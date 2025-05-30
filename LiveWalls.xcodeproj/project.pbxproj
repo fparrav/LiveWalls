@@ -22,6 +22,7 @@
 
 /* Begin PBXFileReference section */
 		55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		55AC1F502DEA0F1400424EA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8B0C7D262B1F4A3000123456 /* LiveWalls.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiveWalls.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8B0C7D292B1F4A3000123456 /* LiveWallsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveWallsApp.swift; sourceTree = "<group>"; };
 		8B0C7D2B2B1F4A3000123456 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -66,6 +67,7 @@
 		8B0C7D282B1F4A3000123456 /* LiveWalls */ = {
 			isa = PBXGroup;
 			children = (
+				55AC1F502DEA0F1400424EA9 /* Info.plist */,
 				55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */,
 				8B0C7D292B1F4A3000123456 /* LiveWallsApp.swift */,
 				8B0C7D2B2B1F4A3000123456 /* ContentView.swift */,
@@ -307,8 +309,10 @@
 				DEVELOPMENT_TEAM = CED7KEV553;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiveWalls/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Live Walls";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -336,8 +340,10 @@
 				DEVELOPMENT_TEAM = CED7KEV553;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiveWalls/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Live Walls";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

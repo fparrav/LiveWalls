@@ -8,7 +8,8 @@ class WallpaperManager: ObservableObject {
     @Published var currentVideo: VideoFile?
     @Published var isPlayingWallpaper = false
     
-    private var desktopWindows: [DesktopVideoWindow] = []
+    // private var desktopWindows: [DesktopVideoWindow] = [] // Modificado
+    private var desktopVideoInstances: [(window: DesktopVideoWindow, accessibleURL: URL)] = [] // Nuevo
     private let userDefaults = UserDefaults.standard
     private let videosKey = "SavedVideos"
     private let currentVideoKey = "CurrentVideo"
@@ -63,7 +64,7 @@ class WallpaperManager: ObservableObject {
                 bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
                 print("🔖 Bookmark creado para: \\(url.lastPathComponent)")
             } catch {
-                print("❌ Error al crear bookmark para \\(url.path): \\(error.localizedDescription)")
+                print("❌ Error al crear bookmark para \(url.path): \(error.localizedDescription)")
                 url.stopAccessingSecurityScopedResource() // Detener el acceso si falla la creación del bookmark
                 continue // No añadir el video si no se puede crear el bookmark
             }
@@ -124,7 +125,7 @@ class WallpaperManager: ObservableObject {
 
         // Verificar que el archivo existe (usando accessibleURL.path)
         guard FileManager.default.fileExists(atPath: accessibleURL.path) else {
-            notificationManager.showError(message: "El archivo de video no se encuentra: \\(videoToPlay.name) (ruta accesible: \\(accessibleURL.path))")
+            notificationManager.showError(message: "El archivo de video no se encuentra: \(videoToPlay.name) (ruta accesible: \(accessibleURL.path))")
             accessibleURL.stopAccessingSecurityScopedResource() // Detener el acceso si el archivo no existe en la ruta resuelta
             return
         }
@@ -159,26 +160,49 @@ class WallpaperManager: ObservableObject {
     
     private func createDesktopWindows(for video: VideoFile, accessibleURL: URL) { // Modificado para aceptar accessibleURL
         let screens = NSScreen.screens
-        print("🖥️ Creando ventanas para \\(screens.count) pantalla(s)")
+        print("🖥️ Creando ventanas para \(screens.count) pantalla(s)")
         
+        // Limpiar instancias antiguas antes de crear nuevas (aunque stopWallpaper ya debería haberlo hecho)
+        // Esto es una doble seguridad, pero la lógica principal está en stopWallpaper -> destroyDesktopWindows
+        if !desktopVideoInstances.isEmpty {
+            print("⚠️ createDesktopWindows llamado pero desktopVideoInstances no estaba vacío. Limpiando primero.")
+            destroyDesktopWindows()
+        }
+
         for (index, screen) in screens.enumerated() {
-            print("📺 Pantalla \\(index + 1): \\(screen.localizedName) - \\(screen.frame)")
-            // Pasar la URL accesible y marcarla como de ámbito de seguridad
-            let window = DesktopVideoWindow(screen: screen, videoURL: accessibleURL, isSecurityScoped: true)
-            desktopWindows.append(window)
+            print("📺 Pantalla \(index + 1): \(screen.localizedName) - \(screen.frame)")
+            let window = DesktopVideoWindow(screen: screen, videoURL: accessibleURL)
+            // desktopWindows.append(window) // Modificado
+            self.desktopVideoInstances.append((window: window, accessibleURL: accessibleURL)) // Nuevo, usando self para claridad
             
             window.orderBack(nil)
-            print("✅ Ventana \\(index + 1) creada y posicionada")
+            print("✅ Ventana \(index + 1) creada y posicionada")
         }
         
-        print("🎬 Total de ventanas creadas: \\(desktopWindows.count)")
+        // print("🎬 Total de ventanas creadas: \\(desktopWindows.count)") // Modificado
+        print("🎬 Total de ventanas creadas: \(desktopVideoInstances.count)") // Nuevo
     }
     
     private func destroyDesktopWindows() {
-        for window in desktopWindows {
-            window.close()
+        print("💥 Destruyendo \(desktopVideoInstances.count) ventana(s) de video de escritorio...")
+        
+        // Procesar las ventanas en lotes para evitar problemas de concurrencia
+        let instances = desktopVideoInstances
+        desktopVideoInstances.removeAll()
+        
+        for instance in instances {
+            // Usar DispatchQueue para asegurar que las operaciones se ejecuten secuencialmente
+            DispatchQueue.main.async {
+                // Cerrar la ventana (esto llamará al método close() mejorado)
+                instance.window.close()
+                
+                // Detener el acceso al recurso de forma segura
+                instance.accessibleURL.stopAccessingSecurityScopedResource()
+                print("🛑 Acceso detenido para \(instance.accessibleURL.lastPathComponent) al destruir la instancia de la ventana.")
+            }
         }
-        desktopWindows.removeAll()
+        
+        print("🗑️ Todas las instancias de ventanas de video de escritorio eliminadas.")
     }
     
     // MARK: - Screen Change Notifications
@@ -214,7 +238,7 @@ class WallpaperManager: ObservableObject {
             return
         }
 
-        print("⏳ Generando miniatura para: \\(video.name) desde \\(accessibleURL.path)")
+        print("⏳ Generando miniatura para: \(video.name) desde \(accessibleURL.path)")
 
         let asset = AVAsset(url: accessibleURL)
         let generator = AVAssetImageGenerator(asset: asset)
@@ -233,10 +257,10 @@ class WallpaperManager: ObservableObject {
             guard let self = self else { return }
 
             if let error = error {
-                print("❌ Error generando miniatura para \\(video.name): \\(error.localizedDescription)")
+                print("❌ Error generando miniatura para \(video.name): \(error.localizedDescription)")
                 // Si el error es de tipo "decodificación" o "archivo no encontrado", podría ser útil registrarlo.
                 if let nsError = error as NSError?, nsError.domain == AVFoundationErrorDomain {
-                    print("  Detalles del error AVFoundation: code \\(nsError.code), userInfo: \\(nsError.userInfo)")
+                    print("  Detalles del error AVFoundation: code \(nsError.code), userInfo: \(nsError.userInfo)")
                 }
                 return
             }
@@ -287,7 +311,7 @@ class WallpaperManager: ObservableObject {
                     }
                     mutableVideoFile.url.stopAccessingSecurityScopedResource() // Detener el acceso a la URL ORIGINAL
                 } catch {
-                    print("❌ Error al crear nuevo bookmark para \\(mutableVideoFile.name) desde URL original: \\(error.localizedDescription)")
+                    print("❌ Error al crear nuevo bookmark para \(mutableVideoFile.name) desde URL original: \(error.localizedDescription)")
                     mutableVideoFile.url.stopAccessingSecurityScopedResource() // Detener el acceso a la URL ORIGINAL si la creación del bookmark falló
                     return nil // No se puede proceder sin un bookmark
                 }
@@ -348,14 +372,14 @@ class WallpaperManager: ObservableObject {
             }
 
             if resolvedURL.startAccessingSecurityScopedResource() {
-                print("✅ Acceso seguro obtenido para: \\(resolvedURL.path)")
+                print("✅ Acceso seguro obtenido para: \(resolvedURL.path)")
                 return resolvedURL // Esta URL está "activa"
             } else {
-                print("❌ No se pudo iniciar el acceso al security-scoped resource para URL resuelta: \\(resolvedURL.path)")
+                print("❌ No se pudo iniciar el acceso al security-scoped resource para URL resuelta: \(resolvedURL.path)")
                 return nil
             }
         } catch {
-            print("❌ Error al resolver bookmark para \\(mutableVideoFile.name): \\(error.localizedDescription)")
+            print("❌ Error al resolver bookmark para \(mutableVideoFile.name): \(error.localizedDescription)")
             // Considerar eliminar el bookmark inválido para que se intente recrear la próxima vez
             if let index = videoFiles.firstIndex(where: { $0.id == mutableVideoFile.id }) {
                 if videoFiles[index].bookmarkData != nil { // Solo si realmente había un bookmark
@@ -399,7 +423,7 @@ class WallpaperManager: ObservableObject {
 
     private func loadCurrentVideo() {
         if let data = userDefaults.data(forKey: currentVideoKey),
-           var video = try? JSONDecoder().decode(VideoFile.self, from: data) {
+           let video = try? JSONDecoder().decode(VideoFile.self, from: data) {
             // Al cargar, la URL es la original. Necesitamos resolverla antes de usarla.
             // Esto se hará en setActiveVideo o startWallpaper.
             self.currentVideo = video

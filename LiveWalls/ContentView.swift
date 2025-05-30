@@ -156,6 +156,7 @@ struct VideoRowView: View {
 struct VideoDetailView: View {
     let video: VideoFile
     @EnvironmentObject var wallpaperManager: WallpaperManager // Acceder al manager
+    @State private var showVideoPreview = false
 
     var body: some View {
         VStack {
@@ -163,7 +164,35 @@ struct VideoDetailView: View {
                 .font(.title)
                 .padding(.bottom)
 
-            if let thumbnailData = video.thumbnailData, let nsImage = NSImage(data: thumbnailData) {
+            // Botón para activar/desactivar vista previa del video
+            HStack {
+                Button(showVideoPreview ? "Mostrar Miniatura" : "Vista Previa Video") {
+                    showVideoPreview.toggle()
+                }
+                .buttonStyle(.bordered)
+                
+                Text("⚠️ Vista previa para testing de crashes")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
+            .padding(.bottom)
+
+            if showVideoPreview {
+                // Vista previa real usando VideoPlayerView instrumentado
+                VideoPlayerView(url: video.url, shouldLoop: true, aspectFill: true)
+                    .frame(maxWidth: 400, maxHeight: 300)
+                    .cornerRadius(8)
+                    .overlay(
+                        Text("🐛 INSTRUMENTADO")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(4)
+                            .background(Color.black.opacity(0.7))
+                            .cornerRadius(4),
+                        alignment: .topTrailing
+                    )
+                    .padding(.bottom)
+            } else if let thumbnailData = video.thumbnailData, let nsImage = NSImage(data: thumbnailData) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
