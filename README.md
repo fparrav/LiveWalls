@@ -188,21 +188,76 @@ La aplicación requiere los siguientes permisos (configurados en `LiveWalls.enti
 5. Abre un Pull Request
 
 ### Guías para Contribuidores
+
 - Sigue las convenciones de código Swift
 - Documenta las nuevas funcionalidades
 - Incluye tests para funcionalidades críticas
 - Actualiza la documentación cuando sea necesario
 
+### Modelo de Contribución Dual
+
+**Live Walls** opera bajo un modelo dual que beneficia a toda la comunidad:
+
+🆓 **Versión Open Source**:
+- Código completo disponible (MIT License)
+- Desarrollo dirigido por la comunidad
+- Ideal para aprender y experimentar
+- Base para proyectos derivados
+
+💰 **Versión Comercial** (Mac App Store):
+- Interfaz pulida y optimizada
+- Soporte técnico oficial
+- Actualizaciones automáticas
+- Funciones premium exclusivas
+- Financia el desarrollo continuo
+
+**¿Cómo ayudan las contribuciones?**
+- Las mejoras en código abierto benefician ambas versiones
+- Los contributors reciben reconocimiento en ambas versiones  
+- Las funciones community-driven pueden llegar a la versión comercial
+- Los ingresos comerciales financian más desarrollo open source
+
+**Reconocimiento**: Todos los contributors aparecen en los créditos de ambas versiones.
+
 ## 📄 Licencia
 
-Este proyecto es de **código abierto**. Puedes usarlo, modificarlo y distribuirlo libremente.
+Este proyecto está licenciado bajo la **MIT License** - consulta el archivo [LICENSE](LICENSE) para más detalles.
+
+### 🏪 Uso Comercial
+
+**Live Walls** es un proyecto de **código abierto con fines comerciales**:
+
+- ✅ **Código libre**: El código fuente está disponible bajo MIT License
+- ✅ **Uso comercial**: Puedes usar, modificar y distribuir libremente
+- ✅ **Reconocimiento requerido**: Debes mantener el aviso de copyright
+- 🏷️ **Venta oficial**: La versión oficial se vende en Mac App Store
+- 🤝 **Contribuciones bienvenidas**: Las mejoras benefician a toda la comunidad
+
+**Si usas este código:**
+- Incluye el aviso de copyright en tu distribución
+- Menciona "Based on Live Walls by [Tu Nombre]" en los créditos
+- Enlaza al repositorio original cuando sea posible
+
+**Diferencias entre versiones:**
+- **Código fuente (MIT)**: Gratis, completo, para desarrolladores
+- **Mac App Store**: Versión pulida, soporte oficial, actualizaciones automáticas
 
 ## 🙏 Créditos
 
 - Desarrollado con Swift y SwiftUI
 - Usa AVFoundation para reproducción de video
 - Iconos del sistema de SF Symbols
+- Comunidad open source por contribuciones y feedback
+
+### 📚 Documentación Adicional
+
+- **[LICENSE](LICENSE)** - Licencia MIT completa
+- **[COMMERCIAL.md](COMMERCIAL.md)** - Información detallada del modelo comercial
+- **[USAGE.md](USAGE.md)** - Guía completa de uso
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Documentación técnica para desarrolladores
 
 ---
 
 **¡Transforma tu escritorio con fondos de pantalla dinámicos!** 🎉
+
+*Proyecto open source con modelo comercial sostenible - Lo mejor de ambos mundos* ✨

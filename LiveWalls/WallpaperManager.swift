@@ -20,11 +20,53 @@ class WallpaperManager: ObservableObject {
         loadCurrentVideo()
         setupScreenChangeNotifications()
         
+        // Para testing: cargar videos automáticamente si la lista está vacía
+        if videoFiles.isEmpty {
+            loadTestingVideos()
+        }
+        
         // Auto-start si estaba activo previamente
         if UserDefaults.standard.bool(forKey: "AutoStartWallpaper") && currentVideo != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 self.startWallpaper()
             }
+        }
+    }
+    
+    // MARK: - Testing Helpers
+    
+    private func loadTestingVideos() {
+        print("🧪 Cargando videos de testing automáticamente...")
+        let testingPath = "/Users/felipe/Livewall/"
+        
+        guard let enumerator = FileManager.default.enumerator(atPath: testingPath) else {
+            print("⚠️ No se pudo acceder a la carpeta de testing: \(testingPath)")
+            return
+        }
+        
+        var testUrls: [URL] = []
+        
+        for case let file as String in enumerator {
+            if file.hasSuffix(".mp4") || file.hasSuffix(".mov") {
+                let fileURL = URL(fileURLWithPath: testingPath + file)
+                if FileManager.default.fileExists(atPath: fileURL.path) {
+                    testUrls.append(fileURL)
+                    print("🎬 Encontrado video de testing: \(file)")
+                }
+            }
+        }
+        
+        if !testUrls.isEmpty {
+            print("🎯 Cargando \(testUrls.count) videos de testing...")
+            addVideoFiles(urls: testUrls)
+            
+            // Seleccionar automáticamente el primer video para testing
+            if let firstVideo = videoFiles.first {
+                setActiveVideo(firstVideo)
+                print("✅ Video de testing seleccionado: \(firstVideo.name)")
+            }
+        } else {
+            print("⚠️ No se encontraron videos de testing en \(testingPath)")
         }
     }
     

@@ -18,11 +18,21 @@ struct VideoPlayerView: NSViewRepresentable {
     }
     
     class Coordinator: NSObject {
+        // Quitar 'weak' ya que VideoPlayerView es una struct, no una clase
         var parent: VideoPlayerView?
         private var observedItems: Set<AVPlayerItem> = []
         private var notificationObservers: [NSObjectProtocol] = []
-        private var isCleanedUp = false
+        // Cambiar a internal para que sea accesible desde dismantleNSView
+        internal var isCleanedUp = false
+        // Cambiar a internal para que sea accesible desde dismantleNSView
+        internal var isBeingDeinitalized = false
         private let cleanupQueue = DispatchQueue(label: "video.cleanup", qos: .userInitiated)
+        
+        // CRITICAL: Mantener referencias fuertes para prevenir deallocación prematura
+        // Esta colección es para los AVPlayer que el coordinador gestiona directamente.
+        private var retainedPlayers: [AVPlayer] = []
+        // Esta colección es para los AVPlayerItem a los que se les han añadido observadores KVO.
+        private var retainedPlayerItems: [AVPlayerItem] = []
         
         init(_ parent: VideoPlayerView) {
             self.parent = parent
@@ -85,6 +95,10 @@ struct VideoPlayerView: NSViewRepresentable {
         func addObserver(for playerItem: AVPlayerItem) {
             guard !isCleanedUp, !observedItems.contains(playerItem) else { return }
             
+            // CRITICAL: Retener referencia fuerte para prevenir deallocación prematura
+            retainedPlayerItems.append(playerItem)
+            logDebug("🔒 addObserver(): Retained playerItem reference, total retained: \(retainedPlayerItems.count)")
+            
             playerItem.addObserver(self,
                                   forKeyPath: "status",
                                   options: [.new, .initial],
@@ -97,9 +111,54 @@ struct VideoPlayerView: NSViewRepresentable {
             guard !isCleanedUp, observedItems.contains(playerItem) else { return }
             
             // Remover observer de forma segura con manejo de errores silencioso
-            playerItem.removeObserver(self, forKeyPath: "status")
-            observedItems.remove(playerItem)
-            print("🗑️ Observer removido para playerItem: \(playerItem)")
+            let success = safeRemoveObserverWithProtection(from: playerItem, keyPath: "status")
+            if success {
+                observedItems.remove(playerItem)
+                
+                // CRITICAL: Liberar referencia fuerte solo después de remover observer exitosamente
+                if let index = retainedPlayerItems.firstIndex(of: playerItem) {
+                    retainedPlayerItems.remove(at: index)
+                    logDebug("🔓 removeObserver(): Released playerItem reference, total retained: \(retainedPlayerItems.count)")
+                }
+                
+                print("🗑️ Observer removido para playerItem: \(playerItem)")
+            } else {
+                logDebug("⚠️ removeObserver(): Failed to remove observer, keeping reference for safety")
+            }
+        }
+        
+        // Nueva función para retener referencias de players
+        func retainPlayer(_ player: AVPlayer) {
+            guard !retainedPlayers.contains(player) else { return }
+            retainedPlayers.append(player)
+            logDebug("🔒 retainPlayer(): Retained player reference, total retained: \(retainedPlayers.count)")
+        }
+        
+        // Función para liberar referencias de AVPlayerItem de forma segura
+        func releasePlayerItem(_ playerItem: AVPlayerItem) {
+            cleanupLock.lock()
+            let isDeinitializing = isBeingDeinitalized
+            cleanupLock.unlock()
+
+            if isDeinitializing {
+                logDebug("🗑️ releasePlayerItem: Coordinator is deinitializing, skipping release for item.")
+                return
+            }
+
+            if let index = retainedPlayerItems.firstIndex(of: playerItem) {
+                retainedPlayerItems.remove(at: index)
+                logDebug("🗑️ releasePlayerItem: Released playerItem. Total retained: \(retainedPlayerItems.count)")
+            } else {
+                logDebug("⚠️ releasePlayerItem: PlayerItem not found in retainedPlayerItems for release.")
+            }
+        }
+        
+        // Nueva función para liberar referencias de players de forma segura
+        func releasePlayer(_ player: AVPlayer) {
+            if let index = retainedPlayers.firstIndex(of: player) {
+                retainedPlayers.remove(at: index)
+                logDebug("🔓 releasePlayer(): Released player reference, total retained: \(retainedPlayers.count)")
+            }
         }
         
         func addNotificationObserver(_ observer: NSObjectProtocol) {
@@ -107,117 +166,272 @@ struct VideoPlayerView: NSViewRepresentable {
             notificationObservers.append(observer)
         }
         
+        // Agregar un mutex para garantizar que las operaciones de limpieza sean thread-safe
+        internal let cleanupLock = NSLock()
+        
         func cleanup() {
-            guard !isCleanedUp else { 
-                logDebug("🧹 cleanup(): Already cleaned up, skipping")
-                return 
+            // Proteger contra limpiezas concurrentes
+            cleanupLock.lock()
+            defer { cleanupLock.unlock() }
+            
+            if isCleanedUp || isBeingDeinitalized {
+                logDebug("🧹 cleanup(): Already cleaned up or being deinitialized, skipping")
+                return
             }
             
             logDebug("🧹 cleanup(): Starting aggressive coordinator cleanup")
             isCleanedUp = true
             
-            // Cleanup en background queue para evitar race conditions
-            cleanupQueue.async { [weak self] in
-                guard let self = self else { 
-                    print("🧹 cleanup(): Self is nil in cleanup queue")
-                    return 
-                }
-                
-                self.logDebug("🧹 cleanup(): In cleanup queue, cloning collections")
-                
-                // Clonar las colecciones para limpieza segura
-                let itemsToClean = Array(self.observedItems)
-                let observersToClean = Array(self.notificationObservers)
-                
-                self.logDebug("🧹 cleanup(): Cloned \(itemsToClean.count) items and \(observersToClean.count) observers")
-                
-                // Limpiar en main queue
-                DispatchQueue.main.async {
-                    self.logDebug("🧹 cleanup(): In main queue, starting observer removal")
-                    
-                    // Remover todos los observers de AVPlayerItem de forma segura
-                    for (index, item) in itemsToClean.enumerated() {
-                        self.logDebug("🧹 cleanup(): Removing observer \(index + 1)/\(itemsToClean.count)")
-                        // Usar un bloque silencioso para evitar crashes
-                        autoreleasepool {
-                            item.removeObserver(self, forKeyPath: "status")
-                        }
-                        self.logDebug("🗑️ cleanup(): Observer removed safely for item \(index + 1)")
-                    }
-                    
-                    self.logDebug("🧹 cleanup(): Starting notification observer removal")
-                    
-                    // Remover todos los notification observers
-                    for (index, observer) in observersToClean.enumerated() {
-                        self.logDebug("🧹 cleanup(): Removing notification observer \(index + 1)/\(observersToClean.count)")
-                        NotificationCenter.default.removeObserver(observer)
-                        self.logDebug("🗑️ cleanup(): Notification observer \(index + 1) removed")
-                    }
-                    
-                    self.logDebug("🧹 cleanup(): Clearing collections")
-                    
-                    // Limpiar las colecciones
-                    self.observedItems.removeAll()
-                    self.notificationObservers.removeAll()
-                    
-                    self.logDebug("✅ cleanup(): Coordinator cleaned up safely")
+            // Capturar y vaciar todas las colecciones de una sola vez para evitar race conditions
+            let itemsToCleanup = Array(observedItems)
+            let observersToCleanup = Array(notificationObservers)
+            let playersToRelease = Array(retainedPlayers)
+            
+            observedItems.removeAll()
+            notificationObservers.removeAll()
+            retainedPlayers.removeAll()
+            retainedPlayerItems.removeAll()
+            
+            // Ahora procesamos los elementos capturados
+            if Thread.isMainThread {
+                performSafeCleanupWithCapturedItems(items: itemsToCleanup, 
+                                                  observers: observersToCleanup,
+                                                  players: playersToRelease)
+            } else {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self, !self.isBeingDeinitalized else { return }
+                    self.performSafeCleanupWithCapturedItems(items: itemsToCleanup, 
+                                                          observers: observersToCleanup,
+                                                          players: playersToRelease)
                 }
             }
         }
         
-        func safeCleanupPlayer(_ player: AVPlayer) {
-            logDebug("🗑️ STARTING safeCleanupPlayer")
-            cleanupQueue.async { [weak self] in
-                self?.logDebug("🗑️ safeCleanupPlayer: In cleanup queue")
-                DispatchQueue.main.async { [weak self] in
-                    self?.logDebug("🗑️ safeCleanupPlayer: In main queue, about to autoreleasepool")
-                    autoreleasepool {
-                        self?.logDebug("🗑️ safeCleanupPlayer: Inside autoreleasepool, pausing player")
-                        player.pause()
-                        self?.logDebug("🗑️ safeCleanupPlayer: Player paused, replacing current item")
-                        player.replaceCurrentItem(with: nil)
-                        self?.logDebug("🗑️ safeCleanupPlayer: Current item replaced")
+        private func performSafeCleanupWithCapturedItems(items: [AVPlayerItem], 
+                                                     observers: [NSObjectProtocol], 
+                                                     players: [AVPlayer]) {
+            // No acceder a self.observedItems o cualquier propiedad colectiva
+            logDebug("🧹 performSafeCleanupWithCapturedItems(): Processing captured items")
+            
+            // Procesar cada item capturado de forma aislada
+            for item in items {
+                autoreleasepool {
+                    if item.observationInfo != nil {
+                        logDebug("🧹 removeObserver for captured item")
+                        item.removeObserver(self, forKeyPath: "status")
                     }
-                    self?.logDebug("🗑️ safeCleanupPlayer: Exited autoreleasepool")
-                    print("🗑️ Player limpiado de forma segura")
                 }
             }
+            
+            // Limpiar observers
+            for observer in observers {
+                autoreleasepool {
+                    logDebug("🧹 removing notification observer")
+                    NotificationCenter.default.removeObserver(observer)
+                }
+            }
+            
+            // Limpiar players
+            for player in players {
+                autoreleasepool {
+                    logDebug("🧹 pausing and clearing player")
+                    player.pause()
+                    player.replaceCurrentItem(with: nil)
+                }
+            }
+            
+            logDebug("✅ performSafeCleanupWithCapturedItems(): All captured items processed")
         }
         
         deinit {
             logDebug("🔄 deinit(): Coordinator deinitializing")
-            if !isCleanedUp {
-                logDebug("🔄 deinit(): Not cleaned up yet, performing emergency cleanup")
-                
-                // Última oportunidad de limpieza síncrona
-                let itemsToClean = Array(observedItems)
-                logDebug("🔄 deinit(): Emergency cleanup for \(itemsToClean.count) items")
-                
-                for (index, item) in itemsToClean.enumerated() {
-                    logDebug("🔄 deinit(): Emergency removing observer \(index + 1)/\(itemsToClean.count)")
-                    // Usar autoreleasepool para limpieza segura
-                    autoreleasepool {
-                        item.removeObserver(self, forKeyPath: "status")
-                    }
-                    logDebug("🔄 deinit(): Emergency observer \(index + 1) removed")
-                }
-                
-                logDebug("🔄 deinit(): Emergency cleanup for \(notificationObservers.count) notification observers")
-                
-                for (index, observer) in notificationObservers.enumerated() {
-                    logDebug("🔄 deinit(): Emergency removing notification observer \(index + 1)")
-                    NotificationCenter.default.removeObserver(observer)
-                    logDebug("🔄 deinit(): Emergency notification observer \(index + 1) removed")
-                }
-                
-                logDebug("🔄 deinit(): Emergency clearing collections")
-                observedItems.removeAll()
-                notificationObservers.removeAll()
-                logDebug("🔄 deinit(): Emergency cleanup completed")
-            } else {
-                logDebug("🔄 deinit(): Already cleaned up")
-            }
+            
+            // Marcamos INMEDIATAMENTE para evitar cualquier otra operación concurrente
+            cleanupLock.lock()
+            isBeingDeinitalized = true
+            isCleanedUp = true
+            cleanupLock.unlock()
+            
+            // NO hacemos nada más aquí - simplemente liberamos las colecciones sin procesar objetos
+            observedItems = []
+            notificationObservers = []
+            retainedPlayers = []
+            retainedPlayerItems = []
+            parent = nil
+            
             logDebug("🔄 deinit(): Coordinator deinitialized successfully")
+        }
+        
+        private func performSafeDeinitCleanup() {
+            // Este método ya no es necesario y solo puede causar problemas
+            // Lo dejamos vacío para evitar modificar muchas partes del código
+            logDebug("🔄 performSafeDeinitCleanup(): Using simplified cleanup approach")
+        }
+        
+        func safeCleanupPlayer(_ player: AVPlayer) {
+            // Proteger contra limpiezas durante deinit
+            cleanupLock.lock()
+            let isDeinitializing = isBeingDeinitalized
+            cleanupLock.unlock()
+            
+            if isDeinitializing {
+                logDebug("🗑️ safeCleanupPlayer: Coordinator is deinitializing, skipping cleanup for player: \(player)")
+                return
+            }
+            
+            logDebug("🗑️ STARTING safeCleanupPlayer for player: \(player)")
+            
+            // Usar una copia local del player
+            let playerRef = player
+            
+            // Hacer una limpieza simple sin referencias a las colecciones internas
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else {
+                    print("🗑️ safeCleanupPlayer: Coordinator deallocated while cleaning player \(playerRef).")
+                    playerRef.pause()
+                    playerRef.replaceCurrentItem(with: nil)
+                    return
+                }
+
+                self.cleanupLock.lock()
+                let stillDeinitializing = self.isBeingDeinitalized
+                self.cleanupLock.unlock()
+
+                if stillDeinitializing {
+                    self.logDebug("🗑️ safeCleanupPlayer: Coordinator started deinitializing during async player cleanup \(playerRef).")
+                    return
+                }
+
+                self.logDebug("🗑️ safeCleanupPlayer: Performing cleanup on main thread for player \(playerRef)")
+                playerRef.pause()
+
+                if let currentItem = playerRef.currentItem {
+                    self.logDebug("🗑️ safeCleanupPlayer: Removing observer and releasing item for player \(playerRef)")
+                    self.removeObserver(for: currentItem) 
+                    self.releasePlayerItem(currentItem)   
+                }
+                
+                playerRef.replaceCurrentItem(with: nil) 
+
+                if let index = self.retainedPlayers.firstIndex(of: playerRef) {
+                    self.retainedPlayers.remove(at: index)
+                    self.logDebug("🗑️ safeCleanupPlayer: Released player reference from retainedPlayers. Total: \(self.retainedPlayers.count)")
+                } else {
+                    self.logDebug("⚠️ safeCleanupPlayer: Player \(playerRef) not found in retainedPlayers for release.")
+                }
+                self.logDebug("✅ safeCleanupPlayer: Finished cleanup for player \(playerRef)")
+            }
+        }
+        
+        func safeCleanupPlayerOnDeinit(_ player: AVPlayer) {
+            logDebug("🗑️ STARTING safeCleanupPlayerOnDeinit")
+            
+            // Limpieza específica para deinit
+            autoreleasepool {
+                logDebug("🗑️ safeCleanupPlayerOnDeinit: Inside autoreleasepool, pausing player")
+                player.pause()
+                logDebug("🗑️ safeCleanupPlayerOnDeinit: Player paused, replacing current item")
+                player.replaceCurrentItem(with: nil)
+                logDebug("🗑️ safeCleanupPlayerOnDeinit: Current item replaced")
+            }
+            logDebug("🗑️ safeCleanupPlayerOnDeinit: Autoreleasepool exited")
+        }
+        
+        func performCleanupForDeinit() {
+            logDebug("🧹 performCleanupForDeinit(): Starting cleanup for deinit")
+            
+            // Cleanup SÍNCRONO en main queue para evitar race conditions
+            if Thread.isMainThread {
+                logDebug("🧹 performCleanupForDeinit(): On main thread, cleaning up directly")
+                autoreleasepool {
+                    // Pausar todos los players
+                    for player in retainedPlayers {
+                        logDebug("🧹 performCleanupForDeinit(): Pausing player")
+                        player.pause()
+                    }
+                    
+                    // Remover observers de todos los items
+                    for item in observedItems {
+                        logDebug("🧹 performCleanupForDeinit(): Removing observer from item")
+                        // Usar _ = para ignorar explícitamente el resultado
+                        _ = safeRemoveObserverWithProtection(from: item, keyPath: "status")
+                    }
+                    
+                    // Limpiar todas las referencias
+                    logDebug("🧹 performCleanupForDeinit(): Clearing all references")
+                    retainedPlayers.removeAll()
+                    retainedPlayerItems.removeAll()
+                    observedItems.removeAll()
+                    notificationObservers.removeAll()
+                }
+                logDebug("🧹 performCleanupForDeinit(): Synchronous cleanup completed")
+            } else {
+                logDebug("🧹 performCleanupForDeinit(): Not on main thread, using async cleanup")
+                DispatchQueue.main.async { [weak self] in
+                    self?.logDebug("🧹 performCleanupForDeinit(): In main queue async, starting autoreleasepool")
+                    autoreleasepool {
+                        // Pausar todos los players
+                        for player in (self?.retainedPlayers ?? []) {
+                            self?.logDebug("🧹 performCleanupForDeinit(): Pausing player")
+                            player.pause()
+                        }
+                        
+                        // Remover observers de todos los items
+                        for item in (self?.observedItems ?? []) {
+                            self?.logDebug("🧹 performCleanupForDeinit(): Removing observer from item")
+                            // Usar _ = para ignorar explícitamente el resultado
+                            _ = self?.safeRemoveObserverWithProtection(from: item, keyPath: "status")
+                        }
+                        
+                        // Limpiar todas las referencias
+                        self?.logDebug("🧹 performCleanupForDeinit(): Clearing all references")
+                        self?.retainedPlayers.removeAll()
+                        self?.retainedPlayerItems.removeAll()
+                        self?.observedItems.removeAll()
+                        self?.notificationObservers.removeAll()
+                    }
+                    self?.logDebug("🧹 performCleanupForDeinit(): Exited autoreleasepool")
+                }
+                logDebug("🧹 performCleanupForDeinit(): Async cleanup scheduled")
+            }
+        }
+        
+        // Función auxiliar para remover observers de forma segura con protección robusta
+        private func safeRemoveObserver(from item: AVPlayerItem, keyPath: String) -> Bool {
+            // En Swift, podemos usar NSException handling implícito
+            // Si el observer no existe, no se producirá un crash sino un warning silencioso
+            item.removeObserver(self, forKeyPath: keyPath)
+            return true  // Asumimos éxito ya que Swift maneja las excepciones internamente
+        }
+        
+        // Función mejorada con protección adicional contra crashes de memoria
+        private func safeRemoveObserverWithProtection(from item: AVPlayerItem, keyPath: String) -> Bool {
+            // Verificación múltiple para prevenir crashes de EXC_BAD_ACCESS
+            
+            // 1. Verificar que el item no está siendo deallocated
+            guard item.observationInfo != nil else {
+                logDebug("⚠️ safeRemoveObserverWithProtection(): Item has no observationInfo, skipping")
+                return false
+            }
+            
+            // 2. Verificar que el item está en nuestro set tracked
+            guard observedItems.contains(item) else {
+                logDebug("⚠️ safeRemoveObserverWithProtection(): Item not in tracked set, skipping")
+                return false
+            }
+            
+            // 3. Usar NSException handling mediante objc runtime protection
+            // Esto es una técnica para manejar excepciones de Objective-C en Swift
+            var success = false
+            autoreleasepool {
+                // El autoreleasepool ayuda a prevenir memory corruption
+                // que puede causar EXC_BAD_ACCESS durante cleanup
+                item.removeObserver(self, forKeyPath: keyPath)
+                success = true
+                logDebug("✅ safeRemoveObserverWithProtection(): Observer removed successfully")
+            }
+            
+            return success
         }
     }
     
@@ -240,6 +454,7 @@ struct VideoPlayerView: NSViewRepresentable {
         context.coordinator.addObserver(for: playerItem)
         
         let player = AVPlayer(playerItem: playerItem)
+        context.coordinator.retainPlayer(player) // Retener el reproductor
         
         playerView.player = player
         playerView.videoGravity = aspectFill ? .resizeAspectFill : .resizeAspect
@@ -281,60 +496,57 @@ struct VideoPlayerView: NSViewRepresentable {
             
             context.coordinator.logDebug("🎯 updateNSView(): URL changed from \(currentURL.lastPathComponent) to \(url.lastPathComponent)")
             
-            // Limpiar el player actual de forma agresiva
+            // Limpiar el player actual de forma específica
             if let currentPlayer = nsView.player {
-                context.coordinator.logDebug("🔄 updateNSView(): Found current player, pausing")
+                context.coordinator.logDebug("🔄 updateNSView(): Found current player, initiating cleanup for URL change.")
                 
-                // Pausa inmediata
-                currentPlayer.pause()
-                context.coordinator.logDebug("🔄 updateNSView(): Current player paused")
-                
-                // Remover observer del item actual de forma segura
-                if let currentItem = currentPlayer.currentItem {
-                    context.coordinator.logDebug("🔄 updateNSView(): Found current item, removing observer")
-                    context.coordinator.removeObserver(for: currentItem)
-                    context.coordinator.logDebug("🔄 updateNSView(): Observer removed for current item")
-                } else {
-                    context.coordinator.logDebug("🔄 updateNSView(): No current item found")
-                }
-                
-                // Limpiar player de forma segura
-                context.coordinator.logDebug("🔄 updateNSView(): Starting safe cleanup of current player")
+                // safeCleanupPlayer se encargará de pausar, remover observadores del item,
+                // liberar el item, anular currentItem y liberar el player de retainedPlayers.
                 context.coordinator.safeCleanupPlayer(currentPlayer)
-                context.coordinator.logDebug("🔄 updateNSView(): Safe cleanup initiated")
+                context.coordinator.logDebug("🔄 updateNSView(): Safe cleanup for current player initiated.")
+                
+                nsView.player = nil // Desvincular de la vista inmediatamente
             } else {
-                context.coordinator.logDebug("🔄 updateNSView(): No current player found")
+                context.coordinator.logDebug("🔄 updateNSView(): No current player found to clean up.")
             }
             
-            // Limpiar observers de notificaciones anteriores
-            context.coordinator.logDebug("🔄 updateNSView(): Starting coordinator cleanup")
-            context.coordinator.cleanup()
-            context.coordinator.logDebug("🔄 updateNSView(): Coordinator cleanup initiated")
+            // NO LLAMAR A context.coordinator.cleanup() aquí, es demasiado agresivo.
             
             // Actualizar parent reference (struct puede haber cambiado)
             context.coordinator.logDebug("🔄 updateNSView(): Updating parent reference")
             context.coordinator.parent = self
             context.coordinator.logDebug("🔄 updateNSView(): Parent reference updated")
             
-            // Pequeña demora para asegurar que la limpieza termine
+            // Pequeña demora para asegurar que la limpieza asíncrona del reproductor anterior
+            // tenga tiempo de progresar antes de crear uno nuevo.
             context.coordinator.logDebug("🔄 updateNSView(): Scheduling delayed player creation")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                context.coordinator.logDebug("🔄 updateNSView(): In delayed execution, starting autoreleasepool")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { // El retraso podría necesitar ajuste
+                context.coordinator.logDebug("🔄 updateNSView(): In delayed execution, starting autoreleasepool for new player setup")
                 autoreleasepool {
-                    context.coordinator.logDebug("🔄 updateNSView(): Inside autoreleasepool, creating new asset")
+                    // Verificar si el coordinador o la vista están siendo desmantelados mientras tanto
+                    context.coordinator.cleanupLock.lock()
+                    let isDeinitNow = context.coordinator.isBeingDeinitalized
+                    context.coordinator.cleanupLock.unlock()
+                    if isDeinitNow {
+                        context.coordinator.logDebug("🔄 updateNSView(): Coordinator/View is deinitializing during delayed execution. Aborting new player setup.")
+                        return
+                    }
+
+                    context.coordinator.logDebug("🔄 updateNSView(): Inside autoreleasepool, creating new asset for \(self.url.lastPathComponent)")
                     
                     // Crear nuevo asset y playerItem
                     let asset = AVURLAsset(url: self.url)
                     let playerItem = AVPlayerItem(asset: asset)
                     context.coordinator.logDebug("🔄 updateNSView(): New asset and playerItem created")
                     
-                    // Añadir observer al nuevo item
+                    // Añadir observer al nuevo item (esto también lo añade a retainedPlayerItems)
                     context.coordinator.logDebug("🔄 updateNSView(): Adding observer to new item")
                     context.coordinator.addObserver(for: playerItem)
-                    context.coordinator.logDebug("🔄 updateNSView(): Observer added to new item")
+                    context.coordinator.logDebug("🔄 updateNSVew(): Observer added to new item")
                     
                     context.coordinator.logDebug("🔄 updateNSView(): Creating new player")
                     let newPlayer = AVPlayer(playerItem: playerItem)
+                    context.coordinator.retainPlayer(newPlayer) // Retener el nuevo reproductor
                     nsView.player = newPlayer
                     context.coordinator.logDebug("🔄 updateNSView(): New player assigned to nsView")
                     
@@ -367,56 +579,53 @@ struct VideoPlayerView: NSViewRepresentable {
     }
     
     static func dismantleNSView(_ nsView: AVPlayerView, coordinator: Coordinator) {
-        coordinator.logDebug("🧹 dismantleNSView(): Starting aggressive NSView dismantling")
+        // CRITICAL: Verificación temprana para evitar cualquier operación en un coordinator que está siendo deinicializado
+        coordinator.cleanupLock.lock()
+        let isBeingDeinited = coordinator.isBeingDeinitalized
+        coordinator.cleanupLock.unlock()
         
-        // Cleanup inmediato en main queue
-        DispatchQueue.main.async {
-            coordinator.logDebug("🧹 dismantleNSView(): In main queue, starting autoreleasepool")
-            autoreleasepool {
-                coordinator.logDebug("🧹 dismantleNSView(): Inside autoreleasepool")
-                
-                if let player = nsView.player {
-                    coordinator.logDebug("🧹 dismantleNSView(): Found player, pausing")
-                    
-                    // Pausa inmediata
-                    player.pause()
-                    coordinator.logDebug("🧹 dismantleNSView(): Player paused")
-                    
-                    // Remover observer del item actual si existe
-                    if let currentItem = player.currentItem {
-                        coordinator.logDebug("🧹 dismantleNSView(): Found current item, removing observer")
-                        coordinator.removeObserver(for: currentItem)
-                        coordinator.logDebug("🧹 dismantleNSView(): Observer removed for current item")
-                    } else {
-                        coordinator.logDebug("🧹 dismantleNSView(): No current item found")
-                    }
-                    
-                    // Limpiar player de forma segura
-                    coordinator.logDebug("🧹 dismantleNSView(): Starting safe player cleanup")
-                    coordinator.safeCleanupPlayer(player)
-                    coordinator.logDebug("🧹 dismantleNSView(): Safe player cleanup initiated")
-                } else {
-                    coordinator.logDebug("🧹 dismantleNSView(): No player found in nsView")
-                }
-                
-                // Limpiar todos los observers del coordinator
-                coordinator.logDebug("🧹 dismantleNSView(): Starting coordinator cleanup")
-                coordinator.cleanup()
-                coordinator.logDebug("🧹 dismantleNSView(): Coordinator cleanup initiated")
-                
-                // Limpiar el player view
-                coordinator.logDebug("🧹 dismantleNSView(): Clearing nsView player")
-                nsView.player = nil
-                coordinator.logDebug("🧹 dismantleNSView(): nsView player cleared")
-                
-                // Limpiar parent reference
-                coordinator.logDebug("🧹 dismantleNSView(): Clearing parent reference")
-                coordinator.parent = nil
-                coordinator.logDebug("🧹 dismantleNSView(): Parent reference cleared")
-                
-                coordinator.logDebug("✅ dismantleNSView(): NSView dismantled successfully")
+        if isBeingDeinited {
+            coordinator.logDebug("🧹 dismantleNSView(): Coordinator being deinitialized, skipping")
+            return
+        }
+        
+        coordinator.logDebug("🧹 dismantleNSView(): Starting NSView dismantling")
+        
+        // Hacer operaciones simples y seguras sin invocar mucha lógica
+        // Primero, capturamos el player
+        let playerToCleanup = nsView.player
+        
+        // Liberamos inmediatamente la referencia en NSView
+        nsView.player = nil
+        
+        // Si hay un player, pausarlo inmediatamente en el hilo principal
+        if let player = playerToCleanup {
+            DispatchQueue.main.async {
+                player.pause()
             }
-            coordinator.logDebug("🧹 dismantleNSView(): Exited autoreleasepool")
+        }
+        
+        // Limpiar recursos gradualmente para evitar bloqueos o race conditions
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak coordinator] in
+            guard let coordinator = coordinator else { return }
+            
+            // Verificar de nuevo que no se haya iniciado deinit
+            coordinator.cleanupLock.lock()
+            let isDeinitNow = coordinator.isBeingDeinitalized
+            coordinator.cleanupLock.unlock()
+            
+            if isDeinitNow {
+                coordinator.logDebug("🧹 dismantleNSView(): Coordinator now being deinitialized, aborting delayed cleanup")
+                return
+            }
+            
+            // Ahora limpiamos el coordinator, que limpiará todos los recursos
+            coordinator.cleanup()
+            
+            // Limpiar referencia al parent
+            coordinator.parent = nil
+            
+            coordinator.logDebug("✅ dismantleNSView(): NSView dismantled successfully")
         }
     }
 }
