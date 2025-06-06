@@ -160,14 +160,16 @@ class WallpaperManager: ObservableObject {
             return
         }
 
-        if let randomVideo = videoFiles.randomElement() {
-            setActiveVideo(randomVideo)
-            // If wallpaper was already playing, or if setActiveVideo started it (e.g. if it was already the current video),
-            // ensure the new random one plays immediately.
-            // Checking isPlayingWallpaper ensures we don't start it if it was previously stopped.
-            if isPlayingWallpaper {
-                startWallpaper()
-            }
+        guard let randomVideo = videoFiles.randomElement() else {
+            return // This case will never occur because videoFiles is not empty.
+        }
+
+        setActiveVideo(randomVideo)
+        // If wallpaper was already playing, or if setActiveVideo started it (e.g. if it was already the current video),
+        // ensure the new random one plays immediately.
+        // Checking isPlayingWallpaper ensures we don't start it if it was previously stopped.
+        if isPlayingWallpaper {
+            startWallpaper()
         }
     }
     
