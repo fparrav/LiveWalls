@@ -1,9 +1,4 @@
-
-// Importar explícitamente los modelos y controladores usados en la vista principal
 import SwiftUI
-import AppKit
-import AVFoundation
-// Los modelos y controladores están en el mismo target, no requieren import explícito como módulo
 
 struct ContentView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
@@ -259,10 +254,7 @@ struct VideoDetailView: View {
     }
 }
 
-
-
-// Vista previa deshabilitada temporalmente para evitar referencia circular de macro 'Preview'.
-// Si necesitas una vista previa, asegúrate de que todas las dependencias estén correctamente definidas y no haya referencias circulares.
-//
-// Corrección: faltaba un cierre de llave '}' para finalizar el archivo correctamente.
+#Preview {
+    ContentView()
+        .environmentObject(WallpaperManager())
 }
