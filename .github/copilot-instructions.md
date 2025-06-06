@@ -14,3 +14,10 @@ Nombra las variables y funciones en español salvo APIs estándar.
 Prefiere structs para modelos de datos y clases para controladores/gestores.
 Mantén los archivos por debajo de 500 líneas cuando sea posible; sugiere modularización si se excede.
 Crea commits utilizando conventional commits y gitmoji.
+  
+---
+## Información del repositorio GitHub para integraciones automáticas
+
+- **Owner:** `fparrav`
+- **Repo:** `LiveWalls`
+---

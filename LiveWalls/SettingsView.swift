@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import AVFoundation
 
 struct SettingsView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
@@ -15,13 +17,13 @@ struct SettingsView: View {
             GroupBox("Reproducción") {
                 VStack(alignment: .leading, spacing: 12) {
                     Toggle("Iniciar fondo de pantalla automáticamente", isOn: $autoStartWallpaper)
-                        .onChange(of: autoStartWallpaper) { _, newValue in
-                            UserDefaults.standard.set(newValue, forKey: "AutoStartWallpaper")
+                        .onChange(of: autoStartWallpaper) {
+                            UserDefaults.standard.set($0, forKey: "AutoStartWallpaper")
                         }
                     
                     Toggle("Silenciar videos", isOn: $muteVideo)
-                        .onChange(of: muteVideo) { _, newValue in
-                            UserDefaults.standard.set(newValue, forKey: "MuteVideo")
+                        .onChange(of: muteVideo) {
+                            UserDefaults.standard.set($0, forKey: "MuteVideo")
                         }
                     
                     HStack {
@@ -32,8 +34,8 @@ struct SettingsView: View {
                             Text("Alta").tag(2)
                         }
                         .pickerStyle(SegmentedPickerStyle())
-                        .onChange(of: videoQuality) { _, newValue in
-                            UserDefaults.standard.set(newValue, forKey: "VideoQuality")
+                        .onChange(of: videoQuality) {
+                            UserDefaults.standard.set($0, forKey: "VideoQuality")
                         }
                     }
                 }
@@ -81,8 +83,10 @@ struct SettingsView: View {
                 
                 Spacer()
                 
+                // Botón para cerrar solo la ventana principal (no la app)
                 Button("Cerrar") {
-                    NSApp.setActivationPolicy(.accessory)
+                    // Oculta la ventana principal, la app sigue viva y visible en el Dock y status bar
+                    NSApp.keyWindow?.orderOut(nil)
                 }
                 .buttonStyle(.borderedProminent)
             }

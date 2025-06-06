@@ -1,113 +1,124 @@
+
+// Importar explícitamente los modelos y controladores usados en la vista principal
 import SwiftUI
+import AppKit
+import AVFoundation
+// Los modelos y controladores están en el mismo target, no requieren import explícito como módulo
 
 struct ContentView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
     @State private var isImporting = false
     @State private var selectedVideo: VideoFile?
     
-    var body: some View {
-        NavigationSplitView {
-            // Sidebar con lista de videos
-            VStack(alignment: .leading, spacing: 16) {
+@State private var showMainWindow: Bool = true
+
+var body: some View {
+    NavigationSplitView {
+        // Sidebar con lista de videos
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Videos")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                Button(action: {
+                    isImporting = true
+                }) {
+                    Image(systemName: "plus")
+                }
+                .help("Agregar videos")
+            }
+            .padding(.horizontal)
+            
+            List(wallpaperManager.videoFiles, selection: $selectedVideo) { video in
+                VideoRowView(video: video)
+                    .tag(video)
+                    .onTapGesture {
+                        // Al seleccionar un video, se establece automáticamente como activo
+                        wallpaperManager.setActiveVideo(video)
+                    }
+                    .contextMenu {
+                        Button("Eliminar", role: .destructive) {
+                            wallpaperManager.removeVideo(video)
+                        }
+                    }
+            }
+            .listStyle(SidebarListStyle())
+            
+            // Controles de reproducción
+            VStack(spacing: 12) {
+                Divider()
+                
                 HStack {
-                    Text("Videos")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                    Button(action: {
+                        wallpaperManager.toggleWallpaper()
+                    }) {
+                        HStack {
+                            Image(systemName: wallpaperManager.isPlayingWallpaper ? "stop.fill" : "play.fill")
+                            Text(wallpaperManager.isPlayingWallpaper ? "Detener" : "Iniciar")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(wallpaperManager.currentVideo == nil)
                     
                     Spacer()
-                    
-                    Button(action: {
-                        isImporting = true
-                    }) {
-                        Image(systemName: "plus")
-                    }
-                    .help("Agregar videos")
                 }
-                .padding(.horizontal)
                 
-                List(wallpaperManager.videoFiles, selection: $selectedVideo) { video in
-                    VideoRowView(video: video)
-                        .tag(video)
-                        .contextMenu {
-                            Button("Establecer como fondo") {
-                                wallpaperManager.setActiveVideo(video)
-                            }
-                            .disabled(video.isActive)
-                            
-                            Divider()
-                            
-                            Button("Eliminar", role: .destructive) {
-                                wallpaperManager.removeVideo(video)
-                            }
-                        }
-                }
-                .listStyle(SidebarListStyle())
-                
-                // Controles de reproducción
-                VStack(spacing: 12) {
-                    Divider()
-                    
+                if let currentVideo = wallpaperManager.currentVideo {
                     HStack {
-                        Button(action: {
-                            wallpaperManager.toggleWallpaper()
-                        }) {
-                            HStack {
-                                Image(systemName: wallpaperManager.isPlayingWallpaper ? "stop.fill" : "play.fill")
-                                Text(wallpaperManager.isPlayingWallpaper ? "Detener" : "Iniciar")
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(wallpaperManager.currentVideo == nil)
-                        
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("Activo: \(currentVideo.name)")
+                            .font(.caption)
+                            .lineLimit(1)
                         Spacer()
                     }
-                    
-                    if let currentVideo = wallpaperManager.currentVideo {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Activo: \(currentVideo.name)")
-                                .font(.caption)
-                                .lineLimit(1)
-                            Spacer()
-                        }
-                        .foregroundColor(.secondary)
-                    }
+                    .foregroundColor(.secondary)
                 }
-                .padding()
             }
-        } detail: {
-            // Área principal con vista previa
-            Group {
-                if let selectedVideo = selectedVideo {
-                    VideoDetailView(video: selectedVideo)
-                } else {
-                    ContentUnavailableView(
-                        "Selecciona un video",
-                        systemImage: "video.fill",
-                        description: Text("Elige un video de la lista para ver una vista previa")
-                    )
-                }
+            .padding()
+        }
+    } detail: {
+        // Área principal con vista previa
+        Group {
+            if let selectedVideo = selectedVideo {
+                VideoDetailView(video: selectedVideo)
+            } else {
+                ContentUnavailableView(
+                    "Selecciona un video",
+                    systemImage: "video.fill",
+                    description: Text("Elige un video de la lista para ver una vista previa")
+                )
             }
         }
-        .fileImporter(
-            isPresented: $isImporting,
-            allowedContentTypes: [.movie],
-            allowsMultipleSelection: true
-        ) { result in
-            switch result {
-            case .success(let urls):
-                wallpaperManager.addVideoFiles(urls: urls)
-            case .failure(let error):
-                print("Error al importar videos: \(error.localizedDescription)")
+    }
+    .fileImporter(
+        isPresented: $isImporting,
+        allowedContentTypes: [.movie],
+        allowsMultipleSelection: true
+    ) { result in
+        switch result {
+        case .success(let urls):
+            wallpaperManager.addVideoFiles(urls: urls)
+        case .failure(let error):
+            print("Error al importar videos: \(error.localizedDescription)")
+        }
+    }
+    .toolbar {
+        ToolbarItem(placement: .primaryAction) {
+            Button("Configuración") {
+                // Aquí se puede abrir una ventana de configuración
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Configuración") {
-                    // Aquí se puede abrir una ventana de configuración
-                }
-            }
+    }
+    // Escuchar la notificación para forzar la aparición de la ventana principal
+    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowMainWindow"))) { _ in
+        // Si la ventana está oculta, traerla al frente
+        if let window = NSApp.windows.first(where: { !$0.isVisible && !($0 is NSPanel) }) ?? NSApp.windows.first {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 }
@@ -155,8 +166,10 @@ struct VideoRowView: View {
 
 struct VideoDetailView: View {
     let video: VideoFile
+
     @EnvironmentObject var wallpaperManager: WallpaperManager // Acceder al manager
     @State private var showVideoPreview = false
+    @State private var urlAccesible: URL? = nil // URL resuelta para vista previa
 
     var body: some View {
         VStack {
@@ -170,28 +183,45 @@ struct VideoDetailView: View {
                     showVideoPreview.toggle()
                 }
                 .buttonStyle(.bordered)
-                
-                Text("⚠️ Vista previa para testing de crashes")
-                    .font(.caption)
-                    .foregroundColor(.orange)
             }
             .padding(.bottom)
 
+            // Resolución y liberación del bookmark para la vista previa
+            .onChange(of: showVideoPreview) {
+                if $0 {
+                    // Solo resolver si no está ya resuelta
+                    if urlAccesible == nil {
+                        urlAccesible = wallpaperManager.resolveBookmark(for: video)
+                    }
+                } else {
+                    // Liberar el recurso cuando se oculta la vista previa
+                    urlAccesible?.stopAccessingSecurityScopedResource()
+                    urlAccesible = nil
+                }
+            }
+            .onDisappear {
+                // Liberar siempre al salir de la vista
+                urlAccesible?.stopAccessingSecurityScopedResource()
+                urlAccesible = nil
+            }
+
             if showVideoPreview {
-                // Vista previa real usando VideoPlayerView instrumentado
-                VideoPlayerView(url: video.url, shouldLoop: true, aspectFill: true)
-                    .frame(maxWidth: 400, maxHeight: 300)
-                    .cornerRadius(8)
-                    .overlay(
-                        Text("🐛 INSTRUMENTADO")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .padding(4)
-                            .background(Color.black.opacity(0.7))
-                            .cornerRadius(4),
-                        alignment: .topTrailing
-                    )
-                    .padding(.bottom)
+                if let urlAccesible = urlAccesible {
+                    // Vista previa real usando VideoPlayerView instrumentado
+                    VideoPlayerView(url: urlAccesible, shouldLoop: true, aspectFill: true)
+                        .frame(maxWidth: 400, maxHeight: 300)
+                        .cornerRadius(8)
+                        .padding(.bottom)
+                } else {
+                    // Si no se pudo resolver el bookmark, mostrar error
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .resizable()
+                        .frame(width: 40, height: 40)
+                        .foregroundColor(.red)
+                    Text("No se pudo acceder al video para vista previa")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
             } else if let thumbnailData = video.thumbnailData, let nsImage = NSImage(data: thumbnailData) {
                 Image(nsImage: nsImage)
                     .resizable()
@@ -218,12 +248,6 @@ struct VideoDetailView: View {
                 .padding(.bottom)
 
             HStack {
-                Button("Establecer como fondo de pantalla") {
-                    wallpaperManager.setActiveVideo(video)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(video.isActive)
-
                 if video.isActive {
                     Label("Activo", systemImage: "checkmark.circle.fill")
                         .foregroundColor(.green)
@@ -235,7 +259,10 @@ struct VideoDetailView: View {
     }
 }
 
-#Preview {
-    ContentView()
-        .environmentObject(WallpaperManager())
+
+
+// Vista previa deshabilitada temporalmente para evitar referencia circular de macro 'Preview'.
+// Si necesitas una vista previa, asegúrate de que todas las dependencias estén correctamente definidas y no haya referencias circulares.
+//
+// Corrección: faltaba un cierre de llave '}' para finalizar el archivo correctamente.
 }

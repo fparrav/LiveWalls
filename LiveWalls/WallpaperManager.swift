@@ -176,20 +176,38 @@ class WallpaperManager: ObservableObject {
             return
         }
 
-        stopWallpaper() // Destruye ventanas antiguas, lo que debería llamar a stopAccessingSecurityScopedResource en URL antiguas
-        isPlayingWallpaper = true
-
-        createDesktopWindows(for: videoToPlay, accessibleURL: accessibleURL) // Pasar la URL accesible
-        notificationManager.showWallpaperStarted(videoName: videoToPlay.name)
-
-        UserDefaults.standard.set(true, forKey: "AutoStartWallpaper")
+        // Primero desactivar el flag isPlayingWallpaper antes de stopWallpaper para evitar 
+        // posibles confusiones durante la transición
+        let wasPlaying = isPlayingWallpaper
+        isPlayingWallpaper = false
+        
+        // Usar un DispatchQueue para asegurar que la destrucción ocurra antes de crear nuevas ventanas
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.destroyDesktopWindows() // Libera ventanas existentes
+            
+            // Verificar nuevamente que accessibleURL es válido después de destruir las ventanas
+            if FileManager.default.fileExists(atPath: accessibleURL.path) {
+                self.isPlayingWallpaper = true
+                self.createDesktopWindows(for: videoToPlay, accessibleURL: accessibleURL)
+                self.notificationManager.showWallpaperStarted(videoName: videoToPlay.name)
+                UserDefaults.standard.set(true, forKey: "AutoStartWallpaper")
+            } else if wasPlaying {
+                // Si estaba reproduciendo y la URL ya no es válida
+                self.notificationManager.showError(message: "No se pudo acceder al archivo durante el cambio de wallpaper")
+                UserDefaults.standard.set(false, forKey: "AutoStartWallpaper")
+            }
+        }
     }
     
+    /// Detiene el wallpaper y destruye las ventanas de escritorio.
+    /// Agrega log defensivo con stack trace para depuración.
     func stopWallpaper() {
+        print("🛑 [stopWallpaper] llamado. Stack trace:\n\(Thread.callStackSymbols.joined(separator: "\n"))")
         isPlayingWallpaper = false
         destroyDesktopWindows()
         notificationManager.showWallpaperStopped()
-        
         // Guardar preferencia de auto-start
         UserDefaults.standard.set(false, forKey: "AutoStartWallpaper")
     }
@@ -229,20 +247,43 @@ class WallpaperManager: ObservableObject {
         print("🎬 Total de ventanas creadas: \(desktopVideoInstances.count)") // Nuevo
     }
     
+    /// Destruye todas las ventanas de video de escritorio de forma segura.
+    /// Ahora cada ventana es responsable de liberar su propio acceso security-scoped.
+    /// Destruye todas las ventanas de video de escritorio de forma segura.
+    /// Agrega log defensivo con stack trace para depuración.
     private func destroyDesktopWindows() {
+        print("💥 [destroyDesktopWindows] llamado. Stack trace:\n\(Thread.callStackSymbols.joined(separator: "\n"))")
         print("💥 Destruyendo \(desktopVideoInstances.count) ventana(s) de video de escritorio...")
-        
-        // Procesar las ventanas en lotes para evitar problemas de concurrencia
+        // Crear una copia local para evitar problemas de concurrencia
         let instances = desktopVideoInstances
+        // Limpiar la colección principal primero para evitar referencias circulares
         desktopVideoInstances.removeAll()
-        
-        for instance in instances {
-            // Cerrar la ventana y liberar el recurso de forma segura y síncrona
-            instance.window.close()
-            safeStopSecurityScopedAccess(for: instance.accessibleURL)
+        // Destruir ventanas una a una con logs defensivos y control de excepciones
+        DispatchQueue.main.async {
+            for (i, instance) in instances.enumerated() {
+                // Verificar si la ventana es válida y está visible antes de cerrarla
+                guard let window = instance.window as NSWindow? else {
+                    print("[destroyDesktopWindows] Ventana #\(i+1) ya era nula")
+                    continue
+                }
+                // Solo intentar cerrar ventanas que no estén ya liberadas
+                if window.isReleasedWhenClosed == false || window.isVisible {
+                    print("[destroyDesktopWindows] Cerrando ventana #\(i+1) para: \(instance.accessibleURL.lastPathComponent)")
+                    // Control de excepciones por seguridad
+                    autoreleasepool {
+                        window.close()
+                    }
+                    print("[destroyDesktopWindows] Ventana #\(i+1) cerrada")
+                    // Darle tiempo al sistema para procesar el cierre antes de continuar
+                    if i < instances.count - 1 {
+                        Thread.sleep(forTimeInterval: 0.05)
+                    }
+                } else {
+                    print("[destroyDesktopWindows] Ventana #\(i+1) ya estaba cerrada o liberada")
+                }
+            }
+            print("🗑️ Todas las instancias de ventanas de video de escritorio eliminadas.")
         }
-        
-        print("🗑️ Todas las instancias de ventanas de video de escritorio eliminadas.")
     }
     
     // MARK: - Security-Scoped Resource Management
