@@ -15,6 +15,11 @@ class WallpaperManager: ObservableObject {
     private let currentVideoKey = "CurrentVideo"
     private let notificationManager = NotificationManager.shared
     
+    // MARK: - Security-Scoped Resource Tracking
+    /// Tracking de URLs que tienen acceso security-scoped activo para prevenir double-stop crashes
+    private var activeSecurityScopedURLs: Set<URL> = []
+    private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
+    
     init() {
         loadSavedVideos()
         loadCurrentVideo()
@@ -76,49 +81,48 @@ class WallpaperManager: ObservableObject {
         for url in urls {
             // Verificar que el archivo sea un video soportado
             guard url.pathExtension.lowercased() == "mp4" || url.pathExtension.lowercased() == "mov" else {
-                print("Archivo no soportado: \\(url.lastPathComponent)")
+                print("Archivo no soportado: \(url.lastPathComponent)")
                 continue
             }
 
-            // Iniciar el acceso al security-scoped resource
-            guard url.startAccessingSecurityScopedResource() else {
-                print("⚠️ No se pudo iniciar el acceso al security-scoped resource para: \\(url.path)")
-                // Podrías mostrar un error al usuario aquí si es necesario
+            // Iniciar el acceso al security-scoped resource de forma segura
+            guard safeStartSecurityScopedAccess(for: url) else {
+                print("⚠️ No se pudo iniciar el acceso al security-scoped resource para: \(url.path)")
                 continue
             }
 
             // Verificar que el archivo exista y sea accesible
             guard FileManager.default.fileExists(atPath: url.path) else {
-                print("Archivo no encontrado: \\(url.path)")
-                url.stopAccessingSecurityScopedResource() // Detener el acceso si el archivo no existe
+                print("Archivo no encontrado: \(url.path)")
+                safeStopSecurityScopedAccess(for: url) // Detener el acceso si el archivo no existe
                 continue
             }
 
             // Verificar que no esté ya en la lista
             guard !videoFiles.contains(where: { $0.url.path == url.path }) else { // Comparar por path para evitar problemas con bookmarks
-                print("Video ya existe: \\(url.lastPathComponent)")
-                url.stopAccessingSecurityScopedResource() // Detener el acceso si ya existe
+                print("Video ya existe: \(url.lastPathComponent)")
+                safeStopSecurityScopedAccess(for: url) // Detener el acceso si ya existe
                 continue
             }
 
             var bookmarkData: Data?
             do {
                 bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-                print("🔖 Bookmark creado para: \\(url.lastPathComponent)")
+                print("🔖 Bookmark creado para: \(url.lastPathComponent)")
             } catch {
                 print("❌ Error al crear bookmark para \(url.path): \(error.localizedDescription)")
-                url.stopAccessingSecurityScopedResource() // Detener el acceso si falla la creación del bookmark
+                safeStopSecurityScopedAccess(for: url) // Detener el acceso si falla la creación del bookmark
                 continue // No añadir el video si no se puede crear el bookmark
             }
-            
+
             // Es importante detener el acceso después de crear el bookmark si no se va a usar la URL inmediatamente.
             // Se volverá a iniciar el acceso cuando se necesite reproducir el video.
-            url.stopAccessingSecurityScopedResource()
+            safeStopSecurityScopedAccess(for: url)
 
             let videoFile = VideoFile(url: url, bookmarkData: bookmarkData) // Guardar el bookmarkData
             videoFiles.append(videoFile)
             generateThumbnail(for: videoFile) // generateThumbnail también necesitará resolver el bookmark
-            print("Video agregado: \\(videoFile.name)")
+            print("Video agregado: \(videoFile.name)")
         }
         saveVideos()
     }
@@ -233,18 +237,57 @@ class WallpaperManager: ObservableObject {
         desktopVideoInstances.removeAll()
         
         for instance in instances {
-            // Usar DispatchQueue para asegurar que las operaciones se ejecuten secuencialmente
-            DispatchQueue.main.async {
-                // Cerrar la ventana (esto llamará al método close() mejorado)
-                instance.window.close()
-                
-                // Detener el acceso al recurso de forma segura
-                instance.accessibleURL.stopAccessingSecurityScopedResource()
-                print("🛑 Acceso detenido para \(instance.accessibleURL.lastPathComponent) al destruir la instancia de la ventana.")
-            }
+            // Cerrar la ventana y liberar el recurso de forma segura y síncrona
+            instance.window.close()
+            safeStopSecurityScopedAccess(for: instance.accessibleURL)
         }
         
         print("🗑️ Todas las instancias de ventanas de video de escritorio eliminadas.")
+    }
+    
+    // MARK: - Security-Scoped Resource Management
+    
+    /// Inicia acceso security-scoped y trackea la URL para prevenir double-start
+    /// - Parameter url: URL a la que se quiere acceder
+    /// - Returns: true si el acceso fue iniciado exitosamente
+    private func safeStartSecurityScopedAccess(for url: URL) -> Bool {
+        return resourceTrackingQueue.sync {
+            // Verificar si ya tiene acceso activo
+            if activeSecurityScopedURLs.contains(url) {
+                print("⚠️ Security-scoped access ya está activo para: \(url.lastPathComponent)")
+                return true // Consideramos que ya está disponible
+            }
+            
+            // Intentar iniciar el acceso
+            guard url.startAccessingSecurityScopedResource() else {
+                print("❌ Falló startAccessingSecurityScopedResource para: \(url.lastPathComponent)")
+                return false
+            }
+            
+            // Agregar al tracking si fue exitoso
+            activeSecurityScopedURLs.insert(url)
+            print("✅ Security-scoped access iniciado y trackeado para: \(url.lastPathComponent)")
+            return true
+        }
+    }
+    
+    /// Detiene acceso security-scoped de forma segura y actualiza el tracking
+    /// - Parameter url: URL cuyo acceso se quiere detener
+    private func safeStopSecurityScopedAccess(for url: URL) {
+        resourceTrackingQueue.sync {
+            // Solo detener si realmente está activo
+            guard activeSecurityScopedURLs.contains(url) else {
+                print("⚠️ Intento de detener security-scoped access que no estaba activo para: \(url.lastPathComponent)")
+                return
+            }
+            
+            // Usar autoreleasepool para prevenir memory corruption durante la liberación
+            autoreleasepool {
+                url.stopAccessingSecurityScopedResource()
+                activeSecurityScopedURLs.remove(url)
+                print("🛑 Security-scoped access detenido y removido del tracking para: \(url.lastPathComponent)")
+            }
+        }
     }
     
     // MARK: - Screen Change Notifications
@@ -334,7 +377,10 @@ class WallpaperManager: ObservableObject {
 
     // MARK: - Bookmark Resolution Helper
 
-    private func resolveBookmark(for videoFile: VideoFile) -> URL? {
+    /// Resuelve el bookmark de un archivo de video y retorna una URL accesible con permisos activos.
+    /// - Parameter videoFile: El modelo de video a resolver.
+    /// - Returns: URL accesible o nil si falla el acceso o el bookmark.
+    func resolveBookmark(for videoFile: VideoFile) -> URL? {
         var mutableVideoFile = videoFile // Copia mutable para actualizar potencialmente bookmarkData
 
         // Intenta crear un bookmark si no existe
