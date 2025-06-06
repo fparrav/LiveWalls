@@ -59,6 +59,15 @@ struct ContentView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(wallpaperManager.currentVideo == nil)
                         
+                        Button {
+                            wallpaperManager.setRandomWallpaper()
+                        } label: {
+                            Image(systemName: "shuffle")
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Establecer fondo aleatorio")
+                        .disabled(wallpaperManager.videoFiles.isEmpty)
+
                         Spacer()
                     }
                     
