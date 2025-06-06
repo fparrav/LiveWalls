@@ -153,6 +153,23 @@ class WallpaperManager: ObservableObject {
     }
     
     // MARK: - Wallpaper Control
+
+    func setRandomWallpaper() {
+        guard !videoFiles.isEmpty else {
+            notificationManager.showError(message: "No videos available to set a random wallpaper.")
+            return
+        }
+
+        if let randomVideo = videoFiles.randomElement() {
+            setActiveVideo(randomVideo)
+            // If wallpaper was already playing, or if setActiveVideo started it (e.g. if it was already the current video),
+            // ensure the new random one plays immediately.
+            // Checking isPlayingWallpaper ensures we don't start it if it was previously stopped.
+            if isPlayingWallpaper {
+                startWallpaper()
+            }
+        }
+    }
     
     func startWallpaper() {
         guard let videoToPlay = currentVideo else {
