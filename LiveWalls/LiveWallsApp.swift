@@ -13,10 +13,8 @@ struct LiveWallsApp: App {
     // Intenta comentar esta línea primero para ver si WallpaperManager.init() es el problema
     @StateObject private var wallpaperManager = WallpaperManager() 
 
-    // Intenta comentar esta línea si la anterior no resuelve el problema
-    // @State private var launchAtLogin = SMAppService.mainApp.status == .enabled 
-    // Si la comentas, puedes usar un valor temporal:
-    // @State private var launchAtLogin = false
+    // Estado para gestionar el auto-inicio del sistema
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -56,12 +54,53 @@ struct LiveWallsApp: App {
         }
 
         MenuBarExtra("Live Walls", systemImage: "video.fill") {
-            Button("Abrir Configuración") {
-                appLogger.info("🔘 Usuario solicitó abrir configuración")
-                // Lógica para abrir la ventana de configuración
-                // Asegúrate que esta lógica no cause problemas si appDelegate o wallpaperManager no están listos.
-                 NotificationCenter.default.post(name: Notification.Name("ShowMainWindow"), object: nil)
+            // Botón para abrir aplicación (cambiado de "Abrir Configuración")
+            Button("Abrir aplicación") {
+                appLogger.info("🔘 Usuario solicitó abrir aplicación")
+                // Lógica para abrir la ventana principal de la aplicación
+                NotificationCenter.default.post(name: Notification.Name("ShowMainWindow"), object: nil)
             }
+            
+            Divider()
+            
+            // Botón para auto-inicio del sistema
+            Button(autoStartButtonText) {
+                appLogger.info("🔄 Usuario cambió configuración de auto-inicio")
+                toggleAutoStart()
+            }
+            
+            Divider()
+            
+            // Botón para salir de la aplicación
+            Button("Salir") {
+                appLogger.info("🚪 Usuario solicitó salir de la aplicación")
+                NSApplication.shared.terminate(nil)
+            }
+        }
+    }
+    
+    // MARK: - Propiedades computadas para el menú
+    
+    /// Texto del botón de auto-inicio basado en el estado actual
+    private var autoStartButtonText: String {
+        launchAtLogin ? "Desactivar inicio automático" : "Activar inicio automático"
+    }
+    
+    // MARK: - Funciones del menú
+    
+    /// Alterna el estado de auto-inicio del sistema
+    private func toggleAutoStart() {
+        do {
+            if launchAtLogin {
+                try SMAppService.mainApp.unregister()
+                appLogger.info("⚙️ Auto-inicio desactivado exitosamente")
+            } else {
+                try SMAppService.mainApp.register()
+                appLogger.info("⚙️ Auto-inicio activado exitosamente")
+            }
+            launchAtLogin.toggle()
+        } catch {
+            appLogger.error("❌ Error al cambiar configuración de auto-inicio: \(error.localizedDescription)")
         }
     }
     
