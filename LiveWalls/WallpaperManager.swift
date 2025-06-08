@@ -10,6 +10,9 @@ class WallpaperManager: ObservableObject {
     
     // private var desktopWindows: [DesktopVideoWindow] = [] // Modificado
     private var desktopVideoInstances: [(window: DesktopVideoWindow, accessibleURL: URL)] = [] // Nuevo
+    /// Retardo (en segundos) antes de liberar el acceso security-scoped tras cerrar una ventana.
+    /// Ajusta este valor si observas problemas de recursos o race conditions.
+    private let resourceReleaseDelay: TimeInterval = 0.1
     private let userDefaults = UserDefaults.standard
     private let videosKey = "SavedVideos"
     private let currentVideoKey = "CurrentVideo"
@@ -666,5 +669,30 @@ class WallpaperManager: ObservableObject {
     deinit {
         NotificationCenter.default.removeObserver(self)
         stopWallpaper()
+    }
+    
+    // MARK: - Utilidades de acceso security-scoped
+    /**
+     Inicia el acceso security-scoped de forma segura para una URL.
+     - Parameter url: URL a la que se desea acceder.
+     - Returns: true si el acceso fue exitoso, false en caso contrario.
+     */
+    private func safeStartSecurityScopedAccess(for url: URL) -> Bool {
+        let acceso = url.startAccessingSecurityScopedResource()
+        if acceso {
+            print("🔓 Acceso security-scoped iniciado para: \(url.lastPathComponent)")
+        } else {
+            print("❌ No se pudo iniciar acceso security-scoped para: \(url.lastPathComponent)")
+        }
+        return acceso
+    }
+
+    /**
+     Detiene el acceso security-scoped de forma segura para una URL.
+     - Parameter url: URL a la que se desea detener el acceso.
+     */
+    private func safeStopSecurityScopedAccess(for url: URL) {
+        url.stopAccessingSecurityScopedResource()
+        print("🔒 Acceso security-scoped detenido para: \(url.lastPathComponent)")
     }
 }

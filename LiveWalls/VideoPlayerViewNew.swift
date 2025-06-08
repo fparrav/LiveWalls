@@ -1,9 +1,8 @@
 import SwiftUI
 import AVFoundation
-import AVKit
 
 /// Nueva implementación de VideoPlayerView que evita los problemas de gestión de memoria
-/// usando un patrón de arquitectura más seguro
+/// usando un patrón de arquitectura más seguro y AVPlayerLayer directamente.
 struct VideoPlayerViewNew: NSViewRepresentable {
     let url: URL
     let shouldLoop: Bool
@@ -20,8 +19,9 @@ struct VideoPlayerViewNew: NSViewRepresentable {
     }
     
     class Coordinator: NSObject {
-        private var playerView: AVPlayerView?
-        private var player: AVPlayer?
+        // private var playerView: AVPlayerView? // Eliminado
+        var playerLayer: AVPlayerLayer? // Nuevo: para AVFoundation, cambiado de private a internal (default)
+        var player: AVPlayer? // Cambiado de private a internal (default)
         private var playerItem: AVPlayerItem?
         private var loopObserver: NSObjectProtocol?
         private let syncQueue = DispatchQueue(label: "video.sync", qos: .userInitiated)
@@ -31,10 +31,10 @@ struct VideoPlayerViewNew: NSViewRepresentable {
             print("🎬 Nuevo Coordinator creado")
         }
         
-        func setupPlayer(for url: URL, shouldLoop: Bool, aspectFill: Bool) {
+        func setupPlayer(for url: URL, shouldLoop: Bool, aspectFill: Bool, in view: NSView) { // Modificado para aceptar NSView
             syncQueue.async { [weak self] in
                 self?.cleanupCurrentPlayer()
-                self?.createNewPlayer(for: url, shouldLoop: shouldLoop, aspectFill: aspectFill)
+                self?.createNewPlayer(for: url, shouldLoop: shouldLoop, aspectFill: aspectFill, in: view) // Modificado
             }
         }
         
@@ -49,6 +49,13 @@ struct VideoPlayerViewNew: NSViewRepresentable {
                     NotificationCenter.default.removeObserver(observer)
                     self.loopObserver = nil
                 }
+
+                // Limpiar playerLayer
+                if let layer = self.playerLayer {
+                    layer.player = nil
+                    layer.removeFromSuperlayer()
+                    self.playerLayer = nil
+                }
                 
                 // Limpiar player
                 self.player?.pause()
@@ -58,14 +65,11 @@ struct VideoPlayerViewNew: NSViewRepresentable {
                 // Limpiar playerItem
                 self.playerItem = nil
                 
-                // Limpiar playerView
-                self.playerView?.player = nil
-                
                 print("✅ Player limpiado")
             }
         }
         
-        private func createNewPlayer(for url: URL, shouldLoop: Bool, aspectFill: Bool) {
+        private func createNewPlayer(for url: URL, shouldLoop: Bool, aspectFill: Bool, in view: NSView) { // Modificado para aceptar NSView
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 
@@ -84,20 +88,22 @@ struct VideoPlayerViewNew: NSViewRepresentable {
                 
                 // Configurar player antes de asignar
                 newPlayer.isMuted = true
+
+                // Configurar playerLayer y añadirlo a la vista
+                let newPlayerLayer = AVPlayerLayer(player: newPlayer)
+                newPlayerLayer.videoGravity = aspectFill ? .resizeAspectFill : .resizeAspect
+                newPlayerLayer.frame = view.bounds // Ajustar al tamaño de la vista contenedora
                 
-                // Configurar playerView si existe
-                if let playerView = self.playerView {
-                    playerView.player = newPlayer
-                    playerView.videoGravity = aspectFill ? .resizeAspectFill : .resizeAspect
-                    playerView.controlsStyle = .none
-                    playerView.showsFrameSteppingButtons = false
-                    playerView.showsSharingServiceButton = false
-                    playerView.showsFullScreenToggleButton = false
+                // Asegurarse de que la vista contenedora tenga una capa
+                if view.layer == nil {
+                    view.wantsLayer = true
                 }
+                view.layer?.addSublayer(newPlayerLayer)
                 
                 // Guardar referencias después de configurar
                 self.player = newPlayer
                 self.playerItem = newPlayerItem
+                self.playerLayer = newPlayerLayer // Guardar referencia al layer
                 
                 // Configurar loop si es necesario
                 if shouldLoop {
@@ -124,8 +130,14 @@ struct VideoPlayerViewNew: NSViewRepresentable {
             self.loopObserver = observer
         }
         
-        func updatePlayerView(_ playerView: AVPlayerView) {
-            self.playerView = playerView
+        // func updatePlayerView(_ playerView: AVPlayerView) { // Eliminado o cambiar propósito
+        //     self.playerView = playerView
+        // }
+        
+        func updateContainingView(_ view: NSView) {
+            // Esta función puede ser usada si el coordinator necesita una referencia a la NSView
+            // Por ejemplo, para ajustar el frame del playerLayer si la vista cambia de tamaño.
+            // Por ahora, el frame se establece en createNewPlayer y se actualizará en updateNSView.
         }
         
         func cleanup() {
@@ -142,34 +154,50 @@ struct VideoPlayerViewNew: NSViewRepresentable {
         }
     }
     
-    func makeNSView(context: Context) -> AVPlayerView {
-        let playerView = AVPlayerView()
+    func makeNSView(context: Context) -> NSView { // Modificado: Retorna NSView
+        let view = NSView()
+        view.wantsLayer = true // Esencial para añadir AVPlayerLayer
         
-        print("🎬 Creando nueva AVPlayerView")
+        print("🎬 Creando nueva NSView para AVPlayerLayer")
         
-        // Configurar el playerView
-        context.coordinator.updatePlayerView(playerView)
-        context.coordinator.setupPlayer(for: url, shouldLoop: shouldLoop, aspectFill: aspectFill)
+        // Configurar el player y playerLayer a través del coordinator
+        // Pasamos la vista para que el coordinator pueda añadir la capa de video.
+        context.coordinator.setupPlayer(for: url, shouldLoop: shouldLoop, aspectFill: aspectFill, in: view)
         
-        return playerView
+        return view
     }
     
-    func updateNSView(_ nsView: AVPlayerView, context: Context) {
+    func updateNSView(_ nsView: NSView, context: Context) { // Modificado: Acepta NSView
         print("🔄 Actualizando NSView para: \(url.lastPathComponent)")
         
+        // Ajustar el frame del playerLayer si el tamaño de la vista cambió
+        if let playerLayer = context.coordinator.playerLayer, playerLayer.superlayer === nsView.layer {
+            if playerLayer.frame != nsView.bounds {
+                playerLayer.frame = nsView.bounds
+                print("🔄 Frame de AVPlayerLayer actualizado a: \(nsView.bounds)")
+            }
+        }
+        
         // Verificar si la URL cambió
-        if let currentURL = (nsView.player?.currentItem?.asset as? AVURLAsset)?.url,
-           currentURL != url {
+        // La lógica original para cambiar de player si la URL cambia se mantiene,
+        // pero setupPlayer ahora toma 'nsView' como argumento.
+        if let currentAsset = context.coordinator.player?.currentItem?.asset as? AVURLAsset,
+           currentAsset.url != url {
             
-            print("🎯 URL cambió de \(currentURL.lastPathComponent) a \(url.lastPathComponent)")
-            context.coordinator.setupPlayer(for: url, shouldLoop: shouldLoop, aspectFill: aspectFill)
+            print("🎯 URL cambió de \(currentAsset.url.lastPathComponent) a \(url.lastPathComponent)")
+            context.coordinator.setupPlayer(for: url, shouldLoop: shouldLoop, aspectFill: aspectFill, in: nsView)
+        } else if context.coordinator.player == nil { // Si no hay player, configurarlo
+            print("🤔 No hay player existente, configurando uno nuevo en updateNSView.")
+            context.coordinator.setupPlayer(for: url, shouldLoop: shouldLoop, aspectFill: aspectFill, in: nsView)
         }
     }
     
-    static func dismantleNSView(_ nsView: AVPlayerView, coordinator: Coordinator) {
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { // Modificado: Acepta NSView
         print("🧹 Desmontando NSView...")
-        coordinator.cleanup()
-        nsView.player = nil
+        coordinator.cleanup() // El coordinator debería manejar la limpieza de su playerLayer
+        // nsView.player = nil // nsView ya no es AVPlayerView
+        // Quitar la capa explícitamente si es necesario, aunque cleanup del coordinator debería hacerlo.
+        nsView.layer?.sublayers?.removeAll(where: { $0 is AVPlayerLayer })
         print("✅ NSView desmontado correctamente")
     }
 }

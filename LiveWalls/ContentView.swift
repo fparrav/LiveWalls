@@ -1,5 +1,5 @@
 import SwiftUI
-import AVKit // Necesario para VideoPlayer y AVPlayer en la vista de detalle
+// import AVKit // Necesario para VideoPlayer y AVPlayer en la vista de detalle // Eliminado ya que VideoPlayerView usa AVFoundation
 import Foundation
 
 struct ContentView: View {
@@ -225,16 +225,15 @@ struct VideoDetailView: View {
 
             if showVideoPreview {
                 if let urlAccesible = urlAccesible {
-                    // Vista previa usando AVKit.VideoPlayer con interacción deshabilitada
-                    // Se ocultan los controles mediante configuración y deshabilitación de interacción
-                    VideoPlayer(player: AVPlayer(url: urlAccesible))
+                    // Vista previa usando AVPlayerLayer a través de VideoPlayerView
+                    VideoPlayerView(url: urlAccesible) // Reemplazado AVKit.VideoPlayer
                         .frame(maxWidth: 400, maxHeight: 300)
                         .cornerRadius(8)
                         .padding(.bottom)
-                        .allowsHitTesting(false) // Deshabilitamos completamente la interacción
-                        .onAppear {
-                            // Configuración adicional para ocultar controles si es posible
-                        }
+                        // .allowsHitTesting(false) // VideoPlayerView (NSViewRepresentable) maneja interacciones de forma diferente
+                        // .onAppear {
+                        //     // Configuración adicional para ocultar controles si es posible
+                        // } // onAppear no es directamente aplicable aquí de la misma manera
                 } else {
                     // Si no se pudo resolver el bookmark, mostrar error
                     Image(systemName: "exclamationmark.triangle.fill")

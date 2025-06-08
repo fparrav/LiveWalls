@@ -1,7 +1,6 @@
 import Cocoa
 import CoreGraphics
 import AVFoundation
-import AVKit
 import os.log
 
 // Logger específico para debugging de memoria
