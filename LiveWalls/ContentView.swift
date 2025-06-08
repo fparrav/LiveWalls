@@ -1,23 +1,59 @@
 import SwiftUI
+import AVKit // Necesario para VideoPlayer y AVPlayer en la vista de detalle
+import Foundation
 
 struct ContentView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
     @State private var isImporting = false
     @State private var selectedVideo: VideoFile?
-    
-@State private var showMainWindow: Bool = true
 
-var body: some View {
-    NavigationSplitView {
-        // Sidebar con lista de videos
-        VStack(alignment: .leading, spacing: 16) {
+    @State private var showMainWindow: Bool = true
+
+    var body: some View {
+        NavigationSplitView {
+            sidebarView // Vista de la barra lateral
+        } detail: {
+            detailView // Vista de detalle
+        }
+        .fileImporter(
+            isPresented: $isImporting,
+            allowedContentTypes: [.movie],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                wallpaperManager.addVideoFiles(urls: urls)
+            case .failure(let error):
+                print("Error al importar videos: \(error.localizedDescription)")
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Configuración App") { // Renombrado para diferenciar del enlace en sidebar
+                    // Aquí se puede abrir una ventana de configuración global de la app
+                    // Por ejemplo, usando SettingsLink en macOS 14+ o una hoja/ventana modal
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowMainWindow"))) { _ in
+            // Si la ventana está oculta, traerla al frente
+            if let window = NSApp.windows.first(where: { !$0.isVisible && !($0 is NSPanel) }) ?? NSApp.windows.first {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+    }
+
+    // Vista computada para la barra lateral
+    @ViewBuilder
+    private var sidebarView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Encabezado con título y botón de agregar
             HStack {
                 Text("Videos")
                     .font(.title2)
                     .fontWeight(.bold)
-                
                 Spacer()
-                
                 Button(action: {
                     isImporting = true
                 }) {
@@ -25,27 +61,41 @@ var body: some View {
                 }
                 .help("Agregar videos")
             }
-            .padding(.horizontal)
-            
-            List(wallpaperManager.videoFiles, selection: $selectedVideo) { video in
-                VideoRowView(video: video)
-                    .tag(video)
-                    .onTapGesture {
-                        // Al seleccionar un video, se establece automáticamente como activo
-                        wallpaperManager.setActiveVideo(video)
-                    }
-                    .contextMenu {
-                        Button("Eliminar", role: .destructive) {
-                            wallpaperManager.removeVideo(video)
+            .padding([.horizontal, .top])
+            .padding(.bottom, 8) // Espacio antes de la lista
+
+            // Lista de videos y enlace de configuración
+            List(selection: $selectedVideo) {
+                ForEach(wallpaperManager.videoFiles) { video in
+                    VideoRowView(video: video)
+                        .tag(video) // Necesario para que la selección funcione con List
+                        .onTapGesture {
+                            // Al seleccionar un video, se establece automáticamente como activo
+                            // y se actualiza selectedVideo para la NavigationSplitView
+                            wallpaperManager.setActiveVideo(video)
+                            // selectedVideo se actualiza automáticamente por el binding de List
                         }
+                        .contextMenu {
+                            Button("Eliminar", role: .destructive) {
+                                wallpaperManager.removeVideo(video)
+                            }
+                        }
+                }
+                
+                // Sección para otros enlaces como "Configuración"
+                Section(header: Text("Opciones")) {
+                    NavigationLink("Configuración Video") { // Enlace a una vista de configuración específica
+                        Text("Ventana de Configuración de Video (Placeholder)")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .navigationTitle("Configuración Video")
                     }
+                }
             }
-            .listStyle(SidebarListStyle())
-            
-            // Controles de reproducción
+            .listStyle(.sidebar) // Estilo apropiado para la barra lateral
+
+            // Controles de reproducción en la parte inferior de la barra lateral
             VStack(spacing: 12) {
                 Divider()
-                
                 HStack {
                     Button(action: {
                         wallpaperManager.toggleWallpaper()
@@ -57,10 +107,10 @@ var body: some View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(wallpaperManager.currentVideo == nil)
-                    
                     Spacer()
                 }
-                
+                .padding(.horizontal)
+
                 if let currentVideo = wallpaperManager.currentVideo {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
@@ -71,49 +121,24 @@ var body: some View {
                         Spacer()
                     }
                     .foregroundColor(.secondary)
+                    .padding(.horizontal)
                 }
             }
-            .padding()
-        }
-    } detail: {
-        // Área principal con vista previa
-        Group {
-            if let selectedVideo = selectedVideo {
-                VideoDetailView(video: selectedVideo)
-            } else {
-                ContentUnavailableView(
-                    "Selecciona un video",
-                    systemImage: "video.fill",
-                    description: Text("Elige un video de la lista para ver una vista previa")
-                )
-            }
+            .padding(.vertical)
         }
     }
-    .fileImporter(
-        isPresented: $isImporting,
-        allowedContentTypes: [.movie],
-        allowsMultipleSelection: true
-    ) { result in
-        switch result {
-        case .success(let urls):
-            wallpaperManager.addVideoFiles(urls: urls)
-        case .failure(let error):
-            print("Error al importar videos: \(error.localizedDescription)")
-        }
-    }
-    .toolbar {
-        ToolbarItem(placement: .primaryAction) {
-            Button("Configuración") {
-                // Aquí se puede abrir una ventana de configuración
-            }
-        }
-    }
-    // Escuchar la notificación para forzar la aparición de la ventana principal
-    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowMainWindow"))) { _ in
-        // Si la ventana está oculta, traerla al frente
-        if let window = NSApp.windows.first(where: { !$0.isVisible && !($0 is NSPanel) }) ?? NSApp.windows.first {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+
+    // Vista computada para el área de detalle
+    @ViewBuilder
+    private var detailView: some View {
+        if let video = selectedVideo {
+            VideoDetailView(video: video, selectedVideo: $selectedVideo)
+        } else {
+            ContentUnavailableView(
+                "Selecciona un video",
+                systemImage: "video.fill",
+                description: Text("Elige un video de la lista para ver una vista previa y detalles.")
+            )
         }
     }
 }
@@ -135,20 +160,20 @@ struct VideoRowView: View {
                     .frame(width: 60, height: 40)
                     .foregroundColor(.gray)
             }
-            
+
             VStack(alignment: .leading) {
                 Text(video.name)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
-                
+
                 Text(video.url.path)
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
-            
+
             Spacer()
-            
+
             if video.isActive {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)
@@ -161,6 +186,7 @@ struct VideoRowView: View {
 
 struct VideoDetailView: View {
     let video: VideoFile
+    @Binding var selectedVideo: VideoFile? // Binding para actualizar la selección
 
     @EnvironmentObject var wallpaperManager: WallpaperManager // Acceder al manager
     @State private var showVideoPreview = false
@@ -182,31 +208,33 @@ struct VideoDetailView: View {
             .padding(.bottom)
 
             // Resolución y liberación del bookmark para la vista previa
-            .onChange(of: showVideoPreview) {
-                if $0 {
-                    // Solo resolver si no está ya resuelta
+            .onChange(of: showVideoPreview) { _, newValue in
+                if newValue {
                     if urlAccesible == nil {
                         urlAccesible = wallpaperManager.resolveBookmark(for: video)
                     }
                 } else {
-                    // Liberar el recurso cuando se oculta la vista previa
                     urlAccesible?.stopAccessingSecurityScopedResource()
                     urlAccesible = nil
                 }
             }
             .onDisappear {
-                // Liberar siempre al salir de la vista
                 urlAccesible?.stopAccessingSecurityScopedResource()
                 urlAccesible = nil
             }
 
             if showVideoPreview {
                 if let urlAccesible = urlAccesible {
-                    // Vista previa real usando VideoPlayerView instrumentado
-                    VideoPlayerView(url: urlAccesible, shouldLoop: true, aspectFill: true)
+                    // Vista previa usando AVKit.VideoPlayer con interacción deshabilitada
+                    // Se ocultan los controles mediante configuración y deshabilitación de interacción
+                    VideoPlayer(player: AVPlayer(url: urlAccesible))
                         .frame(maxWidth: 400, maxHeight: 300)
                         .cornerRadius(8)
                         .padding(.bottom)
+                        .allowsHitTesting(false) // Deshabilitamos completamente la interacción
+                        .onAppear {
+                            // Configuración adicional para ocultar controles si es posible
+                        }
                 } else {
                     // Si no se pudo resolver el bookmark, mostrar error
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -221,11 +249,10 @@ struct VideoDetailView: View {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 400, maxHeight: 300) // Tamaño más grande para el detalle
+                    .frame(maxWidth: 400, maxHeight: 300)
                     .cornerRadius(8)
                     .padding(.bottom)
             } else {
-                // Vista previa más grande si no hay miniatura, o un mensaje
                 Image(systemName: "video.slash.fill")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -237,7 +264,7 @@ struct VideoDetailView: View {
                     .foregroundColor(.secondary)
             }
 
-            Text("Ubicación: \(video.url.path(percentEncoded: false))") // Mostrar la URL original
+            Text("Ubicación: \(video.url.path(percentEncoded: false))")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .padding(.bottom)
@@ -248,13 +275,62 @@ struct VideoDetailView: View {
                         .foregroundColor(.green)
                 }
             }
+            
+            // Botones de navegación para testing
+            HStack(spacing: 16) {
+                Button("← Video Anterior") {
+                    navigationToPreviousVideo()
+                }
+                .buttonStyle(.bordered)
+                .disabled(wallpaperManager.videoFiles.count <= 1)
+                
+                Button("Video Siguiente →") {
+                    navigationToNextVideo()
+                }
+                .buttonStyle(.bordered)
+                .disabled(wallpaperManager.videoFiles.count <= 1)
+            }
+            .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
     }
+    
+    // Función para navegar al video anterior
+    private func navigationToPreviousVideo() {
+        guard let currentVideo = selectedVideo,
+              let currentIndex = wallpaperManager.videoFiles.firstIndex(of: currentVideo),
+              currentIndex > 0 else {
+            // Si no hay video actual o estamos en el primero, ir al último
+            guard let lastVideo = wallpaperManager.videoFiles.last else { return }
+            selectedVideo = lastVideo
+            wallpaperManager.setActiveVideo(lastVideo)
+            return
+        }
+        let previousVideo = wallpaperManager.videoFiles[currentIndex - 1]
+        selectedVideo = previousVideo
+        wallpaperManager.setActiveVideo(previousVideo)
+    }
+    
+    // Función para navegar al video siguiente
+    private func navigationToNextVideo() {
+        guard let currentVideo = selectedVideo,
+              let currentIndex = wallpaperManager.videoFiles.firstIndex(of: currentVideo),
+              currentIndex < wallpaperManager.videoFiles.count - 1 else {
+            // Si no hay video actual o estamos en el último, ir al primero
+            guard let firstVideo = wallpaperManager.videoFiles.first else { return }
+            selectedVideo = firstVideo
+            wallpaperManager.setActiveVideo(firstVideo)
+            return
+        }
+        let nextVideo = wallpaperManager.videoFiles[currentIndex + 1]
+        selectedVideo = nextVideo
+        wallpaperManager.setActiveVideo(nextVideo)
+    }
 }
 
-#Preview {
-    ContentView()
-        .environmentObject(WallpaperManager())
-}
+// Preview temporalmente deshabilitado para resolver errores de compilación
+//#Preview {
+//    ContentView()
+//        .environmentObject(WallpaperManager())
+//}

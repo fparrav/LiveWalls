@@ -78,28 +78,34 @@ extension AVAssetTrack {
 
 
 
-/// Ventana de video de escritorio que gestiona su propio acceso security-scoped.
-/// Es responsable de liberar el acceso a la URL asociada cuando se cierra o se destruye la ventana.
+/// Ventana de video de escritorio que recibe una URL con acceso security-scoped ya manejado externamente.
+/// NO es responsable de gestionar el acceso security-scoped, solo de reproducir el video.
 class DesktopVideoWindow: NSWindow {
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var videoURL: URL
-    /// URL con acceso security-scoped activo. Debe ser liberada por esta instancia.
+    /// URL recibida con acceso activo - NO manejada por esta instancia
     private var urlSecurityScoped: URL?
     private var playerItemStatusObserver: NSKeyValueObservation?
     private var playerRateObserver: NSKeyValueObservation?
+    private var playerItemDidPlayToEndObserver: NSObjectProtocol?
     private var playerItem: AVPlayerItem?
     private var isClosing: Bool = false
     /// Flag para evitar condiciones de carrera entre setup y cleanup
     private var isPlayerSetupInProgress: Bool = false
+    /// Flag para indicar si la ventana está siendo destruida
+    private var isBeingTornDown: Bool = false
 
     /// Inicializa la ventana con la pantalla y la URL de video accesible (security-scoped activa).
+    /// IMPORTANTE: La ventana NO toma ownership del acceso security-scoped. 
+    /// El WallpaperManager es responsable de gestionar el ciclo de vida del acceso.
     /// - Parameters:
     ///   - screen: Pantalla destino.
     ///   - videoURL: URL del video con acceso security-scoped activo.
     init(screen: NSScreen, videoURL: URL) {
         self.videoURL = videoURL
-        self.urlSecurityScoped = videoURL
+        // NO asignar urlSecurityScoped = videoURL porque no es responsabilidad de la ventana
+        self.urlSecurityScoped = nil
 
         let contentRect = screen.frame
 
@@ -319,30 +325,30 @@ class DesktopVideoWindow: NSWindow {
             }
         }
 
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(playerItemDidPlayToEndTime(notification:)),
-            name: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem
-        )
+        // Agregar observador de notificación para el final del video y guardar referencia
+        playerItemDidPlayToEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleVideoEndNotification()
+        }
 
         player?.isMuted = true
         print("🎧 Reproductor silenciado.")
         print("⏳ AVPlayer configurado para \(videoURL.lastPathComponent). Esperando estado 'readyToPlay' para iniciar reproducción...")
     }
     
-    @objc private func playerItemDidPlayToEndTime(notification: NSNotification) {
+    private func handleVideoEndNotification() {
         // Blindar contra notificaciones tardías tras limpieza
         guard !isClosing else {
-            memoryLogger.debug("⚠️ [playerItemDidPlayToEndTime] Ignorado por isClosing=true para \(self.videoURL.lastPathComponent)")
+            memoryLogger.debug("⚠️ [handleVideoEndNotification] Ignorado por isClosing=true para \(self.videoURL.lastPathComponent)")
             return
         }
-        guard let playerItem = notification.object as? AVPlayerItem else { return }
-        // Asegurarse de que la notificación es para el item actual
-        if playerItem == self.player?.currentItem {
-            print("🔄 Video \(self.videoURL.lastPathComponent) llegó al final. Reiniciando.")
-            self.restartVideo()
-        }
+        guard self.player?.currentItem != nil else { return }
+        
+        print("🔄 Video \(self.videoURL.lastPathComponent) llegó al final. Reiniciando.")
+        self.restartVideo()
     }
 
     private func restartVideo() {
@@ -379,17 +385,68 @@ class DesktopVideoWindow: NSWindow {
     }
 
     /// Libera el acceso security-scoped de la URL asociada si está activo.
-    /// Libera el acceso security-scoped de la URL asociada si está activo.
-    /// Libera el acceso security-scoped de la URL asociada si está activo.
-    /// Ahora acepta un contexto para logging detallado.
+    /// Ahora acepta un contexto para logging detallado y maneja mejor los casos de URL nil.
+    /// NOTA: Esta función quedará sin efecto ya que urlSecurityScoped siempre será nil.
+    /// El WallpaperManager es responsable de gestionar el acceso security-scoped.
     private func liberarAccesoSecurityScoped(context: String = "[deinit]") {
         guard let url = urlSecurityScoped else {
-            memoryLogger.debug("🛑 \(context) liberarAccesoSecurityScoped: urlSecurityScoped ya era nil para \(self.videoURL.lastPathComponent)")
+            // Es normal que sea nil ya que la ventana no gestiona el acceso security-scoped
+            memoryLogger.debug("🛑 \(context) liberarAccesoSecurityScoped: No hay acceso security-scoped bajo gestión de la ventana para \(self.videoURL.lastPathComponent)")
             return
         }
         url.stopAccessingSecurityScopedResource()
         memoryLogger.info("🛑 \(context) Security-scoped access liberado por DesktopVideoWindow para: \(url.lastPathComponent)")
         urlSecurityScoped = nil
+    }
+    
+    /**
+     * Limpia todos los recursos de video de manera segura y síncrona.
+     * Esta versión revisada asegura la correcta secuencia de limpieza.
+     */
+    func cleanupVideoResources() {
+        // Marcar como en proceso de limpieza
+        isBeingTornDown = true
+        
+        // IMPORTANTE: Detener reproductor antes de limpiar observadores
+        player?.pause()
+        
+        // Limpiar observador de status primero
+        if let playerItemStatusObserver = playerItemStatusObserver {
+            playerItemStatusObserver.invalidate()
+            self.playerItemStatusObserver = nil
+        }
+        
+        // Limpiar observador de notificaciones
+        if let endObserver = playerItemDidPlayToEndObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.playerItemDidPlayToEndObserver = nil
+        }
+        
+        // Ahora es seguro eliminar la capa de video
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Limpiar capa de video
+            if let playerLayer = self.playerLayer {
+                playerLayer.removeFromSuperlayer()
+                self.playerLayer = nil
+            }
+            
+            // Finalmente, eliminar referencias al reproductor y su ítem
+            // IMPORTANTE: Primero el item se desvincula, luego se limpia el player
+            let tempItem = self.playerItem
+            let tempPlayer = self.player
+            
+            self.playerItem = nil
+            self.player = nil
+            
+            // Liberar recursos explícitamente
+            tempItem?.asset.cancelLoading()
+            tempPlayer?.replaceCurrentItem(with: nil)
+            
+            // Restaurar flag de limpieza
+            self.isBeingTornDown = false
+        }
     }
     
     /// Limpia todos los recursos de video y observadores de forma segura.

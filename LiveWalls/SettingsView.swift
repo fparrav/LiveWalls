@@ -17,13 +17,13 @@ struct SettingsView: View {
             GroupBox("Reproducción") {
                 VStack(alignment: .leading, spacing: 12) {
                     Toggle("Iniciar fondo de pantalla automáticamente", isOn: $autoStartWallpaper)
-                        .onChange(of: autoStartWallpaper) {
-                            UserDefaults.standard.set($0, forKey: "AutoStartWallpaper")
+                        .onChange(of: autoStartWallpaper) { _, newValue in
+                            UserDefaults.standard.set(newValue, forKey: "AutoStartWallpaper")
                         }
                     
                     Toggle("Silenciar videos", isOn: $muteVideo)
-                        .onChange(of: muteVideo) {
-                            UserDefaults.standard.set($0, forKey: "MuteVideo")
+                        .onChange(of: muteVideo) { _, newValue in
+                            UserDefaults.standard.set(newValue, forKey: "MuteVideo")
                         }
                     
                     HStack {
@@ -34,8 +34,8 @@ struct SettingsView: View {
                             Text("Alta").tag(2)
                         }
                         .pickerStyle(SegmentedPickerStyle())
-                        .onChange(of: videoQuality) {
-                            UserDefaults.standard.set($0, forKey: "VideoQuality")
+                        .onChange(of: videoQuality) { _, newValue in
+                            UserDefaults.standard.set(newValue, forKey: "VideoQuality")
                         }
                     }
                 }
