@@ -123,6 +123,19 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
                 }
+                
+                // Área para información adicional (sin botones de debug)
+                // Dejamos comentado por si se necesita agregar información en el futuro
+                /*
+                VStack(spacing: 8) {
+                    Divider()
+                    
+                    Text("Información")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 8)
+                */
             }
             .padding(.vertical)
         }
@@ -275,19 +288,10 @@ struct VideoDetailView: View {
                 }
             }
             
-            // Botones de navegación para testing
-            HStack(spacing: 16) {
-                Button("← Video Anterior") {
-                    navigationToPreviousVideo()
-                }
-                .buttonStyle(.bordered)
-                .disabled(wallpaperManager.videoFiles.count <= 1)
-                
-                Button("Video Siguiente →") {
-                    navigationToNextVideo()
-                }
-                .buttonStyle(.bordered)
-                .disabled(wallpaperManager.videoFiles.count <= 1)
+            // Área para controles adicionales (sin botones de testing)
+            HStack {
+                // Dejamos este espacio para futuros controles de usuario
+                Spacer()
             }
             .padding(.top, 8)
         }

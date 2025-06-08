@@ -2,7 +2,10 @@ import Foundation
 import AppKit
 import AVFoundation
 import UserNotifications
-import os.log // Asegúrate de que os.log esté importado
+import CoreMedia
+import os.log
+
+// Importación del logger específico para debugging de memoria en WallpaperManager
 
 // Logger específico para debugging de memoria en WallpaperManager
 private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManagerMemory")
@@ -12,8 +15,8 @@ class WallpaperManager: ObservableObject {
     @Published var currentVideo: VideoFile?
     @Published var isPlayingWallpaper = false
     
-    // private var desktopWindows: [DesktopVideoWindow] = // Modificado
-    private var desktopVideoInstances: [(window: DesktopVideoWindow, accessibleURL: URL)] = [] // Nuevo
+    // private var desktopWindows: [DesktopVideoWindowMejorada] = // Modificado
+    private var desktopVideoInstances: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)] = [] // Nuevo
     /// Retardo (en segundos) antes de liberar el acceso security-scoped tras cerrar una ventana.
     /// Ajusta este valor si observas problemas de recursos o race conditions.
     private let resourceReleaseDelay: TimeInterval = 0.1
@@ -38,19 +41,18 @@ class WallpaperManager: ObservableObject {
     
     init() {
         loadSavedVideos()
-        loadCurrentVideo()
+        loadCurrentVideo() // loadCurrentVideo ya verifica si el video existe en la lista
         setupScreenChangeNotifications()
         
-        // Para testing: cargar videos automáticamente si la lista está vacía
-        if videoFiles.isEmpty {
-            loadTestingVideos()
-        }
-        
-        // Auto-start si estaba activo previamente
-        if UserDefaults.standard.bool(forKey: "AutoStartWallpaper") && currentVideo != nil {
+        // Auto-start solo si hay videos disponibles y un video actual seleccionado
+        if !videoFiles.isEmpty && currentVideo != nil && UserDefaults.standard.bool(forKey: "AutoStartWallpaper") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 self.startWallpaper()
             }
+        } else if videoFiles.isEmpty && UserDefaults.standard.bool(forKey: "AutoStartWallpaper") {
+            // Si la lista está vacía pero se esperaba auto-start, desactivar el setting
+            print("⚠️ Auto-start desactivado porque la lista de videos está vacía")
+            UserDefaults.standard.set(false, forKey: "AutoStartWallpaper")
         }
     }
     
@@ -123,7 +125,7 @@ class WallpaperManager: ObservableObject {
 
             var bookmarkData: Data?
             do {
-                bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+                bookmarkData = try url.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
                 print("🔖 Bookmark creado para: \(url.lastPathComponent)")
             } catch {
                 print("❌ Error al crear bookmark para \(url.path): \(error.localizedDescription)")
@@ -326,20 +328,46 @@ class WallpaperManager: ObservableObject {
         wallpaperOperationQueue.async { [weak self] in
             guard let self = self else { return }
             self.wallpaperOperationSemaphore.wait()
-            // Capturar la URL del video actual aquí, ANTES de cualquier operación asíncrona dentro de stopWallpaperInternal
-            let urlToActuallyRelease = self.currentVideo?.url // MODIFICADO
-            self.stopWallpaperInternal(urlToRelease: urlToActuallyRelease) { // MODIFICADO
+            
+            // Si no hay currentVideo pero hay ventanas activas, necesitamos una forma de cerrarlas
+            var urlToActuallyRelease: URL? = nil
+            
+            if let videoActual = self.currentVideo {
+                urlToActuallyRelease = videoActual.url
+                print("🔍 Deteniendo wallpaper con video actual: \(videoActual.name)")
+            } else if !self.desktopVideoInstances.isEmpty, let firstInstance = self.desktopVideoInstances.first {
+                // Si hay ventanas pero no hay currentVideo, usar la URL del primer instance
+                urlToActuallyRelease = firstInstance.accessibleURL
+                print("🔍 Deteniendo wallpaper sin video actual, usando URL del primer instance")
+            } else {
+                print("🔍 Deteniendo wallpaper sin video actual ni instancias")
+            }
+            
+            self.stopWallpaperInternal(urlToRelease: urlToActuallyRelease) {
                 self.wallpaperOperationSemaphore.signal()
             }
         }
     }
 
-    // Modificado para aceptar urlToRelease
+    // Modificado para aceptar urlToRelease y manejar caso de lista vacía
     private func stopWallpaperInternal(urlToRelease: URL?, completion: (() -> Void)? = nil) {
         print("🛑 [stopWallpaperInternal] iniciado")
         DispatchQueue.main.async {
             let wasPlaying = self.isPlayingWallpaper // Capturar antes de cambiar
             self.isPlayingWallpaper = false // Marcar como no reproduciendo inmediatamente
+
+            // Verificar si hay instancias de ventanas a cerrar
+            if self.desktopVideoInstances.isEmpty {
+                // No hay ventanas para cerrar, simplemente terminamos
+                print("ℹ️ [stopWallpaperInternal] No hay ventanas de fondo para detener")
+                if wasPlaying { // Usar el estado capturado
+                    self.notificationManager.showWallpaperStopped()
+                }
+                UserDefaults.standard.set(false, forKey: "AutoStartWallpaper")
+                print("✅ [stopWallpaperInternal] completado (sin ventanas para cerrar).")
+                completion?()
+                return
+            }
 
             // Pasar la urlToRelease capturada a destroyDesktopWindowsInternal
             self.destroyDesktopWindowsInternal(urlToRelease: urlToRelease) { // MODIFICADO
@@ -456,16 +484,14 @@ class WallpaperManager: ObservableObject {
 
         for (index, screen) in screens.enumerated() {
             print("📺 Pantalla \(index + 1): \(screen.localizedName) - \(screen.frame)")
-            let window = DesktopVideoWindow(screen: screen, videoURL: accessibleURL)
-            // desktopWindows.append(window) // Modificado
-            self.desktopVideoInstances.append((window: window, accessibleURL: accessibleURL)) // Nuevo, usando self para claridad
+            let window = DesktopVideoWindowMejorada(screen: screen, videoURL: accessibleURL)
+            self.desktopVideoInstances.append((window: window, accessibleURL: accessibleURL))
             
-            window.orderBack(nil)
+            window.orderBack(nil as NSWindow?)
             print("✅ Ventana \(index + 1) creada y posicionada")
         }
         
-        // print("🎬 Total de ventanas creadas: \\(desktopWindows.count)") // Modificado
-        print("🎬 Total de ventanas creadas: \(desktopVideoInstances.count)") // Nuevo
+        print("🎬 Total de ventanas creadas: \(desktopVideoInstances.count)")
     }
     
     /// Destruye todas las ventanas de video de escritorio de forma segura.
@@ -505,9 +531,16 @@ class WallpaperManager: ObservableObject {
         let logMessage = "🧹 Instancias de DesktopVideoWindow eliminadas del seguimiento del manager. Procediendo a cerrarlas."
         memoryLogger.debug("\(logMessage)")
 
-
         if windowsToClose.isEmpty {
             memoryLogger.debug("💨 No hay ventanas de escritorio para destruir.")
+            
+            // Si no hay ventanas para cerrar, verificamos si hay una URL para liberar
+            if capturedUrlToStopAccess == nil {
+                // Si no hay ventanas NI URL, podemos terminar inmediatamente
+                memoryLogger.info("✅ Limpieza de recursos completada (no hay ventanas ni URL para liberar).")
+                completion?()
+                return
+            }
         } else {
             memoryLogger.info("🧹 Cerrando \(windowsToClose.count) ventana(s) de escritorio.")
             for (windowInstance, _) in windowsToClose {
@@ -580,12 +613,12 @@ class WallpaperManager: ObservableObject {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 200, height: 200)
-        generator.requestedTimeToleranceBefore = .zero
-        generator.requestedTimeToleranceAfter = .zero
+        generator.requestedTimeToleranceBefore = CMTime.zero
+        generator.requestedTimeToleranceAfter = CMTime.zero
         
         let time = CMTime(seconds: 1.0, preferredTimescale: 600)
         
-        generator.generateCGImageAsynchronously(for: time) { [weak self] cgImage, actualTime, error in
+        generator.generateCGImageAsynchronously(for: time) { [weak self] (cgImage: CGImage?, actualTime: CMTime, error: Error?) in
             // Es crucial detener el acceso al recurso aquí, independientemente del resultado.
             accessibleURL.stopAccessingSecurityScopedResource()
             print("🛑 Acceso detenido para \\(accessibleURL.lastPathComponent) después de intentar generar miniatura.")
@@ -639,7 +672,7 @@ class WallpaperManager: ObservableObject {
             print("⚠️ No hay bookmark data para: \\(mutableVideoFile.name). Intentando crear uno nuevo desde la URL original.")
             if mutableVideoFile.url.startAccessingSecurityScopedResource() { // Acceder a la URL original
                 do {
-                    let newBookmarkData = try mutableVideoFile.url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+                    let newBookmarkData = try mutableVideoFile.url.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
                     mutableVideoFile.bookmarkData = newBookmarkData // Actualizar la copia mutable
 
                     // Actualizar el videoFile real en el array videoFiles y guardar
@@ -668,13 +701,13 @@ class WallpaperManager: ObservableObject {
 
         var isStale = false
         do {
-            var resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+            var resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: URL.BookmarkResolutionOptions.withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
             
             if isStale {
                 print("⚠️ Bookmark para \\(mutableVideoFile.name) está obsoleto. Intentando refrescarlo...")
                 // Para refrescar, primero se debe poder acceder a la URL resuelta (aunque esté obsoleta)
                 if resolvedURL.startAccessingSecurityScopedResource() {
-                    if let newBookmarkData = try? resolvedURL.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
+                    if let newBookmarkData = try? resolvedURL.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
                         if let index = videoFiles.firstIndex(where: { $0.id == mutableVideoFile.id }) {
                             videoFiles[index].bookmarkData = newBookmarkData
                             saveVideos() // Guardar el bookmark actualizado
@@ -696,7 +729,7 @@ class WallpaperManager: ObservableObject {
                     if let index = videoFiles.firstIndex(where: { $0.id == mutableVideoFile.id }),
                        let refreshedBookmarkData = videoFiles[index].bookmarkData {
                         var refreshedIsStale = false // Esta no debería ser obsoleta ahora
-                        resolvedURL = try URL(resolvingBookmarkData: refreshedBookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &refreshedIsStale)
+                        resolvedURL = try URL(resolvingBookmarkData: refreshedBookmarkData, options: URL.BookmarkResolutionOptions.withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &refreshedIsStale)
                         if refreshedIsStale {
                              print("‼️ Bookmark para \\(mutableVideoFile.name) sigue obsoleto inmediatamente después de refrescar.")
                         }
@@ -763,9 +796,19 @@ class WallpaperManager: ObservableObject {
     private func loadCurrentVideo() {
         if let data = userDefaults.data(forKey: currentVideoKey),
            let video = try? JSONDecoder().decode(VideoFile.self, from: data) {
-            // Al cargar, la URL es la original. Necesitamos resolverla antes de usarla.
-            // Esto se hará en setActiveVideo o startWallpaper.
-            self.currentVideo = video
+            // Sólo establecer currentVideo si el video existe en la lista de videos
+            // Esto previene intentar usar un video que ya no está en la lista
+            if !videoFiles.isEmpty && videoFiles.contains(where: { $0.id == video.id }) {
+                // Al cargar, la URL es la original. Necesitamos resolverla antes de usarla.
+                // Esto se hará en setActiveVideo o startWallpaper.
+                self.currentVideo = video
+                print("✅ Cargado video actual: \(video.name)")
+            } else {
+                print("⚠️ El video guardado no se encuentra en la lista actual o la lista está vacía")
+                self.currentVideo = nil
+                // Eliminar la referencia guardada para evitar intentos futuros
+                userDefaults.removeObject(forKey: currentVideoKey)
+            }
         }
     }
     
@@ -810,5 +853,80 @@ class WallpaperManager: ObservableObject {
     private func safeStopSecurityScopedAccess(for url: URL) {
         url.stopAccessingSecurityScopedResource()
         print("🔒 Acceso security-scoped detenido para: \(url.lastPathComponent)")
+    }
+    
+    // MARK: - Testing y Debugging Utilities
+    
+    /// Limpia toda la lista de videos y carga un solo video para testing
+    /// Esta función es útil para depuración y testing de problemas específicos
+    func limpiarYCargarVideoUnico() {
+    print("🧹 Iniciando limpieza y carga de video único para testing...")
+    
+    // Detener wallpaper si está corriendo
+    if isPlayingWallpaper {
+        stopWallpaper()
+    }
+    
+    // Limpiar la lista actual
+    videoFiles.removeAll()
+    currentVideo = nil
+    
+    // Verificar ruta de testing
+    let rutaTesting = "/Users/felipe/Livewall/"
+    
+    guard let enumerator = FileManager.default.enumerator(atPath: rutaTesting) else {
+        print("❌ No se pudo acceder a la carpeta de testing: \(rutaTesting)")
+        notificationManager.showError(message: "No se pudo acceder a la carpeta de testing")
+        return
+    }
+    
+    // Buscar el primer video válido
+    for case let archivo as String in enumerator {
+        if archivo.hasSuffix(".mp4") || archivo.hasSuffix(".mov") {
+            let urlArchivo = URL(fileURLWithPath: rutaTesting + archivo)
+            if FileManager.default.fileExists(atPath: urlArchivo.path) {
+                print("🎯 Seleccionado video único para testing: \(archivo)")
+                
+                // Agregar solo este video
+                addVideoFiles(urls: [urlArchivo])
+                
+                // Seleccionarlo automáticamente
+                if let primerVideo = videoFiles.first {
+                    setActiveVideo(primerVideo)
+                    print("✅ Video único configurado para testing: \(primerVideo.name)")
+                    notificationManager.showMessage(title: "Testing", message: "Video único cargado: \(primerVideo.name)")
+                }
+                
+                // Guardar cambios
+                saveVideos()
+                return
+            }
+        }
+    }
+    
+    print("⚠️ No se encontraron videos válidos en \(rutaTesting)")
+    notificationManager.showError(message: "No se encontraron videos en la carpeta de testing")
+}
+
+    
+    /// Regenera la miniatura para el video actual
+    /// Útil cuando hay problemas con la generación de thumbnails
+    func regenerarMiniaturaVideoActual() {
+        guard let videoActual = currentVideo else {
+            notificationManager.showError(message: "No hay video activo para regenerar miniatura")
+            return
+        }
+        
+        print("🔄 Regenerando miniatura para: \(videoActual.name)")
+        
+        // Limpiar miniatura actual
+        if let index = videoFiles.firstIndex(where: { $0.id == videoActual.id }) {
+            videoFiles[index].thumbnailData = nil
+        }
+        
+        // Regenerar
+        generateThumbnail(for: videoActual)
+        
+        notificationManager.showMessage(title: "Miniatura", message: "Regenerando miniatura para \(videoActual.name)")
     }
 }

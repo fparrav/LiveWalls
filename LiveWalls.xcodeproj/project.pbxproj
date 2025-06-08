@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */ = {isa = PBXBuildFile; fileRef = 542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */; };
 		55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */; };
 		8B0C7D2A2B1F4A3000123456 /* LiveWallsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D292B1F4A3000123456 /* LiveWallsApp.swift */; };
 		8B0C7D2C2B1F4A3000123456 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D2B2B1F4A3000123456 /* ContentView.swift */; };
@@ -14,13 +15,14 @@
 		8B0C7D312B1F4A3100123456 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8B0C7D302B1F4A3100123456 /* Preview Assets.xcassets */; };
 		8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */; };
 		8B0C7D3A2B1F4A5000123456 /* VideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D392B1F4A5000123456 /* VideoPlayerView.swift */; };
-		8B0C7D3C2B1F4A6000123456 /* DesktopVideoWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3B2B1F4A6000123456 /* DesktopVideoWindow.swift */; };
+
 		8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */; };
 		8B0C7D402B1F4A8000123456 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */; };
 		8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D412B1F4A9000123456 /* NotificationManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopVideoWindowMejorada.swift; sourceTree = "<group>"; };
 		55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		55AC1F502DEA0F1400424EA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8B0C7D262B1F4A3000123456 /* LiveWalls.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiveWalls.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -31,7 +33,7 @@
 		8B0C7D322B1F4A3100123456 /* LiveWalls.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LiveWalls.entitlements; sourceTree = "<group>"; };
 		8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperManager.swift; sourceTree = "<group>"; };
 		8B0C7D392B1F4A5000123456 /* VideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerView.swift; sourceTree = "<group>"; };
-		8B0C7D3B2B1F4A6000123456 /* DesktopVideoWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopVideoWindow.swift; sourceTree = "<group>"; };
+
 		8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFile.swift; sourceTree = "<group>"; };
 		8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		8B0C7D412B1F4A9000123456 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
@@ -73,7 +75,8 @@
 				8B0C7D2B2B1F4A3000123456 /* ContentView.swift */,
 				8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */,
 				8B0C7D392B1F4A5000123456 /* VideoPlayerView.swift */,
-				8B0C7D3B2B1F4A6000123456 /* DesktopVideoWindow.swift */,
+
+				542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */,
 				8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */,
 				8B0C7D412B1F4A9000123456 /* NotificationManager.swift */,
 				8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */,
@@ -120,7 +123,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 1620;
 				TargetAttributes = {
 					8B0C7D252B1F4A3000123456 = {
 						CreatedOnToolsVersion = 15.0;
@@ -166,7 +169,7 @@
 				8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */,
 				8B0C7D3A2B1F4A5000123456 /* VideoPlayerView.swift in Sources */,
 				55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */,
-				8B0C7D3C2B1F4A6000123456 /* DesktopVideoWindow.swift in Sources */,
+				542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */,
 				8B0C7D402B1F4A8000123456 /* SettingsView.swift in Sources */,
 				8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */,
 				8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */,
@@ -211,6 +214,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -274,6 +278,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -305,6 +310,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"LiveWalls/Preview Content\"";
 				DEVELOPMENT_TEAM = CED7KEV553;
 				ENABLE_PREVIEWS = YES;
@@ -336,6 +342,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"LiveWalls/Preview Content\"";
 				DEVELOPMENT_TEAM = CED7KEV553;
 				ENABLE_PREVIEWS = YES;

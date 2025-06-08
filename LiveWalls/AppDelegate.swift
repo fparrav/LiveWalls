@@ -10,8 +10,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Prevenir múltiples instancias
         let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier!)
         if runningApps.count > 1 {
-            logger.warning("⚠️ Ya hay una instancia de LiveWalls corriendo. Saliendo...")
-            NSApp.terminate(nil)
+            logger.warning("⚠️ Ya hay una instancia de LiveWalls corriendo. Activando la instancia existente y saliendo...")
+            
+            // Intentar activar la instancia existente
+            for app in runningApps {
+                if app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+                    app.activate(options: [.activateIgnoringOtherApps])
+                    break
+                }
+            }
+            
+            // Salir de ESTA instancia sin afectar a la existente
+            DispatchQueue.main.async {
+                exit(0) // Usar exit(0) en lugar de NSApp.terminate(nil)
+            }
+            return
         }
         
         // Configurar para manejar terminación
