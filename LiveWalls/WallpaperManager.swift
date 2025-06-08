@@ -258,7 +258,7 @@ class WallpaperManager: ObservableObject {
                 instance.window.close()
                 
                 // Introducir un retraso antes de detener el acceso al recurso
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { // 100ms delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + self.resourceReleaseDelay) { // 100ms delay
                     // Solo detener el acceso si la URL todavía está "viva" y asociada con esta instancia.
                     // Esta verificación es más conceptual ya que 'instance' es una copia.
                     // El principal beneficio es el retraso en sí.
