@@ -158,3 +158,6 @@ sample_videos/
 *.bak
 *.backup
 *.old
+
+
+*.trace
