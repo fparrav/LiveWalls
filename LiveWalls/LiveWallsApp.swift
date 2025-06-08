@@ -27,6 +27,10 @@ struct LiveWallsApp: App {
                 // Si comentaste wallpaperManager arriba, necesitarás un mock o comentar su uso aquí también.
                 // Por ejemplo, podrías necesitar pasar un MockWallpaperManager si comentas el original:
                 // .environmentObject(MockWallpaperManager()) // Asumiendo que tienes un MockWallpaperManager
+                .onAppear {
+                    // 🔗 Configurar conexión entre AppDelegate y WallpaperManager para gestión de terminación
+                    setupTerminationHandling()
+                }
                 .onChange(of: scenePhase) { _, newPhase in
                     switch newPhase {
                     case .active:
@@ -58,6 +62,21 @@ struct LiveWallsApp: App {
                 // Asegúrate que esta lógica no cause problemas si appDelegate o wallpaperManager no están listos.
                  NotificationCenter.default.post(name: Notification.Name("ShowMainWindow"), object: nil)
             }
+        }
+    }
+    
+    /// 🔗 Configura la gestión de terminación de la aplicación
+    private func setupTerminationHandling() {
+        appLogger.info("🔗 Configurando gestión de terminación de la aplicación")
+        
+        // Configurar listener para notificación de terminación en WallpaperManager
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("AppWillTerminate"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            appLogger.info("🧹 Ejecutando limpieza de WallpaperManager antes de terminar")
+            wallpaperManager.stopWallpaper()
         }
     }
 }

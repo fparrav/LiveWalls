@@ -1,31 +1,34 @@
 import Foundation
 import AppKit
+import Combine
 import AVFoundation
-import UserNotifications
-import CoreMedia
-import os.log
 
-// Importación del logger específico para debugging de memoria en WallpaperManager
+// Asegurarse de que Logger esté disponible
+#if canImport(os)
+import os
+#endif
 
-// Logger específico para debugging de memoria en WallpaperManager
-private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManagerMemory")
+// Logger específico para debugging de memoria
+private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "MemoryManagement")
 
-class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
+// Confirmar conformidad con NSObject, ObservableObject y NSWindowDelegate
+class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     @Published var videoFiles: [VideoFile] = []
-    @Published var currentVideo: VideoFile?
+    @Published var currentVideo: VideoFile? = nil // Se especifica el tipo explícitamente
     @Published var isPlayingWallpaper = false
+
+    // MARK: - Variables para sincronización de destrucción de ventanas (delegate pattern)
+    /**
+     pendingDestroyCompletion: Closure que se ejecuta cuando todas las ventanas de escritorio han sido cerradas y los recursos liberados.
+     pendingWindowClosures: Set para rastrear las ventanas pendientes de cerrar (puede usarse si se implementa delegate windowWillClose).
+     closedWindowsCount: Contador de ventanas cerradas, útil para saber cuándo ejecutar el completion.
+     */
+    var pendingDestroyCompletion: (() -> Void)? = nil
+    var pendingWindowClosures: Set<NSWindow> = []
+    var closedWindowsCount: Int = 0
     
     // private var desktopWindows: [DesktopVideoWindowMejorada] = // Modificado
     private var desktopVideoInstances: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)] = [] // Nuevo
-    
-    // MARK: - Sistema mejorado de tracking de ventanas
-    /// Tracking de ventanas que están en proceso de cierre para sincronización correcta
-    private var pendingWindowClosures: Set<DesktopVideoWindowMejorada> = []
-    /// Contador de ventanas cerradas para sincronizar la liberación de recursos
-    private var closedWindowsCount: Int = 0
-    /// Completion handler pendiente para ejecutar cuando todas las ventanas estén cerradas
-    private var pendingDestroyCompletion: (() -> Void)?
-    
     /// Retardo (en segundos) antes de liberar el acceso security-scoped tras cerrar una ventana.
     /// Ajusta este valor si observas problemas de recursos o race conditions.
     private let resourceReleaseDelay: TimeInterval = 0.1
@@ -42,17 +45,23 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
     
     // MARK: - Sincronización para prevenir crashes durante cambio de videos
     /// Queue serial para operaciones críticas de wallpaper que deben ejecutarse una a la vez
-    private let wallpaperOperationQueue = DispatchQueue(label: "wallpaper.operations", qos: .userInitiated)
+    private let wallpaperOperationQueue = DispatchQueue(label: "com.livewalls.wallpaperQueue", attributes: .concurrent)
     /// Semáforo para prevenir operaciones concurrentes de start/stop wallpaper
     private let wallpaperOperationSemaphore = DispatchSemaphore(value: 1)
     /// Flag para rastrear si hay una operación de cambio de video en progreso
     private var isChangingVideo = false
+    /// Flag para prevenir condiciones de carrera durante la limpieza de ventanas de escritorio
+    private var isCleaningUp = false
     
-    init() {
+    override init() {
+        super.init() // Llamar primero al inicializador de NSObject
+
+        // Ahora es seguro usar self y acceder a propiedades/metodos
         loadSavedVideos()
         loadCurrentVideo() // loadCurrentVideo ya verifica si el video existe en la lista
         setupScreenChangeNotifications()
-        
+        setupTerminationHandling() // 🧹 Configurar gestión de terminación
+
         // Auto-start solo si hay videos disponibles y un video actual seleccionado
         if !videoFiles.isEmpty && currentVideo != nil && UserDefaults.standard.bool(forKey: "AutoStartWallpaper") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -134,7 +143,11 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
 
             var bookmarkData: Data?
             do {
-                bookmarkData = try url.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+                bookmarkData = try url.bookmarkData(
+                    options: URL.BookmarkCreationOptions.withSecurityScope, 
+                    includingResourceValuesForKeys: nil as Set<URLResourceKey>?, 
+                    relativeTo: nil as URL?
+                )
                 print("🔖 Bookmark creado para: \(url.lastPathComponent)")
             } catch {
                 print("❌ Error al crear bookmark para \(url.path): \(error.localizedDescription)")
@@ -163,7 +176,7 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
     }
     
     func setActiveVideo(_ video: VideoFile) {
-        wallpaperOperationQueue.async { [weak self] in
+        let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
 
             self.wallpaperOperationSemaphore.wait() // Adquirir semáforo
@@ -220,6 +233,8 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                 }
             }
         }
+        
+        wallpaperOperationQueue.async(execute: workItem)
     }
 
     // MARK: - Wallpaper Control
@@ -244,7 +259,7 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
     }
     
     func startWallpaper() {
-        wallpaperOperationQueue.async { [weak self] in
+        let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.wallpaperOperationSemaphore.wait()
             // Reiniciar el flag isChangingVideo si se llama directamente a startWallpaper
@@ -257,9 +272,17 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                 self.wallpaperOperationSemaphore.signal()
             }
         }
+        wallpaperOperationQueue.async(execute: workItem)
     }
 
     private func startWallpaperInternal(completion: @escaping (Bool) -> Void) {
+        // 🧹 Verificar si hay una operación de limpieza en progreso
+        if isCleaningUp {
+            print("⚠️ Inicio de wallpaper cancelado: operación de limpieza en progreso")
+            completion(false)
+            return
+        }
+        
         // El flag isChangingVideo es más para la lógica de transición.
         // Si se llama a start directamente, no debería estar "cambiando".
         // Sin embargo, si una transición está en curso y currentVideo es nil, evitamos.
@@ -334,7 +357,7 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
     }
 
     func stopWallpaper() {
-        wallpaperOperationQueue.async { [weak self] in
+        let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.wallpaperOperationSemaphore.wait()
             
@@ -356,6 +379,7 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                 self.wallpaperOperationSemaphore.signal()
             }
         }
+        wallpaperOperationQueue.async(execute: workItem)
     }
 
     // Modificado para aceptar urlToRelease y manejar caso de lista vacía
@@ -480,31 +504,64 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
     
     // MARK: - Desktop Windows Management
     
-    private func createDesktopWindows(for video: VideoFile, accessibleURL: URL) { // Modificado para aceptar accessibleURL
+    /**
+     * Crea una ventana de video de escritorio por cada pantalla detectada.
+     * Asigna el delegate de cada ventana a self para gestionar su ciclo de vida.
+     * - Parameters:
+     *   - video: VideoFile a reproducir.
+     *   - accessibleURL: URL con acceso security-scoped activo.
+     */
+    private func createDesktopWindows(for video: VideoFile, accessibleURL: URL) {
         let screens = NSScreen.screens
         print("🖥️ Creando ventanas para \(screens.count) pantalla(s)")
-        
-        // La limpieza principal ahora la hace startWallpaperInternal -> destroyDesktopWindowsInternal ANTES de este punto.
-        // Esta verificación es una doble seguridad.
+
+        // Doble seguridad: no debe haber instancias previas
         if !desktopVideoInstances.isEmpty {
             print("⚠️ createDesktopWindows llamado pero desktopVideoInstances no estaba vacío. Esto no debería ocurrir si la lógica de stop/start es correcta.")
-            // No llamamos a destroy aquí para evitar bucles o limpiezas no deseadas si hay un error lógico previo.
         }
 
         for (index, screen) in screens.enumerated() {
             print("📺 Pantalla \(index + 1): \(screen.localizedName) - \(screen.frame)")
             let window = DesktopVideoWindowMejorada(screen: screen, videoURL: accessibleURL)
-            
-            // Asignar el delegate para recibir notificaciones del ciclo de vida de la ventana
-            window.wallpaperDelegate = self
-            
+            window.delegate = self // Asignar delegate para gestión de cierre
             self.desktopVideoInstances.append((window: window, accessibleURL: accessibleURL))
-            
             window.orderBack(nil as NSWindow?)
             print("✅ Ventana \(index + 1) creada y posicionada")
         }
-        
+
         print("🎬 Total de ventanas creadas: \(desktopVideoInstances.count)")
+    }
+
+    // MARK: - NSWindowDelegate
+
+    /// Delegate: Se llama justo antes de que una ventana sea destruida.
+    /// Elimina la ventana de desktopVideoInstances y lleva el conteo para liberar recursos.
+    public func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+
+        // Buscar y eliminar la instancia correspondiente
+        if let idx = desktopVideoInstances.firstIndex(where: { $0.window === window }) {
+            let url = desktopVideoInstances[idx].accessibleURL
+            memoryLogger.info("🧹 Eliminando referencia a ventana cerrada para URL: \(url.lastPathComponent)")
+            desktopVideoInstances.remove(at: idx)
+        } else {
+            memoryLogger.warning("⚠️ windowWillClose: ventana no encontrada en desktopVideoInstances")
+        }
+
+        // Si hay una operación de destrucción pendiente, llevar el conteo
+        if pendingDestroyCompletion != nil {
+            closedWindowsCount += 1
+            memoryLogger.info("🪟 Ventana cerrada. Progreso: \(self.closedWindowsCount)/\(self.pendingWindowClosures.count)")
+            // Cuando todas las ventanas hayan sido cerradas, ejecutar el completion
+            if closedWindowsCount >= pendingWindowClosures.count {
+                memoryLogger.info("✅ Todas las ventanas de escritorio han sido cerradas. Ejecutando cleanup final.")
+                let completion = pendingDestroyCompletion
+                pendingDestroyCompletion = nil
+                pendingWindowClosures.removeAll()
+                closedWindowsCount = 0
+                completion?()
+            }
+        }
     }
     
     /// Destruye todas las ventanas de video de escritorio de forma segura.
@@ -513,7 +570,7 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
         // Esta es la versión pública que podría ser llamada desde otros lugares.
         // Debería usar el queue y el semáforo para seguridad.
         print("💥 [destroyDesktopWindows] Solicitud pública para destruir ventanas.")
-        wallpaperOperationQueue.async { [weak self] in
+        let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.wallpaperOperationSemaphore.wait()
             // Capturar la URL del video actual aquí para la versión pública
@@ -522,6 +579,7 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                 self.wallpaperOperationSemaphore.signal()
             }
         }
+        wallpaperOperationQueue.async(execute: workItem)
     }
 
     /**
@@ -533,6 +591,9 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
      */
     // Modificado para usar delegate pattern para sincronización correcta
     private func destroyDesktopWindowsInternal(urlToRelease: URL?, completion: (() -> Void)? = nil) {
+        // 🧹 Marcar que hay una operación de limpieza en progreso
+        isCleaningUp = true
+        
         memoryLogger.info("💥 Iniciando destrucción de ventanas de escritorio internas.")
         
         let capturedUrlToStopAccess = urlToRelease // RENOMBRADO para claridad
@@ -548,6 +609,8 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
             if capturedUrlToStopAccess == nil {
                 // Si no hay ventanas NI URL, podemos terminar inmediatamente
                 memoryLogger.info("✅ Limpieza de recursos completada (no hay ventanas ni URL para liberar).")
+                // 🧹 Marcar que la operación de limpieza ha finalizado
+                isCleaningUp = false
                 completion?()
                 return
             } else {
@@ -558,6 +621,8 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                         self.safeStopSecurityScopedAccess(for: url)
                     }
                     memoryLogger.info("✅ Limpieza de recursos completada (sin ventanas).")
+                    // 🧹 Marcar que la operación de limpieza ha finalizado
+                    self.isCleaningUp = false
                     completion?()
                 }
                 return
@@ -587,6 +652,10 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                 } else {
                     memoryLogger.info("✅ Limpieza de recursos completada (destroyDesktopWindowsInternal), no se especificó URL para detener.")
                 }
+                
+                // 🧹 Marcar que la operación de limpieza ha finalizado
+                self.isCleaningUp = false
+                
                 completion?()
             }
         }
@@ -594,6 +663,8 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
         // Cerrar todas las ventanas - el delegate pattern manejará la sincronización
         memoryLogger.info("🛑 Iniciando cierre de \(windowsToClose.count) ventana(s) con delegate pattern.")
         for (windowInstance, _) in windowsToClose {
+            // Liberar correctamente el AVPlayer antes de cerrar la ventana
+            windowInstance.cleanupPlayer()
             // Cada window.close() activará windowWillClose y windowDidClose en el delegate
             windowInstance.close()
         }
@@ -611,6 +682,8 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                     self.pendingDestroyCompletion = nil
                     self.pendingWindowClosures.removeAll()
                     self.closedWindowsCount = 0
+                    // 🧹 Marcar que la operación de limpieza ha finalizado (timeout)
+                    self.isCleaningUp = false
                     completion()
                 }
             }
@@ -629,6 +702,40 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                 self?.restartWallpaper()
             }
         }
+    }
+    
+    /// 🔗 Configura la gestión de terminación de la aplicación en WallpaperManager
+    private func setupTerminationHandling() {
+        print("🔗 Configurando gestión de terminación en WallpaperManager")
+        
+        // Configurar listener para notificación de terminación
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("AppWillTerminate"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("🧹 Recibida notificación de terminación en WallpaperManager")
+            self?.handleApplicationTermination()
+        }
+    }
+    
+    /// 🧹 Maneja la limpieza de recursos cuando la aplicación va a terminar
+    private func handleApplicationTermination() {
+        print("🛑 Iniciando limpieza de recursos antes de terminar la aplicación")
+        
+        // Marcar que estamos en proceso de limpieza para prevenir race conditions
+        isCleaningUp = true
+        
+        // Detener wallpaper si está ejecutándose
+        if isPlayingWallpaper {
+            print("🎥 Deteniendo wallpaper activo antes de terminar")
+            stopWallpaper()
+        }
+        
+        // Limpiar observers de NotificationCenter
+        NotificationCenter.default.removeObserver(self)
+        
+        print("✅ Limpieza de WallpaperManager completada")
     }
     
     private func restartWallpaper() {
@@ -715,7 +822,11 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
             print("⚠️ No hay bookmark data para: \\(mutableVideoFile.name). Intentando crear uno nuevo desde la URL original.")
             if mutableVideoFile.url.startAccessingSecurityScopedResource() { // Acceder a la URL original
                 do {
-                    let newBookmarkData = try mutableVideoFile.url.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil as Set<URLResourceKey>?, relativeTo: nil as URL?)
+                    let newBookmarkData = try mutableVideoFile.url.bookmarkData(
+                        options: URL.BookmarkCreationOptions.withSecurityScope, 
+                        includingResourceValuesForKeys: nil as Set<URLResourceKey>?, 
+                        relativeTo: nil as URL?
+                    )
                     mutableVideoFile.bookmarkData = newBookmarkData // Actualizar la copia mutable
 
                     // Actualizar el videoFile real en el array videoFiles y guardar
@@ -750,7 +861,11 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
                 print("⚠️ Bookmark para \\(mutableVideoFile.name) está obsoleto. Intentando refrescarlo...")
                 // Para refrescar, primero se debe poder acceder a la URL resuelta (aunque esté obsoleta)
                 if resolvedURL.startAccessingSecurityScopedResource() {
-                    if let newBookmarkData = try? resolvedURL.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil as Set<URLResourceKey>?, relativeTo: nil as URL?) {
+                    if let newBookmarkData = try? resolvedURL.bookmarkData(
+                        options: URL.BookmarkCreationOptions.withSecurityScope, 
+                        includingResourceValuesForKeys: nil as Set<URLResourceKey>?, 
+                        relativeTo: nil as URL?
+                    ) {
                         if let index = videoFiles.firstIndex(where: { $0.id == mutableVideoFile.id }) {
                             videoFiles[index].bookmarkData = newBookmarkData
                             saveVideos() // Guardar el bookmark actualizado
@@ -855,34 +970,20 @@ class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
         }
     }
     
-    // MARK: - DesktopVideoWindowDelegate Implementation
-    
-    func windowWillClose(_ window: DesktopVideoWindowMejorada, withURL url: URL) {
-        memoryLogger.info("🔔 [Delegate] Ventana notifica que va a cerrarse: \(url.lastPathComponent)")
-        
-        // Marcar la ventana como pendiente de cierre
-        pendingWindowClosures.insert(window)
-    }
-    
-    func windowDidClose(_ window: DesktopVideoWindowMejorada, withURL url: URL) {
-        memoryLogger.info("🔔 [Delegate] Ventana notifica que se cerró: \(url.lastPathComponent)")
-        
-        // Remover de pendientes y actualizar contador
-        pendingWindowClosures.remove(window)
-        closedWindowsCount += 1
-        
-        // Verificar si todas las ventanas han terminado de cerrarse
-        if pendingWindowClosures.isEmpty, let completion = pendingDestroyCompletion {
-            memoryLogger.info("✅ [Delegate] Todas las ventanas cerradas, ejecutando completion")
-            pendingDestroyCompletion = nil
-            closedWindowsCount = 0
-            completion()
-        }
-    }
-    
     deinit {
-        NotificationCenter.default.removeObserver(self)
+        // Eliminar observer de cambios de pantalla para evitar fugas de memoria
+        NotificationCenter.default.removeObserver(self, name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        // Detener el wallpaper y liberar recursos si aún quedan instancias activas
         stopWallpaper()
+        // Liberar cualquier acceso security-scoped que pudiera quedar activo
+        resourceTrackingQueue.sync(flags: .barrier) {
+            for path in activeSecurityScopedURLs {
+                let url = URL(fileURLWithPath: path)
+                url.stopAccessingSecurityScopedResource()
+                print("🔒 Acceso security-scoped liberado en deinit para: \(url.lastPathComponent)")
+            }
+            activeSecurityScopedURLs.removeAll()
+        }
     }
     
     // MARK: - Utilidades de acceso security-scoped

@@ -6,6 +6,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: "com.livewalls.app", category: "AppLifecycle")
     private var mainWindowController: NSWindowController?
     
+    /// Referencia al WallpaperManager para gestión de recursos durante terminación
+    weak var wallpaperManager: WallpaperManager?
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Prevenir múltiples instancias
         let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier!)
@@ -15,11 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Intentar activar la instancia existente
             for app in runningApps {
                 if app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
-                    if #available(macOS 14.0, *) {
-                        app.activate()
-                    } else {
-                        app.activate(options: [.activateIgnoringOtherApps])
-                    }
+                    app.activate(options: [.activateIgnoringOtherApps])
                     break
                 }
             }
@@ -97,5 +96,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         logger.info("🛑 Solicitud de terminación recibida")
         return .terminateNow
+    }
+    
+    /// ✅ Función para limpiar recursos antes de terminar la aplicación
+    func applicationWillTerminate(_ notification: Notification) {
+        logger.info("🧹 Iniciando limpieza de recursos antes de terminar la aplicación")
+        
+        // Buscar el WallpaperManager en el environment de las ventanas activas
+        if let window = NSApp.windows.first,
+           let contentView = window.contentView,
+           let hostingView = contentView.subviews.first(where: { String(describing: type(of: $0)).contains("HostingView") }) {
+            
+            // Intentar acceder al WallpaperManager a través de reflection o notificaciones
+            NotificationCenter.default.post(name: NSNotification.Name("AppWillTerminate"), object: nil)
+            logger.info("📢 Notificación de terminación enviada")
+        }
+        
+        // Pequeño delay para permitir que se complete la limpieza
+        Thread.sleep(forTimeInterval: 0.2)
+        logger.info("✅ Limpieza de recursos completada")
+    }
+    
+    /// Elimina observers para evitar fugas de memoria al destruir el AppDelegate
+    deinit {
+        // Remover observer de cierre de ventana para evitar leaks
+        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
     }
 }
