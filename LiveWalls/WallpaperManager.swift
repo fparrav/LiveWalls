@@ -1,14 +1,18 @@
-import SwiftUI
-import AVFoundation
+import Foundation
 import AppKit
+import AVFoundation
 import UserNotifications
+import os.log // Asegúrate de que os.log esté importado
+
+// Logger específico para debugging de memoria en WallpaperManager
+private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManagerMemory")
 
 class WallpaperManager: ObservableObject {
     @Published var videoFiles: [VideoFile] = []
     @Published var currentVideo: VideoFile?
     @Published var isPlayingWallpaper = false
     
-    // private var desktopWindows: [DesktopVideoWindow] = [] // Modificado
+    // private var desktopWindows: [DesktopVideoWindow] = // Modificado
     private var desktopVideoInstances: [(window: DesktopVideoWindow, accessibleURL: URL)] = [] // Nuevo
     /// Retardo (en segundos) antes de liberar el acceso security-scoped tras cerrar una ventana.
     /// Ajusta este valor si observas problemas de recursos o race conditions.
@@ -148,55 +152,65 @@ class WallpaperManager: ObservableObject {
     }
     
     func setActiveVideo(_ video: VideoFile) {
-        // Usar un semáforo para prevenir múltiples operaciones simultáneas de cambio de video
         wallpaperOperationQueue.async { [weak self] in
             guard let self = self else { return }
+
+            self.wallpaperOperationSemaphore.wait() // Adquirir semáforo
+
+            self.isChangingVideo = true // Marcar inicio de cambio
+
+            let currentlyPlaying = self.isPlayingWallpaper
             
-            // Esperar el semáforo para asegurar operación atómica
-            self.wallpaperOperationSemaphore.wait()
-            defer { self.wallpaperOperationSemaphore.signal() }
-            
-            // Marcar que hay un cambio de video en progreso
-            self.isChangingVideo = true
-            defer { self.isChangingVideo = false }
-            
-            // Realizar cambios en el hilo principal para las propiedades @Published
             DispatchQueue.main.async {
-                // Desactivar el video anterior
+                // Capturar la URL del video anterior ANTES de actualizar self.currentVideo
+                let previousVideoURL = self.currentVideo?.url
+
                 if let currentIndex = self.videoFiles.firstIndex(where: { $0.isActive }) {
                     self.videoFiles[currentIndex].isActive = false
                 }
-
-                // Activar el nuevo video
                 if let newIndex = self.videoFiles.firstIndex(where: { $0.id == video.id }) {
                     self.videoFiles[newIndex].isActive = true
-                    self.currentVideo = self.videoFiles[newIndex]
+                    self.currentVideo = self.videoFiles[newIndex] // self.currentVideo ahora es el NUEVO video
                     self.saveCurrentVideo()
+                    print("🔄 Video activo cambiado a: \(video.name)")
 
-                    // Si el wallpaper ya se estaba reproduciendo, realizar transición segura
-                    if self.isPlayingWallpaper {
-                        print("🔄 Iniciando transición segura de video...")
-                        
-                        // Detener el wallpaper actual primero de forma sincronizada
-                        self.isPlayingWallpaper = false
-                        self.destroyDesktopWindows()
-                        
-                        // Esperar un momento más largo para que se liberen los recursos completamente
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            // Verificar múltiples condiciones antes de reiniciar
-                            if !self.isChangingVideo && self.currentVideo?.id == video.id {
-                                self.startWallpaper()
-                                print("✅ Transición de video completada")
+                    if currentlyPlaying {
+                        print("🔄 Transición de wallpaper requerida para \(video.name).")
+                        // Pasar previousVideoURL a stopWallpaperInternal
+                        self.stopWallpaperInternal(urlToRelease: previousVideoURL) { // MODIFICADO
+                            // Asegurarse de que el video actual sigue siendo el que queremos iniciar
+                            if self.currentVideo?.id == video.id {
+                                print("▶️ Iniciando nuevo wallpaper después de la transición: \(video.name)")
+                                self.startWallpaperInternal { success in
+                                    if success {
+                                        print("✅ Transición de video completada a: \(video.name)")
+                                    } else {
+                                        memoryLogger.error("❌ Falló la transición de video a: \(video.name)")
+                                    }
+                                    self.isChangingVideo = false // Finalizar el cambio
+                                    self.wallpaperOperationSemaphore.signal() // Liberar semáforo
+                                }
                             } else {
-                                print("⚠️ Transición cancelada: cambio de video en progreso o video diferente seleccionado")
+                                print("⚠️ Transición abortada: el video actual cambió (\(self.currentVideo?.name ?? "nil")) durante la detención del anterior (\(video.name)).")
+                                self.isChangingVideo = false
+                                self.wallpaperOperationSemaphore.signal()
                             }
                         }
+                    } else {
+                        // Si no se estaba reproduciendo, solo actualizamos el video y liberamos.
+                        self.isChangingVideo = false
+                        self.wallpaperOperationSemaphore.signal()
                     }
+                } else {
+                    // No se encontró el nuevo video.
+                    print("❌ No se encontró el video \(video.name) en la lista para activar.")
+                    self.isChangingVideo = false
+                    self.wallpaperOperationSemaphore.signal()
                 }
             }
         }
     }
-    
+
     // MARK: - Wallpaper Control
 
     func setRandomWallpaper() {
@@ -219,89 +233,126 @@ class WallpaperManager: ObservableObject {
     }
     
     func startWallpaper() {
-        // Usar el queue de operaciones para asegurar ejecución serializada
         wallpaperOperationQueue.async { [weak self] in
             guard let self = self else { return }
-            
-            // Usar semáforo para prevenir múltiples operaciones simultáneas
             self.wallpaperOperationSemaphore.wait()
-            defer { self.wallpaperOperationSemaphore.signal() }
-            
-            guard let videoToPlay = self.currentVideo else {
-                DispatchQueue.main.async {
-                    self.notificationManager.showError(message: "No hay ningún video seleccionado")
+            // Reiniciar el flag isChangingVideo si se llama directamente a startWallpaper
+            self.isChangingVideo = false 
+            self.startWallpaperInternal { success in
+                // Manejar el resultado si es necesario para la llamada externa
+                if !success && self.isPlayingWallpaper { // Solo cambiar si falló Y estaba reproduciendo
+                     DispatchQueue.main.async { self.isPlayingWallpaper = false }
                 }
-                return
+                self.wallpaperOperationSemaphore.signal()
             }
+        }
+    }
 
-            guard let accessibleURL = self.resolveBookmark(for: videoToPlay) else {
-                DispatchQueue.main.async {
-                    self.notificationManager.showError(message: "No se pudo acceder al archivo de video: \(videoToPlay.name). Por favor, selecciónelo de nuevo o verifique los permisos.")
-                }
-                return
-            }
+    private func startWallpaperInternal(completion: @escaping (Bool) -> Void) {
+        // El flag isChangingVideo es más para la lógica de transición.
+        // Si se llama a start directamente, no debería estar "cambiando".
+        // Sin embargo, si una transición está en curso y currentVideo es nil, evitamos.
+        if isChangingVideo && self.currentVideo == nil { // Asegurarse que currentVideo no sea nil durante un cambio
+             print("⚠️ Inicio de wallpaper cancelado: cambio de video en progreso sin un video actual claro.")
+             completion(false)
+             return
+        }
 
-            // Verificar que el archivo existe
-            guard FileManager.default.fileExists(atPath: accessibleURL.path) else {
-                DispatchQueue.main.async {
-                    self.notificationManager.showError(message: "El archivo de video no se encuentra: \(videoToPlay.name) (ruta accesible: \(accessibleURL.path))")
-                }
-                accessibleURL.stopAccessingSecurityScopedResource()
-                return
-            }
-
-            // Realizar operaciones de UI en el hilo principal
+        guard let videoToPlay = self.currentVideo else {
             DispatchQueue.main.async {
-                // Marcar que el wallpaper va a empezar
-                self.isPlayingWallpaper = false
-                
-                // Destruir ventanas existentes si hay alguna
-                self.destroyDesktopWindows()
-                
-                // Esperar un poco para asegurar que las ventanas se han liberado
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    // Verificar nuevamente que accessibleURL es válido
-                    if FileManager.default.fileExists(atPath: accessibleURL.path) {
-                        self.isPlayingWallpaper = true
-                        self.createDesktopWindows(for: videoToPlay, accessibleURL: accessibleURL)
-                        self.notificationManager.showWallpaperStarted(videoName: videoToPlay.name)
-                        UserDefaults.standard.set(true, forKey: "AutoStartWallpaper")
-                        print("✅ Wallpaper iniciado exitosamente para: \(videoToPlay.name)")
-                    } else {
-                        self.notificationManager.showError(message: "No se pudo acceder al archivo durante el inicio del wallpaper")
-                        UserDefaults.standard.set(false, forKey: "AutoStartWallpaper")
-                        // Detener acceso al recurso si ya no es válido
-                        accessibleURL.stopAccessingSecurityScopedResource()
-                    }
+                self.notificationManager.showError(message: "No hay ningún video seleccionado")
+            }
+            completion(false)
+            return
+        }
+
+        // Primero, asegurar que cualquier ventana existente sea destruida.
+        // Esto es crucial si startWallpaperInternal es llamado sin un stop previo explícito
+        // o si un stop anterior falló en limpiar completamente.
+        // Usaremos la URL del video que *estaba* currentVideo *antes* de esta operación de start,
+        // que en este contexto (si no es una transición) es el mismo videoToPlay.
+        // Sin embargo, destroyDesktopWindowsInternal ahora toma la URL explícitamente.
+        // Si estamos en una transición, stopWallpaperInternal ya se encargó.
+        // Si es un inicio directo, y había algo, ¿qué URL liberar?
+        // Por seguridad, si isPlayingWallpaper es true (o había instancias), se debería haber llamado a stop.
+        // Aquí, nos enfocamos en iniciar. La limpieza previa es responsabilidad del llamador o de la lógica de transición.
+
+        guard let accessibleURL = self.resolveBookmark(for: videoToPlay) else {
+            DispatchQueue.main.async {
+                self.notificationManager.showError(message: "No se pudo acceder al archivo de video: \\(videoToPlay.name). Por favor, selecciónelo de nuevo o verifique los permisos.")
+            }
+            completion(false)
+            return
+        }
+
+        guard FileManager.default.fileExists(atPath: accessibleURL.path) else {
+            DispatchQueue.main.async {
+                self.notificationManager.showError(message: "El archivo de video no se encuentra: \\(videoToPlay.name) (ruta accesible: \\(accessibleURL.path))")
+            }
+            self.safeStopSecurityScopedAccess(for: accessibleURL) // Detener si se inició y el archivo no existe
+            completion(false)
+            return
+        }
+
+        // La destrucción de ventanas anteriores ya debe haber ocurrido ANTES de llamar a startWallpaperInternal
+        // si esto es parte de una transición (setActiveVideo).
+        // Si es un inicio directo (startWallpaper()), y algo estaba corriendo, stopWallpaper() debió ser llamado.
+        DispatchQueue.main.async {
+            // Este retardo puede ayudar a asegurar que el sistema esté listo para nuevas ventanas,
+            // especialmente después de una operación de destrucción. Un valor pequeño debería ser suficiente.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { 
+                if FileManager.default.fileExists(atPath: accessibleURL.path) {
+                    // Solo marcar isPlayingWallpaper = true si realmente vamos a crear ventanas
+                    self.isPlayingWallpaper = true 
+                    self.createDesktopWindows(for: videoToPlay, accessibleURL: accessibleURL)
+                    self.notificationManager.showWallpaperStarted(videoName: videoToPlay.name)
+                    UserDefaults.standard.set(true, forKey: "AutoStartWallpaper")
+                    print("✅ Wallpaper iniciado exitosamente para: \\(videoToPlay.name)")
+                    completion(true)
+                } else {
+                    print("❌ El archivo \\(accessibleURL.path) dejó de existir antes de crear ventanas.")
+                    self.notificationManager.showError(message: "No se pudo acceder al archivo durante el inicio del wallpaper")
+                    UserDefaults.standard.set(false, forKey: "AutoStartWallpaper")
+                    self.safeStopSecurityScopedAccess(for: accessibleURL)
+                    // Asegurarse de que isPlayingWallpaper sea false si fallamos aquí
+                    self.isPlayingWallpaper = false
+                    completion(false)
                 }
             }
         }
     }
-    
-    /// Detiene el wallpaper y destruye las ventanas de escritorio.
-    /// Implementa sincronización para prevenir race conditions durante el cambio de videos.
+
     func stopWallpaper() {
-        // Usar el queue de operaciones para asegurar ejecución serializada
         wallpaperOperationQueue.async { [weak self] in
             guard let self = self else { return }
-            
-            // Usar semáforo para prevenir múltiples operaciones simultáneas
             self.wallpaperOperationSemaphore.wait()
-            defer { self.wallpaperOperationSemaphore.signal() }
-            
-            print("🛑 [stopWallpaper] iniciado de forma sincronizada")
-            
-            // Actualizar el estado en el hilo principal
-            DispatchQueue.main.async {
-                self.isPlayingWallpaper = false
-                self.destroyDesktopWindows()
-                self.notificationManager.showWallpaperStopped()
-                UserDefaults.standard.set(false, forKey: "AutoStartWallpaper")
-                print("✅ [stopWallpaper] completado exitosamente")
+            // Capturar la URL del video actual aquí, ANTES de cualquier operación asíncrona dentro de stopWallpaperInternal
+            let urlToActuallyRelease = self.currentVideo?.url // MODIFICADO
+            self.stopWallpaperInternal(urlToRelease: urlToActuallyRelease) { // MODIFICADO
+                self.wallpaperOperationSemaphore.signal()
             }
         }
     }
-    
+
+    // Modificado para aceptar urlToRelease
+    private func stopWallpaperInternal(urlToRelease: URL?, completion: (() -> Void)? = nil) {
+        print("🛑 [stopWallpaperInternal] iniciado")
+        DispatchQueue.main.async {
+            let wasPlaying = self.isPlayingWallpaper // Capturar antes de cambiar
+            self.isPlayingWallpaper = false // Marcar como no reproduciendo inmediatamente
+
+            // Pasar la urlToRelease capturada a destroyDesktopWindowsInternal
+            self.destroyDesktopWindowsInternal(urlToRelease: urlToRelease) { // MODIFICADO
+                if wasPlaying { // Usar el estado capturado
+                    self.notificationManager.showWallpaperStopped()
+                }
+                UserDefaults.standard.set(false, forKey: "AutoStartWallpaper")
+                print("✅ [stopWallpaperInternal] completado.")
+                completion?()
+            }
+        }
+    }
+
     func toggleWallpaper() {
         if isPlayingWallpaper {
             stopWallpaper()
@@ -315,6 +366,16 @@ class WallpaperManager: ObservableObject {
     /// Versión síncrona interna de startWallpaper que no usa queue ni semáforo
     /// (porque ya está siendo llamada desde dentro del queue serializado)
     private func startWallpaperSync() {
+        // Esta función parece ser una versión síncrona para toggleWallpaper.
+        // Debería idealmente reutilizar la lógica de startWallpaperInternal
+        // o ser eliminada si toggleWallpaper puede usar la versión asíncrona.
+        // Por ahora, la dejamos como estaba pero advertimos que su lógica de limpieza
+        // y creación podría no estar tan sincronizada como la nueva startWallpaperInternal.
+        // Para mayor seguridad, podría llamar a startWallpaperInternal y bloquear
+        // la cola actual si es estrictamente necesario que sea síncrona,
+        // pero eso puede llevar a deadlocks si no se maneja con cuidado.
+        // Considerar refactorizar toggleWallpaper para que sea completamente asíncrono.
+        print("⚠️ [startWallpaperSync] está siendo llamada. Considerar refactorizar toggleWallpaper.")
         guard let videoToPlay = self.currentVideo else {
             DispatchQueue.main.async {
                 self.notificationManager.showError(message: "No hay ningún video seleccionado")
@@ -365,6 +426,9 @@ class WallpaperManager: ObservableObject {
     /// Versión síncrona interna de stopWallpaper que no usa queue ni semáforo
     /// (porque ya está siendo llamada desde dentro del queue serializado)
     private func stopWallpaperSync() {
+        // Similar a startWallpaperSync, considerar refactorizar.
+        print("⚠️ [stopWallpaperSync] está siendo llamada. Considerar refactorizar toggleWallpaper.")
+        
         print("🛑 [stopWallpaperSync] iniciado")
         
         // Actualizar el estado en el hilo principal
@@ -383,11 +447,11 @@ class WallpaperManager: ObservableObject {
         let screens = NSScreen.screens
         print("🖥️ Creando ventanas para \(screens.count) pantalla(s)")
         
-        // Limpiar instancias antiguas antes de crear nuevas (aunque stopWallpaper ya debería haberlo hecho)
-        // Esto es una doble seguridad, pero la lógica principal está en stopWallpaper -> destroyDesktopWindows
+        // La limpieza principal ahora la hace startWallpaperInternal -> destroyDesktopWindowsInternal ANTES de este punto.
+        // Esta verificación es una doble seguridad.
         if !desktopVideoInstances.isEmpty {
-            print("⚠️ createDesktopWindows llamado pero desktopVideoInstances no estaba vacío. Limpiando primero.")
-            destroyDesktopWindows()
+            print("⚠️ createDesktopWindows llamado pero desktopVideoInstances no estaba vacío. Esto no debería ocurrir si la lógica de stop/start es correcta.")
+            // No llamamos a destroy aquí para evitar bucles o limpiezas no deseadas si hay un error lógico previo.
         }
 
         for (index, screen) in screens.enumerated() {
@@ -407,37 +471,76 @@ class WallpaperManager: ObservableObject {
     /// Destruye todas las ventanas de video de escritorio de forma segura.
     /// Implementa mejor sincronización para evitar race conditions.
     private func destroyDesktopWindows() {
-        guard !desktopVideoInstances.isEmpty else {
-            print("💥 [destroyDesktopWindows] No hay ventanas que destruir")
-            return
-        }
-        
-        print("💥 [destroyDesktopWindows] Destruyendo \(desktopVideoInstances.count) ventana(s) de video de escritorio...")
-        
-        // Crear una copia local para evitar problemas de concurrencia
-        let instances = desktopVideoInstances
-        desktopVideoInstances.removeAll() // Clear the main list immediately
-        
-        for instance in instances {
-            // Usar DispatchQueue para asegurar que las operaciones se ejecuten secuencialmente en el hilo principal
-            DispatchQueue.main.async {
-                // Cerrar la ventana (esto llamará al método close() mejorado en DesktopVideoWindow)
-                instance.window.close()
-                
-                // Introducir un retraso antes de detener el acceso al recurso
-                DispatchQueue.main.asyncAfter(deadline: .now() + self.resourceReleaseDelay) { // 100ms delay
-                    // Solo detener el acceso si la URL todavía está "viva" y asociada con esta instancia.
-                    // Esta verificación es más conceptual ya que 'instance' es una copia.
-                    // El principal beneficio es el retraso en sí.
-                    instance.accessibleURL.stopAccessingSecurityScopedResource()
-                    print("🛑 Acceso detenido con retraso para \(instance.accessibleURL.lastPathComponent) al destruir la instancia de la ventana.")
-                }
+        // Esta es la versión pública que podría ser llamada desde otros lugares.
+        // Debería usar el queue y el semáforo para seguridad.
+        print("💥 [destroyDesktopWindows] Solicitud pública para destruir ventanas.")
+        wallpaperOperationQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.wallpaperOperationSemaphore.wait()
+            // Capturar la URL del video actual aquí para la versión pública
+            let urlToActuallyRelease = self.currentVideo?.url
+            self.destroyDesktopWindowsInternal(urlToRelease: urlToActuallyRelease) { // MODIFICADO
+                self.wallpaperOperationSemaphore.signal()
             }
         }
-        
-        print("🗑️ Todas las instancias de ventanas de video de escritorio programadas para cierre y liberación de recursos.")
     }
-    
+
+    /**
+     * Destruye todas las ventanas de video de escritorio existentes y libera sus recursos.
+     * Esta función ahora utiliza un DispatchGroup para asegurar que todas las operaciones asíncronas
+     * (como el cierre de ventanas y la detención del acceso a los recursos) se completen antes de llamar al completion handler.
+     * - Parameter urlToRelease: La URL del recurso cuyo acceso security-scoped se debe detener. Debería ser la del video que se estaba reproduciendo.
+     * - Parameter completion: Bloque a ejecutar cuando todas las ventanas han sido destruidas y los recursos liberados.
+     */
+    // Modificado para aceptar urlToRelease
+    private func destroyDesktopWindowsInternal(urlToRelease: URL?, completion: (() -> Void)? = nil) {
+        memoryLogger.info("💥 Iniciando destrucción de ventanas de escritorio internas.")
+        let group = DispatchGroup()
+
+        // Usar la urlToRelease pasada, que debería ser la del video que se estaba reproduciendo.
+        let capturedUrlToStopAccess = urlToRelease // RENOMBRADO para claridad
+
+        let windowsToClose = self.desktopVideoInstances 
+        desktopVideoInstances.removeAll()
+        let logMessage = "🧹 Instancias de DesktopVideoWindow eliminadas del seguimiento del manager. Procediendo a cerrarlas."
+        memoryLogger.debug("\(logMessage)")
+
+
+        if windowsToClose.isEmpty {
+            memoryLogger.debug("💨 No hay ventanas de escritorio para destruir.")
+        } else {
+            memoryLogger.info("🧹 Cerrando \(windowsToClose.count) ventana(s) de escritorio.")
+            for (windowInstance, _) in windowsToClose {
+                // El cierre de la ventana se asume síncrono o que no necesitamos esperar su finalización asíncrona aquí
+                // para el propósito de este DispatchGroup, que se centra en safeStopSecurityScopedAccess.
+                windowInstance.close() 
+            }
+            memoryLogger.info("✅ Todas las \(windowsToClose.count) ventanas han recibido la orden de cierre.")
+        }
+
+        // Entrar al grupo para la operación de detener el acceso al recurso con retraso.
+        group.enter()
+        DispatchQueue.main.asyncAfter(deadline: .now() + resourceReleaseDelay) {
+            if let url = capturedUrlToStopAccess { // Usar la URL capturada/pasada
+                memoryLogger.info("⏳ Intentando detener el acceso para la URL (retrasado): \(url.lastPathComponent)")
+                self.safeStopSecurityScopedAccess(for: url)
+            } else {
+                memoryLogger.debug("💨 No hay URL de video (capturada/pasada) para detener el acceso (retrasado).")
+            }
+            group.leave()
+        }
+
+        group.notify(queue: .main) {
+            // El log ahora reflejará la URL que realmente se intentó detener (si la hubo)
+            if let url = capturedUrlToStopAccess { // Usar la URL capturada/pasada
+                 memoryLogger.info("✅ Limpieza de recursos completada (destroyDesktopWindowsInternal) para \(url.lastPathComponent).")
+            } else {
+                 memoryLogger.info("✅ Limpieza de recursos completada (destroyDesktopWindowsInternal), no se especificó URL para detener.")
+            }
+            completion?()
+        }
+    }
+
     // MARK: - Screen Change Notifications
     
     private func setupScreenChangeNotifications() {
@@ -678,13 +781,26 @@ class WallpaperManager: ObservableObject {
      - Returns: true si el acceso fue exitoso, false en caso contrario.
      */
     private func safeStartSecurityScopedAccess(for url: URL) -> Bool {
-        let acceso = url.startAccessingSecurityScopedResource()
-        if acceso {
-            print("🔓 Acceso security-scoped iniciado para: \(url.lastPathComponent)")
-        } else {
-            print("❌ No se pudo iniciar acceso security-scoped para: \(url.lastPathComponent)")
+        var success = false
+        // Usar la cola de tracking para asegurar la consistencia de activeSecurityScopedURLs
+        // y la serialización de las llamadas a startAccessingSecurityScopedResource.
+        resourceTrackingQueue.sync(flags: .barrier) {
+            // Siempre intentar iniciar el acceso. 
+            // url.startAccessingSecurityScopedResource() es idempotente si el acceso ya está activo
+            // (incrementa un contador de uso).
+            if url.startAccessingSecurityScopedResource() {
+                print("🔓 Acceso de seguridad INICIADO o YA ACTIVO para: \\(url.lastPathComponent)")
+                // Añadir al set para nuestro tracking. Si ya estaba, no hay cambio.
+                activeSecurityScopedURLs.insert(url.standardizedFileURL.path)
+                success = true
+            } else {
+                print("❌ Falló al INICIAR acceso de seguridad para: \\(url.lastPathComponent)")
+                // Si falla, asegurarse de que no esté (o se elimine) de nuestro tracking.
+                activeSecurityScopedURLs.remove(url.standardizedFileURL.path)
+                success = false
+            }
         }
-        return acceso
+        return success
     }
 
     /**
