@@ -249,21 +249,26 @@ class WallpaperManager: ObservableObject {
         
         // Procesar las ventanas en lotes para evitar problemas de concurrencia
         let instances = desktopVideoInstances
-        desktopVideoInstances.removeAll()
+        desktopVideoInstances.removeAll() // Clear the main list immediately
         
         for instance in instances {
-            // Usar DispatchQueue para asegurar que las operaciones se ejecuten secuencialmente
+            // Usar DispatchQueue para asegurar que las operaciones se ejecuten secuencialmente en el hilo principal
             DispatchQueue.main.async {
-                // Cerrar la ventana (esto llamará al método close() mejorado)
+                // Cerrar la ventana (esto llamará al método close() mejorado en DesktopVideoWindow)
                 instance.window.close()
                 
-                // Detener el acceso al recurso de forma segura
-                instance.accessibleURL.stopAccessingSecurityScopedResource()
-                print("🛑 Acceso detenido para \(instance.accessibleURL.lastPathComponent) al destruir la instancia de la ventana.")
+                // Introducir un retraso antes de detener el acceso al recurso
+                DispatchQueue.main.asyncAfter(deadline: .now() + self.resourceReleaseDelay) { // 100ms delay
+                    // Solo detener el acceso si la URL todavía está "viva" y asociada con esta instancia.
+                    // Esta verificación es más conceptual ya que 'instance' es una copia.
+                    // El principal beneficio es el retraso en sí.
+                    instance.accessibleURL.stopAccessingSecurityScopedResource()
+                    print("🛑 Acceso detenido con retraso para \(instance.accessibleURL.lastPathComponent) al destruir la instancia de la ventana.")
+                }
             }
         }
         
-        print("🗑️ Todas las instancias de ventanas de video de escritorio eliminadas.")
+        print("🗑️ Todas las instancias de ventanas de video de escritorio programadas para cierre y liberación de recursos.")
     }
     
     // MARK: - Screen Change Notifications
