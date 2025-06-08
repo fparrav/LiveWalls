@@ -10,13 +10,22 @@ import os.log
 // Logger específico para debugging de memoria en WallpaperManager
 private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManagerMemory")
 
-class WallpaperManager: ObservableObject {
+class WallpaperManager: ObservableObject, DesktopVideoWindowDelegate {
     @Published var videoFiles: [VideoFile] = []
     @Published var currentVideo: VideoFile?
     @Published var isPlayingWallpaper = false
     
     // private var desktopWindows: [DesktopVideoWindowMejorada] = // Modificado
     private var desktopVideoInstances: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)] = [] // Nuevo
+    
+    // MARK: - Sistema mejorado de tracking de ventanas
+    /// Tracking de ventanas que están en proceso de cierre para sincronización correcta
+    private var pendingWindowClosures: Set<DesktopVideoWindowMejorada> = []
+    /// Contador de ventanas cerradas para sincronizar la liberación de recursos
+    private var closedWindowsCount: Int = 0
+    /// Completion handler pendiente para ejecutar cuando todas las ventanas estén cerradas
+    private var pendingDestroyCompletion: (() -> Void)?
+    
     /// Retardo (en segundos) antes de liberar el acceso security-scoped tras cerrar una ventana.
     /// Ajusta este valor si observas problemas de recursos o race conditions.
     private let resourceReleaseDelay: TimeInterval = 0.1
@@ -485,6 +494,10 @@ class WallpaperManager: ObservableObject {
         for (index, screen) in screens.enumerated() {
             print("📺 Pantalla \(index + 1): \(screen.localizedName) - \(screen.frame)")
             let window = DesktopVideoWindowMejorada(screen: screen, videoURL: accessibleURL)
+            
+            // Asignar el delegate para recibir notificaciones del ciclo de vida de la ventana
+            window.wallpaperDelegate = self
+            
             self.desktopVideoInstances.append((window: window, accessibleURL: accessibleURL))
             
             window.orderBack(nil as NSWindow?)
@@ -513,24 +526,21 @@ class WallpaperManager: ObservableObject {
 
     /**
      * Destruye todas las ventanas de video de escritorio existentes y libera sus recursos.
-     * Esta función ahora utiliza un DispatchGroup para asegurar que todas las operaciones asíncronas
+     * Esta función ahora utiliza el delegate pattern para asegurar que todas las operaciones asíncronas
      * (como el cierre de ventanas y la detención del acceso a los recursos) se completen antes de llamar al completion handler.
      * - Parameter urlToRelease: La URL del recurso cuyo acceso security-scoped se debe detener. Debería ser la del video que se estaba reproduciendo.
      * - Parameter completion: Bloque a ejecutar cuando todas las ventanas han sido destruidas y los recursos liberados.
      */
-    // Modificado para aceptar urlToRelease
+    // Modificado para usar delegate pattern para sincronización correcta
     private func destroyDesktopWindowsInternal(urlToRelease: URL?, completion: (() -> Void)? = nil) {
         memoryLogger.info("💥 Iniciando destrucción de ventanas de escritorio internas.")
-        let group = DispatchGroup()
-
-        // Usar la urlToRelease pasada, que debería ser la del video que se estaba reproduciendo.
+        
         let capturedUrlToStopAccess = urlToRelease // RENOMBRADO para claridad
-
-        let windowsToClose = self.desktopVideoInstances 
+        let windowsToClose = self.desktopVideoInstances
         desktopVideoInstances.removeAll()
-        let logMessage = "🧹 Instancias de DesktopVideoWindow eliminadas del seguimiento del manager. Procediendo a cerrarlas."
-        memoryLogger.debug("\(logMessage)")
-
+        
+        memoryLogger.debug("🧹 Instancias de DesktopVideoWindow eliminadas del seguimiento del manager. Procediendo a cerrarlas.")
+        
         if windowsToClose.isEmpty {
             memoryLogger.debug("💨 No hay ventanas de escritorio para destruir.")
             
@@ -540,37 +550,70 @@ class WallpaperManager: ObservableObject {
                 memoryLogger.info("✅ Limpieza de recursos completada (no hay ventanas ni URL para liberar).")
                 completion?()
                 return
-            }
-        } else {
-            memoryLogger.info("🧹 Cerrando \(windowsToClose.count) ventana(s) de escritorio.")
-            for (windowInstance, _) in windowsToClose {
-                // El cierre de la ventana se asume síncrono o que no necesitamos esperar su finalización asíncrona aquí
-                // para el propósito de este DispatchGroup, que se centra en safeStopSecurityScopedAccess.
-                windowInstance.close() 
-            }
-            memoryLogger.info("✅ Todas las \(windowsToClose.count) ventanas han recibido la orden de cierre.")
-        }
-
-        // Entrar al grupo para la operación de detener el acceso al recurso con retraso.
-        group.enter()
-        DispatchQueue.main.asyncAfter(deadline: .now() + resourceReleaseDelay) {
-            if let url = capturedUrlToStopAccess { // Usar la URL capturada/pasada
-                memoryLogger.info("⏳ Intentando detener el acceso para la URL (retrasado): \(url.lastPathComponent)")
-                self.safeStopSecurityScopedAccess(for: url)
             } else {
-                memoryLogger.debug("💨 No hay URL de video (capturada/pasada) para detener el acceso (retrasado).")
+                // Hay URL para liberar pero no ventanas - proceder directamente
+                DispatchQueue.main.asyncAfter(deadline: .now() + resourceReleaseDelay) {
+                    if let url = capturedUrlToStopAccess {
+                        memoryLogger.info("⏳ Deteniendo acceso para URL (retrasado, sin ventanas): \(url.lastPathComponent)")
+                        self.safeStopSecurityScopedAccess(for: url)
+                    }
+                    memoryLogger.info("✅ Limpieza de recursos completada (sin ventanas).")
+                    completion?()
+                }
+                return
             }
-            group.leave()
         }
-
-        group.notify(queue: .main) {
-            // El log ahora reflejará la URL que realmente se intentó detener (si la hubo)
-            if let url = capturedUrlToStopAccess { // Usar la URL capturada/pasada
-                 memoryLogger.info("✅ Limpieza de recursos completada (destroyDesktopWindowsInternal) para \(url.lastPathComponent).")
-            } else {
-                 memoryLogger.info("✅ Limpieza de recursos completada (destroyDesktopWindowsInternal), no se especificó URL para detener.")
+        
+        // Configurar el delegate pattern para sincronización
+        memoryLogger.info("🧹 Configurando sincronización para cierre de \(windowsToClose.count) ventana(s).")
+        
+        // Reiniciar contadores de seguimiento
+        pendingWindowClosures.removeAll()
+        closedWindowsCount = 0
+        
+        // Configurar completion handler que se ejecutará cuando todas las ventanas estén cerradas
+        pendingDestroyCompletion = { [weak self] in
+            guard let self = self else {
+                completion?()
+                return
             }
-            completion?()
+            
+            // Liberar recursos después de que todas las ventanas se hayan cerrado
+            DispatchQueue.main.asyncAfter(deadline: .now() + self.resourceReleaseDelay) {
+                if let url = capturedUrlToStopAccess {
+                    memoryLogger.info("⏳ Deteniendo acceso para URL (retrasado): \(url.lastPathComponent)")
+                    self.safeStopSecurityScopedAccess(for: url)
+                    memoryLogger.info("✅ Limpieza de recursos completada (destroyDesktopWindowsInternal) para \(url.lastPathComponent).")
+                } else {
+                    memoryLogger.info("✅ Limpieza de recursos completada (destroyDesktopWindowsInternal), no se especificó URL para detener.")
+                }
+                completion?()
+            }
+        }
+        
+        // Cerrar todas las ventanas - el delegate pattern manejará la sincronización
+        memoryLogger.info("🛑 Iniciando cierre de \(windowsToClose.count) ventana(s) con delegate pattern.")
+        for (windowInstance, _) in windowsToClose {
+            // Cada window.close() activará windowWillClose y windowDidClose en el delegate
+            windowInstance.close()
+        }
+        
+        memoryLogger.info("📤 Órdenes de cierre enviadas a todas las ventanas. Esperando notificaciones de delegate.")
+        
+        // Si por alguna razón no hay delegate calls (error de implementación), 
+        // configurar un timeout de seguridad
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self = self else { return }
+            
+            if self.pendingDestroyCompletion != nil {
+                memoryLogger.warning("⚠️ Timeout en delegate pattern - ejecutando limpieza de emergencia")
+                if let completion = self.pendingDestroyCompletion {
+                    self.pendingDestroyCompletion = nil
+                    self.pendingWindowClosures.removeAll()
+                    self.closedWindowsCount = 0
+                    completion()
+                }
+            }
         }
     }
 
@@ -672,7 +715,7 @@ class WallpaperManager: ObservableObject {
             print("⚠️ No hay bookmark data para: \\(mutableVideoFile.name). Intentando crear uno nuevo desde la URL original.")
             if mutableVideoFile.url.startAccessingSecurityScopedResource() { // Acceder a la URL original
                 do {
-                    let newBookmarkData = try mutableVideoFile.url.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+                    let newBookmarkData = try mutableVideoFile.url.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil as Set<URLResourceKey>?, relativeTo: nil as URL?)
                     mutableVideoFile.bookmarkData = newBookmarkData // Actualizar la copia mutable
 
                     // Actualizar el videoFile real en el array videoFiles y guardar
@@ -707,7 +750,7 @@ class WallpaperManager: ObservableObject {
                 print("⚠️ Bookmark para \\(mutableVideoFile.name) está obsoleto. Intentando refrescarlo...")
                 // Para refrescar, primero se debe poder acceder a la URL resuelta (aunque esté obsoleta)
                 if resolvedURL.startAccessingSecurityScopedResource() {
-                    if let newBookmarkData = try? resolvedURL.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
+                    if let newBookmarkData = try? resolvedURL.bookmarkData(options: URL.BookmarkCreationOptions.withSecurityScope, includingResourceValuesForKeys: nil as Set<URLResourceKey>?, relativeTo: nil as URL?) {
                         if let index = videoFiles.firstIndex(where: { $0.id == mutableVideoFile.id }) {
                             videoFiles[index].bookmarkData = newBookmarkData
                             saveVideos() // Guardar el bookmark actualizado
@@ -809,6 +852,31 @@ class WallpaperManager: ObservableObject {
                 // Eliminar la referencia guardada para evitar intentos futuros
                 userDefaults.removeObject(forKey: currentVideoKey)
             }
+        }
+    }
+    
+    // MARK: - DesktopVideoWindowDelegate Implementation
+    
+    func windowWillClose(_ window: DesktopVideoWindowMejorada, withURL url: URL) {
+        memoryLogger.info("🔔 [Delegate] Ventana notifica que va a cerrarse: \(url.lastPathComponent)")
+        
+        // Marcar la ventana como pendiente de cierre
+        pendingWindowClosures.insert(window)
+    }
+    
+    func windowDidClose(_ window: DesktopVideoWindowMejorada, withURL url: URL) {
+        memoryLogger.info("🔔 [Delegate] Ventana notifica que se cerró: \(url.lastPathComponent)")
+        
+        // Remover de pendientes y actualizar contador
+        pendingWindowClosures.remove(window)
+        closedWindowsCount += 1
+        
+        // Verificar si todas las ventanas han terminado de cerrarse
+        if pendingWindowClosures.isEmpty, let completion = pendingDestroyCompletion {
+            memoryLogger.info("✅ [Delegate] Todas las ventanas cerradas, ejecutando completion")
+            pendingDestroyCompletion = nil
+            closedWindowsCount = 0
+            completion()
         }
     }
     

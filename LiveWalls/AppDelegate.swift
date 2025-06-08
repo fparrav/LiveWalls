@@ -15,7 +15,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Intentar activar la instancia existente
             for app in runningApps {
                 if app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
-                    app.activate(options: [.activateIgnoringOtherApps])
+                    if #available(macOS 14.0, *) {
+                        app.activate()
+                    } else {
+                        app.activate(options: [.activateIgnoringOtherApps])
+                    }
                     break
                 }
             }

@@ -9,6 +9,24 @@ import os.log
 // Logger específico para debugging de memoria
 private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "MemoryManagement")
 
+// MARK: - Delegate Protocol para comunicación con WallpaperManager
+
+/// Protocol para manejar el ciclo de vida de DesktopVideoWindowMejorada
+/// Permite al WallpaperManager recibir notificaciones sobre el estado de las ventanas
+public protocol DesktopVideoWindowDelegate: AnyObject {
+    /// Se llama cuando la ventana está a punto de cerrarse
+    /// - Parameters:
+    ///   - window: La ventana que se va a cerrar
+    ///   - url: URL del video asociado con la ventana
+    func windowWillClose(_ window: DesktopVideoWindowMejorada, withURL url: URL)
+    
+    /// Se llama después de que la ventana se ha cerrado completamente
+    /// - Parameters:
+    ///   - window: La ventana que se cerró
+    ///   - url: URL del video asociado con la ventana
+    func windowDidClose(_ window: DesktopVideoWindowMejorada, withURL url: URL)
+}
+
 // Extensiones para compatibilidad con versiones anteriores de macOS
 extension AVAsset {
     var isPlayableDeprecated: Bool {
@@ -67,7 +85,7 @@ extension AVAssetTrack {
 }
 
 /// Ventana de video de escritorio mejorada y unificada
-class DesktopVideoWindowMejorada: NSWindow {
+public class DesktopVideoWindowMejorada: NSWindow {
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var videoURL: URL
@@ -79,6 +97,9 @@ class DesktopVideoWindowMejorada: NSWindow {
     private var isClosing: Bool = false
     private var isPlayerSetupInProgress: Bool = false
     private var isBeingTornDown: Bool = false
+    
+    // MARK: - Delegate para comunicación con WallpaperManager
+    weak var wallpaperDelegate: DesktopVideoWindowDelegate?
 
     /// Inicializa la ventana con la pantalla y la URL de video accesible (security-scoped activa).
     /// IMPORTANTE: La ventana NO toma ownership del acceso security-scoped. 
@@ -86,7 +107,7 @@ class DesktopVideoWindowMejorada: NSWindow {
     /// - Parameters:
     ///   - screen: Pantalla destino.
     ///   - videoURL: URL del video con acceso security-scoped activo.
-    init(screen: NSScreen, videoURL: URL) {
+    public init(screen: NSScreen, videoURL: URL) {
         self.videoURL = videoURL
         self.urlSecurityScoped = nil
         let contentRect = screen.frame
@@ -128,7 +149,7 @@ class DesktopVideoWindowMejorada: NSWindow {
         }
         if #available(macOS 13.0, *) {
             do {
-                let (isPlayable, duration, tracks) = try await asset.load(.isPlayable, .duration, .tracks)
+                let (_, _, tracks) = try await asset.load(.isPlayable, .duration, .tracks)
                 let videoTracks = tracks.filter { $0.mediaType == .video }
                 var loadedTrackDetails: [(track: AVAssetTrack, naturalSize: CGSize, isPlayable: Bool)] = []
                 for track in videoTracks {
@@ -193,16 +214,16 @@ class DesktopVideoWindowMejorada: NSWindow {
             showErrorInWindow("Sin pistas válidas: \(videoURL.lastPathComponent)")
             return
         }
-        playerItem = AVPlayerItem(asset: asset)
-        guard let playerItem = playerItem else { return }
-        player = AVPlayer(playerItem: playerItem)
+        let newPlayerItem = AVPlayerItem(asset: asset)
+        playerItem = newPlayerItem
+        player = AVPlayer(playerItem: newPlayerItem)
         player?.actionAtItemEnd = .none
         playerLayer = AVPlayerLayer(player: player)
         playerLayer?.videoGravity = .resizeAspectFill
         playerLayer?.frame = self.contentView?.bounds ?? .zero
         self.contentView?.layer = playerLayer
         self.contentView?.wantsLayer = true
-        playerItemStatusObserver = playerItem.observe(\.status, options: [.new, .initial]) { [weak self] (item: AVPlayerItem, _: NSKeyValueObservedChange<AVPlayerItem.Status>) in
+        playerItemStatusObserver = newPlayerItem.observe(\.status, options: [.new, .initial]) { [weak self] (item: AVPlayerItem, _: NSKeyValueObservedChange<AVPlayerItem.Status>) in
             guard let self = self, !self.isClosing, self.player != nil, self.playerItem === item else { return }
             switch item.status {
             case .readyToPlay:
@@ -225,7 +246,7 @@ class DesktopVideoWindowMejorada: NSWindow {
         }
         playerItemDidPlayToEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
+            object: newPlayerItem,
             queue: .main
         ) { [weak self] _ in
             self?.handleVideoEndNotification()
@@ -250,15 +271,26 @@ class DesktopVideoWindowMejorada: NSWindow {
         }
     }
 
-    override func close() {
+    public override func close() {
         memoryLogger.info("🛑 [close] Iniciando cierre de DesktopVideoWindowMejorada para \(self.videoURL.lastPathComponent)")
         guard !isClosing else {
             memoryLogger.warning("⚠️ [close] Llamado a close() mientras ya se estaba cerrando para \(self.videoURL.lastPathComponent)")
             return
         }
         isClosing = true
+        
+        // Notificar al delegate ANTES de cerrar
+        wallpaperDelegate?.windowWillClose(self, withURL: videoURL)
+        
+        // Limpiar recursos antes del cierre
         cleanupResources()
+        
+        // Cerrar la ventana
         super.close()
+        
+        // Notificar al delegate DESPUÉS de cerrar
+        wallpaperDelegate?.windowDidClose(self, withURL: videoURL)
+        
         memoryLogger.info("✅ [close] DesktopVideoWindowMejorada cerrada correctamente para \(self.videoURL.lastPathComponent)")
     }
 
@@ -286,7 +318,7 @@ class DesktopVideoWindowMejorada: NSWindow {
             player.replaceCurrentItem(with: nil)
             self.player = nil
         }
-        if let playerItem = playerItem {
+        if playerItem != nil {
             self.playerItem = nil
         }
         if let contentView = self.contentView {
