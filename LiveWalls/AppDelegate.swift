@@ -18,7 +18,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Intentar activar la instancia existente
             for app in runningApps {
                 if app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
-                    app.activate(options: [.activateIgnoringOtherApps])
+                    // Usar activate() sin opciones para evitar la API deprecada en macOS 14+
+                    if #available(macOS 14.0, *) {
+                        app.activate()
+                    } else {
+                        app.activate(options: [.activateIgnoringOtherApps])
+                    }
                     break
                 }
             }
@@ -105,7 +110,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Buscar el WallpaperManager en el environment de las ventanas activas
         if let window = NSApp.windows.first,
            let contentView = window.contentView,
-           let hostingView = contentView.subviews.first(where: { String(describing: type(of: $0)).contains("HostingView") }) {
+           let _ = contentView.subviews.first(where: { String(describing: type(of: $0)).contains("HostingView") }) {
             
             // Intentar acceder al WallpaperManager a través de reflection o notificaciones
             NotificationCenter.default.post(name: NSNotification.Name("AppWillTerminate"), object: nil)
