@@ -413,107 +413,26 @@ class WallpaperManager: ObservableObject {
         
         // Crear una copia local para evitar problemas de concurrencia
         let instances = desktopVideoInstances
-        // Limpiar la colección principal primero para evitar referencias circulares
-        desktopVideoInstances.removeAll()
+        desktopVideoInstances.removeAll() // Clear the main list immediately
         
-        // Destruir ventanas en el hilo principal de forma secuencial y sincronizada
-        DispatchQueue.main.async {
-            let dispatchGroup = DispatchGroup()
-            
-            for (i, instance) in instances.enumerated() {
-                dispatchGroup.enter()
+        for instance in instances {
+            // Usar DispatchQueue para asegurar que las operaciones se ejecuten secuencialmente en el hilo principal
+            DispatchQueue.main.async {
+                // Cerrar la ventana (esto llamará al método close() mejorado en DesktopVideoWindow)
+                instance.window.close()
                 
-                // Verificar si la ventana es válida antes de cerrarla
-                guard let window = instance.window as NSWindow? else {
-                    print("[destroyDesktopWindows] Ventana #\(i+1) ya era nula")
-                    // Liberar acceso security-scoped de la URL aunque la ventana sea nula
-                    self.safeStopSecurityScopedAccess(for: instance.accessibleURL)
-                    dispatchGroup.leave()
-                    continue
-                }
-                
-                // Solo intentar cerrar ventanas que no estén ya liberadas
-                if window.isReleasedWhenClosed == false || window.isVisible {
-                    print("[destroyDesktopWindows] Cerrando ventana #\(i+1) para: \(instance.accessibleURL.lastPathComponent)")
-                    
-                    // Control de excepciones por seguridad con autoreleasepool
-                    autoreleasepool {
-                        window.close()
-                    }
-                    
-                    print("[destroyDesktopWindows] Ventana #\(i+1) cerrada")
-                    
-                    // Liberar acceso security-scoped DESPUÉS de cerrar la ventana
-                    self.safeStopSecurityScopedAccess(for: instance.accessibleURL)
-                    
-                    // Darle tiempo al sistema para procesar el cierre
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        dispatchGroup.leave()
-                    }
-                } else {
-                    print("[destroyDesktopWindows] Ventana #\(i+1) ya estaba cerrada o liberada")
-                    // Liberar acceso security-scoped aunque la ventana ya estuviera cerrada
-                    self.safeStopSecurityScopedAccess(for: instance.accessibleURL)
-                    dispatchGroup.leave()
+                // Introducir un retraso antes de detener el acceso al recurso
+                DispatchQueue.main.asyncAfter(deadline: .now() + self.resourceReleaseDelay) { // 100ms delay
+                    // Solo detener el acceso si la URL todavía está "viva" y asociada con esta instancia.
+                    // Esta verificación es más conceptual ya que 'instance' es una copia.
+                    // El principal beneficio es el retraso en sí.
+                    instance.accessibleURL.stopAccessingSecurityScopedResource()
+                    print("🛑 Acceso detenido con retraso para \(instance.accessibleURL.lastPathComponent) al destruir la instancia de la ventana.")
                 }
             }
-            
-            // Esperar a que todas las ventanas terminen de cerrarse
-            dispatchGroup.notify(queue: .main) {
-                print("🗑️ Todas las instancias de ventanas de video de escritorio eliminadas correctamente.")
-            }
         }
-    }
-    
-    // MARK: - Security-Scoped Resource Management
-    
-    /// Inicia acceso security-scoped y trackea la URL para prevenir double-start
-    /// - Parameter url: URL a la que se quiere acceder
-    /// - Returns: true si el acceso fue iniciado exitosamente
-    private func safeStartSecurityScopedAccess(for url: URL) -> Bool {
-        return resourceTrackingQueue.sync {
-            // Normalizar la URL usando path absoluto para comparaciones consistentes
-            let normalizedPath = url.path
-            
-            // Verificar si ya tiene acceso activo usando el path normalizado
-            if activeSecurityScopedURLs.contains(normalizedPath) {
-                print("⚠️ Security-scoped access ya está activo para: \(url.lastPathComponent)")
-                return true // Consideramos que ya está disponible
-            }
-            
-            // Intentar iniciar el acceso
-            guard url.startAccessingSecurityScopedResource() else {
-                print("❌ Falló startAccessingSecurityScopedResource para: \(url.lastPathComponent)")
-                return false
-            }
-            
-            // Agregar al tracking si fue exitoso usando el path normalizado
-            activeSecurityScopedURLs.insert(normalizedPath)
-            print("✅ Security-scoped access iniciado y trackeado para: \(url.lastPathComponent) (path: \(normalizedPath))")
-            return true
-        }
-    }
-    
-    /// Detiene acceso security-scoped de forma segura y actualiza el tracking
-    /// - Parameter url: URL cuyo acceso se quiere detener
-    private func safeStopSecurityScopedAccess(for url: URL) {
-        resourceTrackingQueue.sync {
-            // Normalizar la URL usando path absoluto para comparaciones consistentes
-            let normalizedPath = url.path
-            
-            // Solo detener si realmente está activo usando el path normalizado
-            guard activeSecurityScopedURLs.contains(normalizedPath) else {
-                print("⚠️ Intento de detener security-scoped access que no estaba activo para: \(url.lastPathComponent) (path: \(normalizedPath))")
-                return
-            }
-            
-            // Usar autoreleasepool para prevenir memory corruption durante la liberación
-            autoreleasepool {
-                url.stopAccessingSecurityScopedResource()
-                activeSecurityScopedURLs.remove(normalizedPath)
-                print("🛑 Security-scoped access detenido y removido del tracking para: \(url.lastPathComponent) (path: \(normalizedPath))")
-            }
-        }
+        
+        print("🗑️ Todas las instancias de ventanas de video de escritorio programadas para cierre y liberación de recursos.")
     }
     
     // MARK: - Screen Change Notifications
