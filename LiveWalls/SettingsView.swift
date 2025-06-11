@@ -8,70 +8,90 @@ struct SettingsView: View {
     @State private var muteVideo = UserDefaults.standard.bool(forKey: "MuteVideo")
     @State private var videoQuality = UserDefaults.standard.integer(forKey: "VideoQuality")
     
+    @State private var isAutoChangeEnabled: Bool
+    @State private var autoChangeIntervalMinutes: Int
+    @State private var shouldAutoPlayOnSelection: Bool
+
+    private let minIntervalMinutes = 1
+    private let maxIntervalMinutes = 120
+
+    init() {
+        _isAutoChangeEnabled = State(initialValue: UserDefaults.standard.bool(forKey: "AutoChangeEnabled"))
+        let savedInterval = UserDefaults.standard.double(forKey: "AutoChangeInterval")
+        _autoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
+        _shouldAutoPlayOnSelection = State(initialValue: UserDefaults.standard.bool(forKey: "ShouldAutoPlayOnSelection"))
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Configuración")
-                .font(.title)
-                .fontWeight(.bold)
-            
-            GroupBox("Reproducción") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle("Iniciar fondo de pantalla automáticamente", isOn: $autoStartWallpaper)
-                        .onChange(of: autoStartWallpaper) { _, newValue in
-                            UserDefaults.standard.set(newValue, forKey: "AutoStartWallpaper")
-                        }
-                    
-                    Toggle("Silenciar videos", isOn: $muteVideo)
-                        .onChange(of: muteVideo) { _, newValue in
-                            UserDefaults.standard.set(newValue, forKey: "MuteVideo")
-                        }
-                    
-                    HStack {
-                        Text("Calidad de video:")
-                        Picker("Calidad", selection: $videoQuality) {
-                            Text("Baja").tag(0)
-                            Text("Media").tag(1)
-                            Text("Alta").tag(2)
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .onChange(of: videoQuality) { _, newValue in
-                            UserDefaults.standard.set(newValue, forKey: "VideoQuality")
-                        }
+        // Usar una Form para agrupar la configuración, común en macOS
+        Form {
+            // Sección de Reproducción General
+            Section(header: Text("Reproducción General").font(.headline)) {
+                Toggle("Iniciar fondo de pantalla automáticamente al abrir la app", isOn: $autoStartWallpaper)
+                    .onChange(of: autoStartWallpaper) { _ in
+                        UserDefaults.standard.set(autoStartWallpaper, forKey: "AutoStartWallpaper")
                     }
+                
+                Toggle("Silenciar videos", isOn: $muteVideo)
+                    .onChange(of: muteVideo) { _ in
+                        UserDefaults.standard.set(muteVideo, forKey: "MuteVideo")
+                        // wallpaperManager.setMuted(muteVideo) // Notificar al manager
+                    }
+                
+                Picker("Calidad de video (si aplica conversión):", selection: $videoQuality) {
+                    Text("Baja").tag(0)
+                    Text("Media").tag(1)
+                    Text("Alta").tag(2)
+                    Text("Original").tag(3)
                 }
-                .padding()
+                .onChange(of: videoQuality) { _ in
+                    UserDefaults.standard.set(videoQuality, forKey: "VideoQuality")
+                }
+                
+                Toggle("Reproducir video al seleccionarlo en la lista", isOn: $shouldAutoPlayOnSelection)
+                    .onChange(of: shouldAutoPlayOnSelection) { _ in
+                        wallpaperManager.shouldAutoPlayOnSelection = shouldAutoPlayOnSelection
+                        wallpaperManager.saveAutoChangeSettings()
+                    }
             }
             
-            GroupBox("Pantalla") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Pantallas detectadas: \(NSScreen.screens.count)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Text("El fondo de pantalla se aplicará a todas las pantallas y espacios de trabajo conectados.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-            }
-            
-            GroupBox("Videos") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Videos guardados: \(wallpaperManager.videoFiles.count)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    HStack {
-                        Button("Limpiar todos los videos") {
-                            wallpaperManager.videoFiles.removeAll()
-                            wallpaperManager.stopWallpaper()
+            Divider()
+
+            // Sección de Cambio Automático de Wallpaper
+            Section(header: Text("Cambio Automático de Wallpaper").font(.headline)) {
+                Toggle("Activar cambio automático de wallpaper", isOn: $isAutoChangeEnabled)
+                    .onChange(of: isAutoChangeEnabled) { _ in
+                        wallpaperManager.isAutoChangeEnabled = isAutoChangeEnabled
+                        wallpaperManager.saveAutoChangeSettings()
+                    }
+                
+                if isAutoChangeEnabled {
+                    Picker("Intervalo de cambio (minutos):", selection: $autoChangeIntervalMinutes) {
+                        ForEach(minIntervalMinutes...maxIntervalMinutes, id: \.self) { minutes in
+                            Text("\(minutes) min").tag(minutes)
                         }
-                        .buttonStyle(.bordered)
-                        
-                        Spacer()
+                    }
+                    .onChange(of: autoChangeIntervalMinutes) { _ in
+                        wallpaperManager.autoChangeInterval = TimeInterval(autoChangeIntervalMinutes * 60)
+                        wallpaperManager.saveAutoChangeSettings()
                     }
                 }
-                .padding()
+            }
+            
+            Divider()
+
+            Section(header: Text("Gestión de Videos").font(.headline)) {
+                Text("Videos guardados: \(wallpaperManager.videoFiles.count)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Button("Limpiar todos los videos") {
+                    // Añadir alerta de confirmación
+                    wallpaperManager.videoFiles.removeAll()
+                    wallpaperManager.stopWallpaperSafe() // Usar la versión segura
+                    wallpaperManager.saveVideos() // Guardar la lista vacía
+                }
+                .buttonStyle(.bordered)
             }
             
             Spacer()
@@ -80,23 +100,35 @@ struct SettingsView: View {
                 Text("Live Walls v1.0")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                
                 Spacer()
-                
-                // Botón para cerrar solo la ventana principal (no la app)
-                Button("Cerrar") {
-                    // Oculta la ventana principal, la app sigue viva y visible en el Dock y status bar
-                    NSApp.keyWindow?.orderOut(nil)
+                Button("Cerrar Ventana") {
+                    NSApp.keyWindow?.close() // Cierra la ventana de configuración
                 }
                 .buttonStyle(.borderedProminent)
             }
         }
         .padding()
-        .frame(width: 500, height: 400)
+        .frame(width: 500, height: 450) // Ajustar altura si es necesario
+        // Cargar el estado del wallpaperManager cuando la vista aparece
+        // Esto asegura que los @State locales se sincronicen con el manager
+        .onAppear {
+            self.isAutoChangeEnabled = wallpaperManager.isAutoChangeEnabled
+            self.autoChangeIntervalMinutes = Int(wallpaperManager.autoChangeInterval / 60)
+            self.shouldAutoPlayOnSelection = wallpaperManager.shouldAutoPlayOnSelection
+            
+            // Cargar también los valores que no están directamente en el manager pero sí en UserDefaults
+            self.autoStartWallpaper = UserDefaults.standard.bool(forKey: "AutoStartWallpaper")
+            self.muteVideo = UserDefaults.standard.bool(forKey: "MuteVideo")
+            self.videoQuality = UserDefaults.standard.integer(forKey: "VideoQuality")
+        }
     }
 }
 
-#Preview {
-    SettingsView()
-        .environmentObject(WallpaperManager())
-}
+// Vista previa temporalmente deshabilitada para resolver errores de inicialización
+// struct SettingsView_Previews: PreviewProvider {
+//     static var previews: some View {
+//         let manager = WallpaperManager()
+//         SettingsView()
+//             .environmentObject(manager)
+//     }
+// }

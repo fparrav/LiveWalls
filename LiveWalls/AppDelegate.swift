@@ -1,100 +1,60 @@
 import Cocoa
 import os.log
+import UserNotifications
+import SwiftUI
 
 /// AppDelegate mejorado con protección contra cierres inesperados de la ventana principal
 class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: "com.livewalls.app", category: "AppLifecycle")
-    private var mainWindowController: NSWindowController?
+    private var mainWindow: NSWindow?
     
-    /// Referencia al WallpaperManager para gestión de recursos durante terminación
-    weak var wallpaperManager: WallpaperManager?
+    /// Referencia al WallpaperManager
+    var wallpaperManager: WallpaperManager? {
+        didSet {
+            logger.info("📱 WallpaperManager configurado")
+        }
+    }
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        logger.info("🚀 Iniciando aplicación")
+        
+        // Configurar la ventana principal
+        setupMainWindow()
+        
         // Prevenir múltiples instancias
-        let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier!)
-        if runningApps.count > 1 {
-            logger.warning("⚠️ Ya hay una instancia de LiveWalls corriendo. Activando la instancia existente y saliendo...")
-            
-            // Intentar activar la instancia existente
-            for app in runningApps {
-                if app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
-                    // Usar activate() sin opciones para evitar la API deprecada en macOS 14+
-                    if #available(macOS 14.0, *) {
-                        app.activate()
-                    } else {
-                        app.activate(options: [.activateIgnoringOtherApps])
-                    }
-                    break
-                }
-            }
-            
-            // Salir de ESTA instancia sin afectar a la existente
-            DispatchQueue.main.async {
-                exit(0) // Usar exit(0) en lugar de NSApp.terminate(nil)
-            }
+        if !isFirstInstance() {
+            logger.warning("⚠️ Ya existe una instancia de la aplicación")
+            NSApp.terminate(nil)
             return
         }
         
-        // Configurar para manejar terminación
-        NSApp.delegate = self
-        
-        // Registrar para notificación de cierre de ventana
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowWillClose(_:)),
-            name: NSWindow.willCloseNotification,
-            object: nil
-        )
+        // Configurar la política de activación
+        NSApp.setActivationPolicy(.accessory)
     }
     
-    @objc func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        
-        // Verificar si es la ventana principal que se está cerrando
-        if window == NSApp.mainWindow {
-            logger.info("🪟 Ventana principal cerrándose")
-            
-            // Ajustar la lógica para manejar el cierre de la ventana principal sin usar `return`
-            logger.info("🔄 Aplicación terminando o cierre inesperado detectado")
-            
-            // Si no está terminando, prevenir el cierre ordenando al frente de nuevo
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                // Reabrir la ventana principal si no hay otras ventanas visibles
-                if NSApp.windows.filter({ $0.isVisible }).isEmpty {
-                    self.logger.info("🔄 Reabriendo ventana principal automáticamente")
-                    self.showMainWindow()
-                }
+    private func setupMainWindow() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.center()
+        window.title = "Live Walls"
+        window.isReleasedWhenClosed = false // Importante: no liberar la ventana al cerrarla
+        // Comentado: SwiftUI maneja la ventana principal automáticamente a través de LiveWallsApp
+        // window.contentView = NSHostingView(rootView: ContentView())
+        self.mainWindow = window
+    }
+    
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            if let window = mainWindow {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
             }
         }
-    }
-    
-    func showMainWindow() {
-        // Política accessory: la app NO aparece en el Dock
-        NSApp.setActivationPolicy(.accessory)
-        NSApp.activate(ignoringOtherApps: true)
-
-        // Buscar la ventana principal y traerla al frente
-        if let window = NSApp.windows.first(where: { $0.isVisible == false && !($0 is NSPanel) }) {
-            logger.info("🪟 Restaurando ventana principal existente")
-            window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
-        } else if let window = NSApp.windows.first {
-            logger.info("🪟 Usando primera ventana disponible")
-            window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
-        } else {
-            // Si no hay ventanas, crear una nueva instancia de la ventana principal
-            logger.warning("⚠️ No se encontró ventana principal existente. Recargando interfaz...")
-            recreateMainWindow()
-        }
-    }
-    
-    private func recreateMainWindow() {
-        // Esta es una implementación básica, puede necesitar ajustes según tu app
-        logger.info("🔄 Recreando ventana principal")
-        // Forzar a SwiftUI a recrear la ventana principal:
-        // Enviar una notificación que la vista principal escuche para forzar su aparición
-        NotificationCenter.default.post(name: NSNotification.Name("ShowMainWindow"), object: nil)
+        return true
     }
     
     // Permitir terminación normal
@@ -105,26 +65,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     /// ✅ Función para limpiar recursos antes de terminar la aplicación
     func applicationWillTerminate(_ notification: Notification) {
-        logger.info("🧹 Iniciando limpieza de recursos antes de terminar la aplicación")
+        logger.info("🛑 Terminando aplicación")
         
-        // Buscar el WallpaperManager en el environment de las ventanas activas
-        if let window = NSApp.windows.first,
-           let contentView = window.contentView,
-           let _ = contentView.subviews.first(where: { String(describing: type(of: $0)).contains("HostingView") }) {
-            
-            // Intentar acceder al WallpaperManager a través de reflection o notificaciones
-            NotificationCenter.default.post(name: NSNotification.Name("AppWillTerminate"), object: nil)
-            logger.info("📢 Notificación de terminación enviada")
-        }
-        
-        // Pequeño delay para permitir que se complete la limpieza
-        Thread.sleep(forTimeInterval: 0.2)
-        logger.info("✅ Limpieza de recursos completada")
+        // Asegurar que el WallpaperManager limpie sus recursos
+        wallpaperManager?.stopWallpaper()
     }
     
     /// Elimina observers para evitar fugas de memoria al destruir el AppDelegate
     deinit {
         // Remover observer de cierre de ventana para evitar leaks
         NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
+    }
+    
+    private func isFirstInstance() -> Bool {
+        let semaphore = DispatchSemaphore(value: 0)
+        var isFirst = true
+        
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.livewalls.app.instanceCheck"),
+            object: nil,
+            queue: nil
+        ) { _ in
+            isFirst = false
+            semaphore.signal()
+        }
+        
+        DistributedNotificationCenter.default().post(
+            name: NSNotification.Name("com.livewalls.app.instanceCheck"),
+            object: nil
+        )
+        
+        _ = semaphore.wait(timeout: .now() + 0.1)
+        return isFirst
     }
 }

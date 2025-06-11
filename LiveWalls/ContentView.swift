@@ -29,9 +29,8 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Configuración App") { // Renombrado para diferenciar del enlace en sidebar
+                Button("Configuración App") {
                     // Aquí se puede abrir una ventana de configuración global de la app
-                    // Por ejemplo, usando SettingsLink en macOS 14+ o una hoja/ventana modal
                 }
             }
         }
@@ -64,19 +63,19 @@ struct ContentView: View {
             .padding([.horizontal, .top])
             .padding(.bottom, 8) // Espacio antes de la lista
 
-            // Lista de videos y enlace de configuración
+            // Lista de videos
             List(selection: $selectedVideo) {
                 ForEach(wallpaperManager.videoFiles) { video in
                     VideoRowView(video: video)
-                        .tag(video) // Necesario para que la selección funcione con List
+                        .tag(video)
                         .onTapGesture {
-                            // Al seleccionar un video, se establece automáticamente como activo
-                            // y se actualiza selectedVideo para la NavigationSplitView
                             wallpaperManager.setActiveVideo(video)
-                            // selectedVideo se actualiza automáticamente por el binding de List
                         }
                         .contextMenu {
-                            Button("Eliminar", role: .destructive) {
+                            Button("Fijar como Fondo", systemImage: "pin.fill") {
+                                wallpaperManager.setAsCurrentWallpaper(video: video)
+                            }
+                            Button("Eliminar", systemImage: "trash", role: .destructive) {
                                 wallpaperManager.removeVideo(video)
                             }
                         }
@@ -84,10 +83,8 @@ struct ContentView: View {
                 
                 // Sección para otros enlaces como "Configuración"
                 Section(header: Text("Opciones")) {
-                    NavigationLink("Configuración Video") { // Enlace a una vista de configuración específica
-                        Text("Ventana de Configuración de Video (Placeholder)")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .navigationTitle("Configuración Video")
+                    NavigationLink("Configuración General") {
+                        SettingsView()
                     }
                 }
             }
@@ -98,7 +95,11 @@ struct ContentView: View {
                 Divider()
                 HStack {
                     Button(action: {
-                        wallpaperManager.toggleWallpaper()
+                        if wallpaperManager.isPlayingWallpaper {
+                            wallpaperManager.stopWallpaperSafe()
+                        } else {
+                            wallpaperManager.startWallpaperSafe()
+                        }
                     }) {
                         HStack {
                             Image(systemName: wallpaperManager.isPlayingWallpaper ? "stop.fill" : "play.fill")
@@ -147,11 +148,36 @@ struct ContentView: View {
         if let video = selectedVideo {
             VideoDetailView(video: video, selectedVideo: $selectedVideo)
         } else {
-            ContentUnavailableView(
-                "Selecciona un video",
-                systemImage: "video.fill",
-                description: Text("Elige un video de la lista para ver una vista previa y detalles.")
-            )
+            VStack {
+                if #available(macOS 14.0, *) {
+                    ContentUnavailableView(
+                        "Selecciona un video",
+                        systemImage: "video.fill",
+                        description: Text("Elige un video de la lista para ver una vista previa y detalles.")
+                    )
+                } else {
+                    VStack {
+                        Image(systemName: "video.fill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 50, height: 50)
+                            .foregroundColor(.secondary)
+                            .padding(.bottom, 10)
+                        Text("Selecciona un video")
+                            .font(.title2)
+                            .padding(.bottom, 5)
+                        Text("Elige un video de la lista para ver una vista previa y detalles.")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                }
+                NavigationLink("Ir a Configuración") {
+                    SettingsView()
+                }
+                .padding(.top)
+            }
         }
     }
 }
@@ -206,22 +232,41 @@ struct VideoDetailView: View {
     @State private var urlAccesible: URL? = nil // URL resuelta para vista previa
 
     var body: some View {
-        VStack {
+        VStack(alignment: .leading) {
             Text(video.name)
-                .font(.title)
-                .padding(.bottom)
+                .font(.largeTitle)
+                .padding(.bottom, 5)
 
-            // Botón para activar/desactivar vista previa del video
+            Text("Ubicación: \(video.url.path(percentEncoded: false))")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .padding(.bottom, 20)
+
             HStack {
-                Button(showVideoPreview ? "Mostrar Miniatura" : "Vista Previa Video") {
+                Button {
                     showVideoPreview.toggle()
+                } label: {
+                    Label(showVideoPreview ? "Ocultar Vista Previa" : "Mostrar Vista Previa", systemImage: showVideoPreview ? "eye.slash" : "eye")
                 }
                 .buttonStyle(.bordered)
+                
+                Spacer()
+                
+                Button {
+                    wallpaperManager.setAsCurrentWallpaper(video: video)
+                } label: {
+                    Label("Fijar como Fondo", systemImage: "pin.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .help("Establece este video como el fondo de pantalla actual y detiene el cambio automático.")
+
             }
             .padding(.bottom)
 
             // Resolución y liberación del bookmark para la vista previa
-            .onChange(of: showVideoPreview) { _, newValue in
+            .onChange(of: showVideoPreview) { newValue in
                 if newValue {
                     if urlAccesible == nil {
                         urlAccesible = wallpaperManager.resolveBookmark(for: video)
@@ -237,16 +282,12 @@ struct VideoDetailView: View {
             }
 
             if showVideoPreview {
-                if let urlAccesible = urlAccesible {
+                if let resolvedURL = urlAccesible {
                     // Vista previa usando AVPlayerLayer a través de VideoPlayerView
-                    VideoPlayerView(url: urlAccesible) // Reemplazado AVKit.VideoPlayer
+                    VideoPlayerView(url: resolvedURL, shouldLoop: true, aspectFill: true)
                         .frame(maxWidth: 400, maxHeight: 300)
                         .cornerRadius(8)
                         .padding(.bottom)
-                        // .allowsHitTesting(false) // VideoPlayerView (NSViewRepresentable) maneja interacciones de forma diferente
-                        // .onAppear {
-                        //     // Configuración adicional para ocultar controles si es posible
-                        // } // onAppear no es directamente aplicable aquí de la misma manera
                 } else {
                     // Si no se pudo resolver el bookmark, mostrar error
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -276,26 +317,18 @@ struct VideoDetailView: View {
                     .foregroundColor(.secondary)
             }
 
-            Text("Ubicación: \(video.url.path(percentEncoded: false))")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .padding(.bottom)
-
             HStack {
                 if video.isActive {
-                    Label("Activo", systemImage: "checkmark.circle.fill")
+                    Label("Activo (Reproduciendo o Seleccionado)", systemImage: "checkmark.circle.fill")
                         .foregroundColor(.green)
                 }
-            }
-            
-            // Área para controles adicionales (sin botones de testing)
-            HStack {
-                // Dejamos este espacio para futuros controles de usuario
                 Spacer()
             }
-            .padding(.top, 8)
+            .padding(.top, 5)
+            
+            Spacer() // Empuja todo hacia arriba
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading) // Asegura que el contenido se alinee arriba
         .padding()
     }
     

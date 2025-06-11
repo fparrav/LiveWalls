@@ -5,6 +5,8 @@ import Cocoa
 import CoreGraphics
 import AVFoundation
 import os.log
+import Foundation
+import AppKit
 
 // Logger específico para debugging de memoria
 private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "MemoryManagement")
@@ -68,31 +70,6 @@ extension AVAssetTrack {
 
 /// Ventana de video de escritorio mejorada y unificada
 public class DesktopVideoWindowMejorada: NSWindow {
-    /**
-     Libera correctamente el AVPlayer asociado a la ventana.
-     Pausa la reproducción, reemplaza el ítem actual con nil y elimina observadores de notificaciones.
-     Se recomienda llamar a esta función antes de cerrar la ventana para evitar fugas de memoria o referencias a recursos de video.
-     */
-    public func cleanupPlayer() {
-        // Pausar el reproductor si existe
-        player?.pause()
-        // Reemplazar el ítem actual con nil para liberar recursos de AVFoundation
-        player?.replaceCurrentItem(with: nil)
-        // Eliminar observadores de notificaciones y KVO
-        if let playerItemStatusObserver = playerItemStatusObserver {
-            playerItemStatusObserver.invalidate()
-            self.playerItemStatusObserver = nil
-        }
-        if let endObserver = playerItemDidPlayToEndObserver {
-            NotificationCenter.default.removeObserver(endObserver)
-            self.playerItemDidPlayToEndObserver = nil
-        }
-        if let playerRateObserver = playerRateObserver {
-            playerRateObserver.invalidate()
-            self.playerRateObserver = nil
-        }
-        memoryLogger.info("✅ cleanupPlayer ejecutado para \(self.videoURL.lastPathComponent)")
-    }
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var videoURL: URL
@@ -103,9 +80,13 @@ public class DesktopVideoWindowMejorada: NSWindow {
     private var isClosing: Bool = false
     private var isPlayerSetupInProgress: Bool = false
     private var isBeingTornDown: Bool = false
+    private let setupLock = NSLock()
+    private let cleanupLock = NSLock()
+    private let setupQueue = DispatchQueue(label: "com.livewalls.window.setup", qos: .userInitiated)
+    private let cleanupQueue = DispatchQueue(label: "com.livewalls.window.cleanup", qos: .userInitiated)
 
     // Definición de la propiedad playerItem
-    private var playerItem: AVPlayerItem? // Representa el ítem de reproducción actual
+    private var playerItem: AVPlayerItem?
 
     /// Inicializa la ventana con la pantalla y la URL de video accesible (security-scoped activa).
     /// IMPORTANTE: La ventana NO toma ownership del acceso security-scoped. 
@@ -138,192 +119,232 @@ public class DesktopVideoWindowMejorada: NSWindow {
         self.ignoresMouseEvents = true
         self.backgroundColor = NSColor.clear
         self.setFrame(screen.frame, display: true)
+        self.styleMask = [.borderless, .fullSizeContentView]
+        
+        // Optimizaciones adicionales
+        self.acceptsMouseMovedEvents = false
+        self.isMovable = false
+        self.isMovableByWindowBackground = false
+        self.isReleasedWhenClosed = true
+        self.hidesOnDeactivate = false
+        self.isExcludedFromWindowsMenu = true
+        self.showsResizeIndicator = false
+        self.showsToolbarButton = false
+        self.titlebarAppearsTransparent = true
+        self.titleVisibility = .hidden
+        self.toolbar = nil
     }
 
     private func setupPlayer(with url: URL) async {
-        await MainActor.run { self.isPlayerSetupInProgress = true }
-        defer {
-            Task { @MainActor in self.isPlayerSetupInProgress = false }
-        }
-        let asset = AVURLAsset(url: url)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            await MainActor.run {
-                if self.isClosing { return }
-                self.showErrorInWindow("Archivo no encontrado: \(url.lastPathComponent)")
+        await withCheckedContinuation { continuation in
+            setupLock.lock()
+            guard !isPlayerSetupInProgress else {
+                setupLock.unlock()
+                memoryLogger.warning("⚠️ Setup de player ya en progreso")
+                continuation.resume()
+                return
             }
-            return
-        }
-        if #available(macOS 13.0, *) {
-            do {
-                // Reemplazo de variables no utilizadas con `_`
-                let (_, _, tracks) = try await asset.load(.isPlayable, .duration, .tracks)
-                let videoTracks = tracks.filter { $0.mediaType == .video }
-                var loadedTrackDetails: [(track: AVAssetTrack, naturalSize: CGSize, isPlayable: Bool)] = []
-                for track in videoTracks {
-                    let (naturalSize, isTrackPlayable) = try await track.load(.naturalSize, .isPlayable)
-                    if isTrackPlayable {
-                        loadedTrackDetails.append((track, naturalSize, isTrackPlayable))
+            isPlayerSetupInProgress = true
+            setupLock.unlock()
+
+            let asset = AVURLAsset(url: url)
+            Task {
+                do {
+                    let (isPlayable, _) = try await asset.load(.isPlayable, .tracks)
+                    
+                    guard isPlayable else {
+                        throw NSError(domain: "com.livewalls.error", code: -1, userInfo: [NSLocalizedDescriptionKey: "El video no es reproducible"])
                     }
-                }
-                if loadedTrackDetails.isEmpty {
+
                     await MainActor.run {
-                        if self.isClosing { return }
-                        self.showErrorInWindow("Pistas no reproducibles (13+): \(url.lastPathComponent)")
-                    }
-                    return
-                }
-                await MainActor.run {
-                    if self.isClosing { return }
-                    self.configurePlayerWithAsset(asset, trackDetails: loadedTrackDetails)
-                }
-            } catch {
-                await MainActor.run {
-                    if self.isClosing { return }
-                    self.showErrorInWindow("Error carga (13+): \(error.localizedDescription.prefix(30))... \(url.lastPathComponent)")
-                }
-            }
-        } else {
-            asset.loadValuesAsynchronously(forKeys: ["playable", "duration", "tracks"]) { [weak self] in
-                guard let self = self else { return }
-                DispatchQueue.main.async {
-                    if self.isClosing { return }
-                    var error: NSError?
-                    let playableStatus = asset.statusOfValue(forKey: "playable", error: &error)
-                    if playableStatus == .failed || error != nil || !asset.isPlayableDeprecated {
-                        self.showErrorInWindow("No reproducible (legacy): \(error?.localizedDescription ?? "No reproducible")... \(url.lastPathComponent)")
-                        return
-                    }
-                    let videoTracksLegacy = asset.tracksDeprecated.filter { $0.mediaType == .video }
-                    if videoTracksLegacy.isEmpty {
-                        self.showErrorInWindow("Sin pistas (legacy): \(url.lastPathComponent)")
-                        return
-                    }
-                    var legacyTrackDetails: [(track: AVAssetTrack, naturalSize: CGSize, isPlayable: Bool)] = []
-                    for track in videoTracksLegacy {
-                        let naturalSize = track.naturalSizeDeprecated
-                        let isTrackPlayable = track.isPlayableDeprecated
-                        if isTrackPlayable {
-                            legacyTrackDetails.append((track, naturalSize, isTrackPlayable))
+                        setupLock.lock()
+                        defer { setupLock.unlock() }
+                        
+                        guard !isBeingTornDown else {
+                            memoryLogger.warning("⚠️ Setup cancelado: ventana siendo destruida")
+                            continuation.resume()
+                            return
                         }
+
+                        // Crear componentes en orden específico
+                        let newPlayerItem = AVPlayerItem(asset: asset)
+                        let newPlayer = AVPlayer(playerItem: newPlayerItem)
+                        
+                        // Configuración optimizada para reproducción en segundo plano
+                        newPlayer.actionAtItemEnd = .none
+                        newPlayer.volume = 0.0
+                        newPlayer.automaticallyWaitsToMinimizeStalling = false
+                        newPlayer.isMuted = true
+                        newPlayer.rate = 1.0 // Asegurar que la velocidad sea 1.0
+                        
+                        // Configurar playerLayer con optimizaciones
+                        let newPlayerLayer = AVPlayerLayer(player: newPlayer)
+                        newPlayerLayer.videoGravity = .resizeAspectFill
+                        newPlayerLayer.frame = self.contentView?.bounds ?? .zero
+                        newPlayerLayer.isOpaque = true
+                        newPlayerLayer.backgroundColor = CGColor.black
+                        newPlayerLayer.masksToBounds = true
+                        newPlayerLayer.shouldRasterize = true // Optimizar renderizado
+                        newPlayerLayer.rasterizationScale = NSScreen.main?.backingScaleFactor ?? 1.0
+                        newPlayerLayer.drawsAsynchronously = true // Renderizado asíncrono
+
+                        // Añadir layer a la vista
+                        if let contentView = self.contentView {
+                            if contentView.layer == nil {
+                                contentView.wantsLayer = true
+                            }
+                            contentView.layer?.addSublayer(newPlayerLayer)
+                        }
+
+                        // Configurar observadores
+                        setupObservers(player: newPlayer, playerItem: newPlayerItem)
+
+                        // Guardar referencias
+                        self.player = newPlayer
+                        self.playerItem = newPlayerItem
+                        self.playerLayer = newPlayerLayer
+
+                        // Iniciar reproducción
+                        newPlayer.play()
+                        
+                        memoryLogger.info("✅ Player configurado exitosamente para: \(url.lastPathComponent)")
+                        continuation.resume()
                     }
-                    if legacyTrackDetails.isEmpty {
-                        self.showErrorInWindow("Pistas no reproducibles (legacy): \(url.lastPathComponent)")
-                        return
+                } catch {
+                    memoryLogger.error("❌ Error configurando player: \(error.localizedDescription)")
+                    await MainActor.run {
+                        self.cleanupPlayer()
+                        continuation.resume()
                     }
-                    self.configurePlayerWithAsset(asset, trackDetails: legacyTrackDetails)
                 }
             }
         }
     }
 
-    private func configurePlayerWithAsset(_ asset: AVAsset, trackDetails: [(track: AVAssetTrack, naturalSize: CGSize, isPlayable: Bool)]) {
-        guard !trackDetails.isEmpty else {
-            showErrorInWindow("Sin pistas válidas: \(videoURL.lastPathComponent)")
-            return
-        }
-        // Ajuste para desempaquetar playerItem de forma segura
-        if let playerItem = playerItem {
-            playerItemStatusObserver = playerItem.observe(\AVPlayerItem.status, options: [.new, .initial]) { [weak self] (item: AVPlayerItem, _: NSKeyValueObservedChange<AVPlayerItem.Status>) in
-                guard let self = self, !self.isClosing, self.player != nil, self.playerItem === item else { return }
-                switch item.status {
-                case .readyToPlay:
-                    self.player?.play()
-                    self.playerRateObserver = self.player?.observe(\.rate, options: [.new]) { [weak self] (player: AVPlayer, _: NSKeyValueObservedChange<Float>) in
-                        guard let self = self, !self.isClosing else { return }
-                        if player.rate == 0 && player.error == nil && item.isPlaybackLikelyToKeepUp {
-                            // Puede ser una pausa o el final del video si actionAtItemEnd no es .none
-                        } else if let error = player.error {
-                            self.showErrorInWindow("Error reprod.: \(error.localizedDescription.prefix(30)) \(self.videoURL.lastPathComponent)")
-                        }
-                    }
-                case .failed:
-                    self.showErrorInWindow("Error Item: \((item.error?.localizedDescription ?? "Desconocido").prefix(30)) \(self.videoURL.lastPathComponent)")
-                case .unknown:
-                    break
-                @unknown default:
-                    break
-                }
+    private func setupObservers(player: AVPlayer, playerItem: AVPlayerItem) {
+        // Observar estado del playerItem
+        playerItemStatusObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
+            guard let self = self else { return }
+            switch item.status {
+            case .readyToPlay:
+                memoryLogger.info("✅ PlayerItem listo para reproducir")
+                player.play()
+            case .failed:
+                memoryLogger.error("❌ PlayerItem falló: \(item.error?.localizedDescription ?? "Error desconocido")")
+                self.cleanupPlayer()
+            case .unknown:
+                memoryLogger.warning("⚠️ PlayerItem en estado desconocido")
+            @unknown default:
+                memoryLogger.warning("⚠️ PlayerItem en estado no manejado")
             }
         }
+
+        // Observar tasa de reproducción
+        playerRateObserver = player.observe(\.rate, options: [.new]) { [weak self] player, _ in
+            guard let self = self else { return }
+            if player.rate == 0 && !self.isClosing {
+                memoryLogger.warning("⚠️ Player se detuvo inesperadamente")
+                player.play()
+            }
+        }
+
+        // Observar fin de reproducción
         playerItemDidPlayToEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
             queue: .main
         ) { [weak self] _ in
-            self?.handleVideoEndNotification()
+            guard let self = self else { return }
+            if !self.isClosing {
+                memoryLogger.info("🔄 Video llegó al final, reiniciando...")
+                player.seek(to: .zero)
+                player.play()
+            }
         }
-        player?.isMuted = true
     }
 
-    private func handleVideoEndNotification() {
-        guard !isClosing else { return }
-        guard self.player?.currentItem != nil else { return }
-        self.restartVideo()
-    }
+    /// Limpia de manera segura todos los recursos del player
+    private func cleanupPlayer() {
+        // Evitar múltiples limpiezas concurrentes
+        cleanupLock.lock()
+        guard !isBeingTornDown else {
+            cleanupLock.unlock()
+            return
+        }
+        isBeingTornDown = true
+        cleanupLock.unlock()
 
-    private func restartVideo() {
-        guard !isClosing else { return }
-        guard let player = player else { return }
-        player.seek(to: .zero) { [weak self] success in
-            guard let self = self, !self.isClosing else { return }
-            if success {
-                self.player?.play()
+        // Ejecutar limpieza en el hilo principal de manera síncrona si ya estamos en él
+        let cleanup = {
+            // Guardar referencias locales antes de limpiar para evitar race conditions
+            let currentPlayer = self.player
+            let currentPlayerLayer = self.playerLayer
+            let currentStatusObserver = self.playerItemStatusObserver
+            let currentRateObserver = self.playerRateObserver
+            let currentEndObserver = self.playerItemDidPlayToEndObserver
+            
+            // Limpiar referencias inmediatamente para evitar accesos posteriores
+            self.player = nil
+            self.playerItem = nil
+            self.playerLayer = nil
+            self.playerItemStatusObserver = nil
+            self.playerRateObserver = nil
+            self.playerItemDidPlayToEndObserver = nil
+            
+            // Limpiar observadores
+            currentStatusObserver?.invalidate()
+            currentRateObserver?.invalidate()
+            if let observer = currentEndObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+
+            // Detener reproducción de manera segura
+            currentPlayer?.pause()
+            currentPlayer?.replaceCurrentItem(with: nil)
+            
+            // Remover layer de manera segura
+            currentPlayerLayer?.removeFromSuperlayer()
+            
+            memoryLogger.info("🧹 Player limpiado exitosamente")
+        }
+        
+        // Ejecutar en el hilo principal
+        if Thread.isMainThread {
+            cleanup()
+        } else {
+            DispatchQueue.main.sync {
+                cleanup()
             }
         }
     }
 
     /// Cierra la ventana y libera los recursos asociados.
     public override func close() {
-        memoryLogger.info("🛑 [close] Iniciando cierre de DesktopVideoWindowMejorada para \(self.videoURL.lastPathComponent)")
-        guard !isClosing else {
-            memoryLogger.warning("⚠️ [close] Llamado a close() mientras ya se estaba cerrando para \(self.videoURL.lastPathComponent)")
-            return
-        }
+        // Evitar cierre múltiple
+        if isClosing { return }
         isClosing = true
-        cleanupResources()
-        super.close()
-        memoryLogger.info("✅ [close] DesktopVideoWindowMejorada cerrada correctamente para \(self.videoURL.lastPathComponent)")
-    }
-
-    func cleanupResources() {
-        isBeingTornDown = true
-        player?.pause()
-        if let playerItemStatusObserver = playerItemStatusObserver {
-            playerItemStatusObserver.invalidate()
-            self.playerItemStatusObserver = nil
+        
+        memoryLogger.info("🚪 Cerrando ventana de video...")
+        
+        // Limpiar recursos antes de cerrar la ventana
+        cleanupPlayer()
+        
+        // Cerrar la ventana en el hilo principal
+        if Thread.isMainThread {
+            super.close()
+        } else {
+            DispatchQueue.main.async {
+                super.close()
+            }
         }
-        if let endObserver = playerItemDidPlayToEndObserver {
-            NotificationCenter.default.removeObserver(endObserver)
-            self.playerItemDidPlayToEndObserver = nil
-        }
-        if let playerRateObserver = playerRateObserver {
-            playerRateObserver.invalidate()
-            self.playerRateObserver = nil
-        }
-        if let playerLayer = playerLayer {
-            playerLayer.player = nil
-            playerLayer.removeFromSuperlayer()
-            self.playerLayer = nil
-        }
-        if let player = player {
-            player.replaceCurrentItem(with: nil)
-            self.player = nil
-        }
-        if let contentView = self.contentView {
-            contentView.layer = nil
-            contentView.wantsLayer = false
-        }
-        isBeingTornDown = false
-        memoryLogger.info("✅ Limpieza de recursos completada para \(self.videoURL.lastPathComponent)")
     }
 
     deinit {
-        memoryLogger.info("🧹 [deinit] Iniciando deinit para DesktopVideoWindowMejorada de \(self.videoURL.lastPathComponent)")
-        if !isClosing {
-            memoryLogger.warning("⚠️ [deinit] Llamado sin cierre previo. Ejecutando limpieza de emergencia.")
-            cleanupResources()
+        memoryLogger.info("🧹 Deinicializando ventana de video")
+        // Asegurar limpieza final si no se hizo antes
+        if !isBeingTornDown {
+            cleanupPlayer()
         }
-        memoryLogger.info("✅ [deinit] Completado para DesktopVideoWindowMejorada de \(self.videoURL.lastPathComponent)")
     }
 
     private func showErrorInWindow(_ message: String) {
