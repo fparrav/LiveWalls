@@ -4,6 +4,7 @@ import AVFoundation
 
 struct SettingsView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
+    @EnvironmentObject var launchManager: LaunchManager
     @State private var autoStartWallpaper = UserDefaults.standard.bool(forKey: "AutoStartWallpaper")
     @State private var muteVideo = UserDefaults.standard.bool(forKey: "MuteVideo")
     @State private var videoQuality = UserDefaults.standard.integer(forKey: "VideoQuality")
@@ -55,6 +56,26 @@ struct SettingsView: View {
                     }
             }
             
+            Divider()
+            
+            // Sección de Configuración del Sistema
+            Section(header: Text("Sistema").font(.headline)) {
+                Toggle("Iniciar Live Walls con el sistema", isOn: Binding(
+                    get: { launchManager.isLaunchAtLoginEnabled },
+                    set: { newValue in
+                        launchManager.setLaunchAtLogin(newValue)
+                    }
+                ))
+                .help("Inicia automáticamente Live Walls cuando inicies sesión en macOS")
+                
+                if #unavailable(macOS 13.0) {
+                    Text("⚠️ Para macOS < 13.0, configura manualmente en Preferencias del Sistema > Usuarios y Grupos > Objetos de inicio")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Divider()
 
             // Sección de Cambio Automático de Wallpaper
@@ -108,7 +129,7 @@ struct SettingsView: View {
             }
         }
         .padding()
-        .frame(width: 500, height: 450) // Ajustar altura si es necesario
+        .frame(width: 500, height: 520) // Aumentar altura para la nueva sección
         // Cargar el estado del wallpaperManager cuando la vista aparece
         // Esto asegura que los @State locales se sincronicen con el manager
         .onAppear {

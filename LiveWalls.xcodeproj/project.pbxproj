@@ -14,11 +14,11 @@
 		8B0C7D2E2B1F4A3100123456 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8B0C7D2D2B1F4A3100123456 /* Assets.xcassets */; };
 		8B0C7D312B1F4A3100123456 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8B0C7D302B1F4A3100123456 /* Preview Assets.xcassets */; };
 		8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */; };
-		8B0C7D3A2B1F4A5000123456 /* VideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D392B1F4A5000123456 /* VideoPlayerView.swift */; };
-
 		8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */; };
 		8B0C7D402B1F4A8000123456 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */; };
 		8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D412B1F4A9000123456 /* NotificationManager.swift */; };
+		9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */; };
+		9A1B2C3D4E5F6789ABCDEF03 /* StatusBarMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,11 +32,11 @@
 		8B0C7D302B1F4A3100123456 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		8B0C7D322B1F4A3100123456 /* LiveWalls.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LiveWalls.entitlements; sourceTree = "<group>"; };
 		8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperManager.swift; sourceTree = "<group>"; };
-		8B0C7D392B1F4A5000123456 /* VideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerView.swift; sourceTree = "<group>"; };
-
 		8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFile.swift; sourceTree = "<group>"; };
 		8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		8B0C7D412B1F4A9000123456 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchManager.swift; sourceTree = "<group>"; };
+		9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarMenuView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,8 +74,8 @@
 				8B0C7D292B1F4A3000123456 /* LiveWallsApp.swift */,
 				8B0C7D2B2B1F4A3000123456 /* ContentView.swift */,
 				8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */,
-				8B0C7D392B1F4A5000123456 /* VideoPlayerView.swift */,
-
+				9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */,
+				9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */,
 				542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */,
 				8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */,
 				8B0C7D412B1F4A9000123456 /* NotificationManager.swift */,
@@ -167,10 +167,11 @@
 			files = (
 				8B0C7D2C2B1F4A3000123456 /* ContentView.swift in Sources */,
 				8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */,
-				8B0C7D3A2B1F4A5000123456 /* VideoPlayerView.swift in Sources */,
 				55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */,
 				542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */,
 				8B0C7D402B1F4A8000123456 /* SettingsView.swift in Sources */,
+				9A1B2C3D4E5F6789ABCDEF03 /* StatusBarMenuView.swift in Sources */,
+				9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */,
 				8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */,
 				8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */,
 				8B0C7D2A2B1F4A3000123456 /* LiveWallsApp.swift in Sources */,

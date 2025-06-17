@@ -125,7 +125,7 @@ public class DesktopVideoWindowMejorada: NSWindow {
         self.acceptsMouseMovedEvents = false
         self.isMovable = false
         self.isMovableByWindowBackground = false
-        self.isReleasedWhenClosed = true
+        self.isReleasedWhenClosed = false // Cambiado a false para controlar el ciclo de vida
         self.hidesOnDeactivate = false
         self.isExcludedFromWindowsMenu = true
         self.showsResizeIndicator = false
@@ -138,9 +138,9 @@ public class DesktopVideoWindowMejorada: NSWindow {
     private func setupPlayer(with url: URL) async {
         await withCheckedContinuation { continuation in
             setupLock.lock()
-            guard !isPlayerSetupInProgress else {
+            guard !isPlayerSetupInProgress, !isBeingTornDown else {
                 setupLock.unlock()
-                memoryLogger.warning("⚠️ Setup de player ya en progreso")
+                memoryLogger.warning("⚠️ Setup de player cancelado - ya en progreso o siendo destruido")
                 continuation.resume()
                 return
             }
@@ -158,7 +158,10 @@ public class DesktopVideoWindowMejorada: NSWindow {
 
                     await MainActor.run {
                         setupLock.lock()
-                        defer { setupLock.unlock() }
+                        defer { 
+                            setupLock.unlock()
+                            self.isPlayerSetupInProgress = false
+                        }
                         
                         guard !isBeingTornDown else {
                             memoryLogger.warning("⚠️ Setup cancelado: ventana siendo destruida")
@@ -213,7 +216,13 @@ public class DesktopVideoWindowMejorada: NSWindow {
                 } catch {
                     memoryLogger.error("❌ Error configurando player: \(error.localizedDescription)")
                     await MainActor.run {
-                        self.cleanupPlayer()
+                        self.setupLock.lock()
+                        self.isPlayerSetupInProgress = false
+                        self.setupLock.unlock()
+                        
+                        self.cleanupPlayer { [weak self] in
+                            self?.showErrorInWindow("Error cargando video: \(error.localizedDescription)")
+                        }
                         continuation.resume()
                     }
                 }
@@ -264,79 +273,105 @@ public class DesktopVideoWindowMejorada: NSWindow {
     }
 
     /// Limpia de manera segura todos los recursos del player
-    private func cleanupPlayer() {
-        // Evitar múltiples limpiezas concurrentes
+    /// Basado en las mejores prácticas de Swift Foundation para concurrencia
+    private func cleanupPlayer(completion: @escaping () -> Void = {}) {
+        // Usar defer para garantizar unlock del lock
         cleanupLock.lock()
+        defer { cleanupLock.unlock() }
+        
         guard !isBeingTornDown else {
-            cleanupLock.unlock()
+            completion()
             return
         }
         isBeingTornDown = true
-        cleanupLock.unlock()
-
-        // Ejecutar limpieza en el hilo principal de manera síncrona si ya estamos en él
-        let cleanup = {
-            // Guardar referencias locales antes de limpiar para evitar race conditions
-            let currentPlayer = self.player
-            let currentPlayerLayer = self.playerLayer
-            let currentStatusObserver = self.playerItemStatusObserver
-            let currentRateObserver = self.playerRateObserver
-            let currentEndObserver = self.playerItemDidPlayToEndObserver
+        
+        // Capturar referencias ANTES de limpiar para thread safety
+        let components = (
+            player: self.player,
+            playerLayer: self.playerLayer,
+            playerItem: self.playerItem,
+            statusObserver: self.playerItemStatusObserver,
+            rateObserver: self.playerRateObserver,
+            endObserver: self.playerItemDidPlayToEndObserver
+        )
+        
+        // Limpiar referencias atómicamente
+        self.player = nil
+        self.playerItem = nil
+        self.playerLayer = nil
+        self.playerItemStatusObserver = nil
+        self.playerRateObserver = nil
+        self.playerItemDidPlayToEndObserver = nil
+        
+        // Realizar limpieza asíncrona para evitar deadlocks
+        let performCleanupAsync = {
+            // Limpiar observadores PRIMERO
+            components.statusObserver?.invalidate()
+            components.rateObserver?.invalidate()
             
-            // Limpiar referencias inmediatamente para evitar accesos posteriores
-            self.player = nil
-            self.playerItem = nil
-            self.playerLayer = nil
-            self.playerItemStatusObserver = nil
-            self.playerRateObserver = nil
-            self.playerItemDidPlayToEndObserver = nil
-            
-            // Limpiar observadores
-            currentStatusObserver?.invalidate()
-            currentRateObserver?.invalidate()
-            if let observer = currentEndObserver {
+            if let observer = components.endObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
-
-            // Detener reproducción de manera segura
-            currentPlayer?.pause()
-            currentPlayer?.replaceCurrentItem(with: nil)
             
-            // Remover layer de manera segura
-            currentPlayerLayer?.removeFromSuperlayer()
+            // Detener player ANTES de remover layer
+            components.player?.pause()
+            components.player?.replaceCurrentItem(with: nil)
+            
+            // Remover layer del superlayer
+            components.playerLayer?.removeFromSuperlayer()
             
             memoryLogger.info("🧹 Player limpiado exitosamente")
+            
+            // Ejecutar completion en el hilo principal
+            DispatchQueue.main.async {
+                completion()
+            }
         }
         
-        // Ejecutar en el hilo principal
+        // Ejecutar limpieza de manera thread-safe
         if Thread.isMainThread {
-            cleanup()
+            // Si estamos en el hilo principal, ejecutar asíncronamente para evitar bloqueos
+            DispatchQueue.main.async(execute: performCleanupAsync)
         } else {
-            DispatchQueue.main.sync {
-                cleanup()
-            }
+            // Si estamos en otro hilo, ejecutar directamente
+            performCleanupAsync()
         }
     }
 
     /// Cierra la ventana y libera los recursos asociados.
-    public override func close() {
+    public func close(completion: @escaping () -> Void = {}) {
         // Evitar cierre múltiple
-        if isClosing { return }
+        if isClosing { 
+            completion()
+            return 
+        }
         isClosing = true
         
         memoryLogger.info("🚪 Cerrando ventana de video...")
         
         // Limpiar recursos antes de cerrar la ventana
-        cleanupPlayer()
-        
-        // Cerrar la ventana en el hilo principal
-        if Thread.isMainThread {
-            super.close()
-        } else {
-            DispatchQueue.main.async {
-                super.close()
+        cleanupPlayer { [weak self] in
+            guard let self = self else {
+                completion()
+                return
+            }
+            
+            // Cerrar la ventana en el hilo principal
+            DispatchQueue.main.async { [weak self] in
+                self?.performClose()
+                completion()
             }
         }
+    }
+    
+    /// Método privado para cerrar la ventana
+    private func performClose() {
+        super.close()
+    }
+    
+    /// Override del método close() original para mantener compatibilidad
+    public override func close() {
+        close(completion: {})
     }
 
     deinit {

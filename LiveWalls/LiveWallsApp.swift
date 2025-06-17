@@ -13,10 +13,14 @@ struct LiveWallsApp: App {
     // Inicialización segura del WallpaperManager con StateObject
     @StateObject private var wallpaperManager = WallpaperManager()
     
+    // Gestor de inicio automático
+    @StateObject private var launchManager = LaunchManager()
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(wallpaperManager)
+                .environmentObject(launchManager)
                 .onAppear {
                     // Configurar el AppDelegate después de que la vista aparezca
                     appDelegate.wallpaperManager = wallpaperManager
@@ -28,18 +32,9 @@ struct LiveWallsApp: App {
         }
         
         MenuBarExtra("Live Walls", systemImage: "play.circle.fill") {
-            Button("Abrir aplicación") {
-                NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first {
-                    window.makeKeyAndOrderFront(nil)
-                }
-            }
-            
-            Divider()
-            
-            Button("Salir") {
-                NSApplication.shared.terminate(nil)
-            }
+            StatusBarMenuView()
+                .environmentObject(wallpaperManager)
+                .environmentObject(launchManager)
         }
     }
     

@@ -89,29 +89,87 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         appLogger.info("📁 Agregando \(urls.count) archivos de video")
         
         for url in urls {
-            // Crear bookmark security-scoped
+            // Verificar si ya tenemos acceso al archivo
+            var accessGranted = false
+            
+            // Intentar iniciar acceso security-scoped si no está activo
+            if !url.startAccessingSecurityScopedResource() {
+                appLogger.warning("⚠️ No se pudo iniciar acceso security-scoped para: \(url.lastPathComponent)")
+            } else {
+                accessGranted = true
+            }
+            
             do {
+                // Verificar que el archivo existe y es accesible
+                guard try url.checkResourceIsReachable() else {
+                    appLogger.error("❌ Archivo no accesible: \(url.lastPathComponent)")
+                    if accessGranted {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                    continue
+                }
+                
+                // Crear bookmark security-scoped
                 let bookmarkData = try url.bookmarkData(
                     options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
                     includingResourceValuesForKeys: nil,
                     relativeTo: nil
                 )
                 
+                // Generar miniatura del video
+                let thumbnail = generateThumbnail(for: url)
+                
                 let videoFile = VideoFile(
                     url: url,
                     name: url.deletingPathExtension().lastPathComponent,
+                    thumbnailData: thumbnail,
                     bookmarkData: bookmarkData
                 )
                 
                 DispatchQueue.main.async {
+                    let countBefore = self.videoFiles.count
                     self.videoFiles.append(videoFile)
+                    let countAfter = self.videoFiles.count
+                    
                     self.saveVideos()
                     self.appLogger.info("✅ Video agregado: \(videoFile.name)")
+                    self.appLogger.info("📊 Videos en lista: \(countBefore) → \(countAfter)")
+                    
+                    // Debug adicional para verificar que SwiftUI recibe la actualización
+                    print("🔄 VideoFiles actualizado: \(self.videoFiles.count) videos")
+                    print("📝 Nombres: \(self.videoFiles.map { $0.name })")
+                }
+                
+                // Detener acceso temporal ya que tenemos el bookmark
+                if accessGranted {
+                    url.stopAccessingSecurityScopedResource()
                 }
                 
             } catch {
-                appLogger.error("❌ Error creando bookmark para \(url.lastPathComponent): \(error)")
+                appLogger.error("❌ Error procesando \(url.lastPathComponent): \(error)")
+                if accessGranted {
+                    url.stopAccessingSecurityScopedResource()
+                }
             }
+        }
+    }
+    
+    /// Genera una miniatura para el video
+    /// - Parameter url: URL del archivo de video
+    /// - Returns: Data de la imagen en formato PNG o nil si falla
+    private func generateThumbnail(for url: URL) -> Data? {
+        let asset = AVURLAsset(url: url)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        imageGenerator.maximumSize = CGSize(width: 120, height: 80)
+        
+        do {
+            let cgImage = try imageGenerator.copyCGImage(at: CMTime.zero, actualTime: nil)
+            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: 120, height: 80))
+            return nsImage.tiffRepresentation
+        } catch {
+            appLogger.warning("⚠️ No se pudo generar miniatura para: \(url.lastPathComponent)")
+            return nil
         }
     }
     
@@ -270,8 +328,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             
             createdWindows.append((window: window, accessibleURL: accessibleURL))
             
-            // Pequeña pausa entre ventanas
-            Thread.sleep(forTimeInterval: 0.1)
+            // Usar RunLoop en lugar de Thread.sleep para no bloquear
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         }
         
         if createdWindows.isEmpty {
@@ -296,16 +354,27 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let instancesToDestroy = desktopVideoInstances
         desktopVideoInstances.removeAll()
         
+        // Usar DispatchGroup para esperar que todas las ventanas se cierren completamente
+        let group = DispatchGroup()
+        
         for (window, accessibleURL) in instancesToDestroy {
-            window.close()
+            group.enter()
             
-            // Liberar acceso security-scoped con retraso
-            DispatchQueue.main.asyncAfter(deadline: .now() + resourceReleaseDelay) {
-                self.safeStopSecurityScopedAccess(for: accessibleURL)
+            // Usar el nuevo método close con completion
+            window.close { [weak self] in
+                // Liberar acceso security-scoped después de que la ventana esté completamente cerrada
+                let delay = self?.resourceReleaseDelay ?? 0.1
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self?.safeStopSecurityScopedAccess(for: accessibleURL)
+                    group.leave()
+                }
             }
         }
         
-        completion()
+        // Ejecutar completion cuando todas las ventanas estén cerradas
+        group.notify(queue: .main) {
+            completion()
+        }
     }
     
     // MARK: - Security-Scoped Resource Management
@@ -495,3 +564,7 @@ extension WallpaperManager {
         }
     }
 }
+
+// MARK: - Debug Functions
+
+// MARK: - Final del archivo
