@@ -21,6 +21,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Configurar la ventana principal
         setupMainWindow()
         
+        // Configurar manejo de cierre de ventanas
+        setupWindowCloseHandling()
+        
         // Prevenir múltiples instancias
         if !isFirstInstance() {
             logger.warning("⚠️ Ya existe una instancia de la aplicación")
@@ -28,8 +31,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         
-        // Configurar la política de activación
-        NSApp.setActivationPolicy(.accessory)
+        // La política de activación ahora se maneja en LiveWallsApp.swift
+        logger.info("✅ AppDelegate configurado - política de activación manejada por LiveWallsApp")
+    }
+    
+    /// Configura el manejo de cierre de ventanas
+    private func setupWindowCloseHandling() {
+        // Observar el cierre de ventanas para ajustar la política de activación
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: nil
+        )
+    }
+    
+    /// Maneja el cierre de ventanas principales
+    @objc private func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        
+        // Si es una ventana principal (no de status bar), ajustar comportamiento
+        if !window.className.contains("StatusBar") && !window.className.contains("MenuWindow") {
+            logger.info("🚪 Ventana principal cerrándose - manteniendo app en background")
+            
+            // Verificar si quedan ventanas principales después del cierre
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                let mainWindows = NSApp.windows.filter { w in
+                    !w.className.contains("StatusBar") && 
+                    !w.className.contains("MenuWindow") && 
+                    w.isVisible && 
+                    w != window
+                }
+                
+                if mainWindows.isEmpty {
+                    self.logger.info("📱 App funcionando en background - status bar disponible")
+                    // Mantenemos política regular para permitir reactivación desde status bar
+                }
+            }
+        }
     }
     
     private func setupMainWindow() {
@@ -48,12 +87,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        logger.info("🔄 Solicitud de reapertura - ventanas visibles: \(flag)")
+        
         if !flag {
-            if let window = mainWindow {
-                window.makeKeyAndOrderFront(nil)
+            // No hay ventanas visibles, necesitamos mostrar una
+            logger.info("🎯 Mostrando ventana principal desde dock/reopen")
+            
+            DispatchQueue.main.async {
+                // Activar la aplicación
                 NSApp.activate(ignoringOtherApps: true)
+                
+                // Buscar cualquier ventana principal disponible
+                let mainWindows = NSApp.windows.filter { window in
+                    !window.className.contains("StatusBar") &&
+                    !window.className.contains("MenuWindow") &&
+                    window.canBecomeMain
+                }
+                
+                if let window = mainWindows.first {
+                    // Restaurar si está minimizada
+                    if window.isMiniaturized {
+                        window.deminiaturize(nil)
+                    }
+                    
+                    // Traer al frente
+                    window.makeKeyAndOrderFront(nil)
+                    window.orderFrontRegardless()
+                    
+                    self.logger.info("✅ Ventana restaurada desde dock/reopen")
+                } else {
+                    self.logger.warning("⚠️ No se encontró ventana para restaurar desde dock/reopen")
+                }
             }
         }
+        
         return true
     }
     
@@ -61,6 +128,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         logger.info("🛑 Solicitud de terminación recibida")
         return .terminateNow
+    }
+    
+    /// Método auxiliar para abrir la ventana principal desde componentes externos
+    @objc func showMainWindow() {
+        logger.info("🚀 Mostrando ventana principal desde método auxiliar")
+        
+        DispatchQueue.main.async {
+            // Activar la aplicación
+            NSApp.unhide(nil)
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            
+            // Buscar ventanas principales
+            let mainWindows = NSApp.windows.filter { window in
+                !window.className.contains("StatusBar") &&
+                !window.className.contains("MenuWindow") &&
+                window.canBecomeMain
+            }
+            
+            if let window = mainWindows.first {
+                // Restaurar y mostrar
+                if window.isMiniaturized {
+                    window.deminiaturize(nil)
+                }
+                
+                window.orderFrontRegardless()
+                window.makeKeyAndOrderFront(nil)
+                
+                // Verificar activación
+                DispatchQueue.main.async {
+                    window.makeKey()
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                
+                self.logger.info("✅ Ventana principal mostrada exitosamente")
+            } else {
+                self.logger.warning("⚠️ No se encontró ventana principal para mostrar")
+            }
+        }
     }
     
     /// ✅ Función para limpiar recursos antes de terminar la aplicación

@@ -17,16 +17,18 @@ struct LiveWallsApp: App {
     @StateObject private var launchManager = LaunchManager()
     
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
                 .onAppear {
                     // Configurar el AppDelegate después de que la vista aparezca
                     appDelegate.wallpaperManager = wallpaperManager
+                    appLogger.info("📱 Ventana principal apareció - manteniendo política regular")
                 }
         }
         .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
         }
@@ -36,15 +38,21 @@ struct LiveWallsApp: App {
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
         }
+        .menuBarExtraStyle(.menu)
     }
     
     init() {
         appLogger.info("🚀 Iniciando LiveWalls App")
         
-        // Configuración segura de la política de activación
+        // Configuración inicial de la aplicación
         DispatchQueue.main.async {
-            NSApp.setActivationPolicy(.accessory)
-            appLogger.info("✅ Política de activación configurada")
+            // Iniciar como aplicación regular para permitir ventana principal
+            NSApp.setActivationPolicy(.regular)
+            
+            // Configurar comportamiento inicial
+            appLogger.info("🔧 Configurando comportamiento inicial de ventanas")
+            
+            appLogger.info("✅ Política de activación regular configurada - app lista para mostrar ventanas")
         }
     }
 }
