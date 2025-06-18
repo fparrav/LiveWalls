@@ -103,7 +103,7 @@ struct ContentView: View {
                         VideoThumbnailCard(
                             video: video,
                             isSelected: selectedVideo?.id == video.id,
-                            isActive: video.isActive
+                            isActive: wallpaperManager.currentVideo?.id == video.id
                         ) {
                             selectedVideo = video
                         }

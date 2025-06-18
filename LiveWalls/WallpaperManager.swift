@@ -178,6 +178,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     func setActiveVideo(_ video: VideoFile) {
         DispatchQueue.main.async {
             self.appLogger.info("🎯 Estableciendo video activo: \(video.name)")
+            
+            // Actualizar el estado isActive de todos los videos
+            for i in 0..<self.videoFiles.count {
+                self.videoFiles[i].isActive = (self.videoFiles[i].id == video.id)
+            }
+            
             self.currentVideo = video
             self.saveCurrentVideo()
             
@@ -448,6 +454,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         DispatchQueue.main.async {
             self.videoFiles = videos
             self.appLogger.info("📂 Cargados \(videos.count) videos guardados")
+            self.syncActiveVideoState()
         }
     }
     
@@ -464,6 +471,23 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         DispatchQueue.main.async {
             self.currentVideo = video
+            self.syncActiveVideoState()
+        }
+    }
+    
+    /// Sincroniza el estado isActive de todos los videos con el currentVideo
+    private func syncActiveVideoState() {
+        guard let currentVideo = currentVideo else {
+            // Si no hay video actual, desmarcar todos como activos
+            for i in 0..<videoFiles.count {
+                videoFiles[i].isActive = false
+            }
+            return
+        }
+        
+        // Marcar solo el video actual como activo
+        for i in 0..<videoFiles.count {
+            videoFiles[i].isActive = (videoFiles[i].id == currentVideo.id)
         }
     }
     
