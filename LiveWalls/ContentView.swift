@@ -106,6 +106,7 @@ struct ContentView: View {
                             isActive: wallpaperManager.currentVideo?.id == video.id
                         ) {
                             selectedVideo = video
+                            print("🎯 Video seleccionado: \(video.name) (ID: \(video.id))")
                         }
                     }
                 }
@@ -202,7 +203,11 @@ struct ContentView: View {
                 // Botón establecer como wallpaper
                 Button(action: {
                     if let video = selectedVideo {
+                        print("🌟 Estableciendo wallpaper: \(video.name) (ID: \(video.id))")
                         wallpaperManager.setAsCurrentWallpaper(video: video)
+                        print("✅ Comando setAsCurrentWallpaper enviado")
+                    } else {
+                        print("❌ No hay video seleccionado para establecer como wallpaper")
                     }
                 }) {
                     Label("Establecer como Wallpaper", systemImage: "pin.fill")

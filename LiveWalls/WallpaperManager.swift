@@ -22,7 +22,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     @Published var isPlayingWallpaper = false
     @Published var isAutoChangeEnabled = false
     @Published var autoChangeInterval: TimeInterval = 10 * 60 // 10 minutos por defecto
-    @Published var shouldAutoPlayOnSelection = false
     
     // MARK: - Private Properties
     private let appLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManager")
@@ -179,17 +178,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         DispatchQueue.main.async {
             self.appLogger.info("🎯 Estableciendo video activo: \(video.name)")
             
-            // Actualizar el estado isActive de todos los videos
-            for i in 0..<self.videoFiles.count {
-                self.videoFiles[i].isActive = (self.videoFiles[i].id == video.id)
+            // Actualizar el estado isActive de todos los videos y forzar actualización de UI
+            var updatedVideos = self.videoFiles
+            for i in 0..<updatedVideos.count {
+                updatedVideos[i].isActive = (updatedVideos[i].id == video.id)
             }
+            self.videoFiles = updatedVideos // Esto fuerza la actualización de @Published
             
             self.currentVideo = video
             self.saveCurrentVideo()
             
-            if self.shouldAutoPlayOnSelection {
-                self.startWallpaperSafe()
-            }
+            self.appLogger.info("✅ Video activo establecido: \(video.name)")
         }
     }
     
@@ -477,18 +476,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     /// Sincroniza el estado isActive de todos los videos con el currentVideo
     private func syncActiveVideoState() {
+        var updatedVideos = videoFiles
+        
         guard let currentVideo = currentVideo else {
             // Si no hay video actual, desmarcar todos como activos
-            for i in 0..<videoFiles.count {
-                videoFiles[i].isActive = false
+            for i in 0..<updatedVideos.count {
+                updatedVideos[i].isActive = false
             }
+            self.videoFiles = updatedVideos
             return
         }
         
         // Marcar solo el video actual como activo
-        for i in 0..<videoFiles.count {
-            videoFiles[i].isActive = (videoFiles[i].id == currentVideo.id)
+        for i in 0..<updatedVideos.count {
+            updatedVideos[i].isActive = (updatedVideos[i].id == currentVideo.id)
         }
+        self.videoFiles = updatedVideos
+        
+        appLogger.info("🔄 Estado sincronizado - Video activo: \(currentVideo.name)")
     }
     
     private func loadAutoChangeSettings() {
@@ -497,14 +502,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         if autoChangeInterval <= 0 {
             autoChangeInterval = 10 * 60 // Default 10 minutos
         }
-        shouldAutoPlayOnSelection = userDefaults.bool(forKey: "AutoPlayOnSelection")
     }
     
     /// Guarda la configuración de cambio automático
     func saveAutoChangeSettings() {
         userDefaults.set(isAutoChangeEnabled, forKey: "AutoChangeEnabled")
         userDefaults.set(autoChangeInterval, forKey: "AutoChangeInterval")
-        userDefaults.set(shouldAutoPlayOnSelection, forKey: "AutoPlayOnSelection")
         
         if isAutoChangeEnabled {
             startAutoChangeTimerIfNeeded()
@@ -530,9 +533,23 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             appLogger.info("⏱️ Cambio automático desactivado por fijación manual")
         }
         
-        // Establecer como video actual e iniciar
-        setActiveVideo(video)
-        startWallpaperSafe()
+        // Establecer como video actual de forma síncrona para uso inmediato
+        DispatchQueue.main.async {
+            // Actualizar el estado isActive de todos los videos y forzar actualización de UI
+            var updatedVideos = self.videoFiles
+            for i in 0..<updatedVideos.count {
+                updatedVideos[i].isActive = (updatedVideos[i].id == video.id)
+            }
+            self.videoFiles = updatedVideos // Esto fuerza la actualización de @Published
+            
+            self.currentVideo = video
+            self.saveCurrentVideo()
+            
+            self.appLogger.info("✅ Video activo establecido: \(video.name)")
+            
+            // Iniciar wallpaper DESPUÉS de que currentVideo se haya actualizado
+            self.startWallpaperSafe()
+        }
     }
     
     // MARK: - System Notifications

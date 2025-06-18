@@ -12,14 +12,12 @@ struct SettingsView: View {
     @State private var muteVideo: Bool
     @State private var isAutoChangeEnabled: Bool
     @State private var autoChangeIntervalMinutes: Int
-    @State private var shouldAutoPlayOnSelection: Bool
     
     // Estados originales para poder cancelar cambios
     @State private var originalAutoStartWallpaper: Bool
     @State private var originalMuteVideo: Bool
     @State private var originalIsAutoChangeEnabled: Bool
     @State private var originalAutoChangeIntervalMinutes: Int
-    @State private var originalShouldAutoPlayOnSelection: Bool
     @State private var originalLaunchAtLogin: Bool
 
     private let minIntervalMinutes = 1
@@ -31,21 +29,18 @@ struct SettingsView: View {
         let mute = UserDefaults.standard.bool(forKey: "MuteVideo")
         let autoChangeEnabled = UserDefaults.standard.bool(forKey: "AutoChangeEnabled")
         let savedInterval = UserDefaults.standard.double(forKey: "AutoChangeInterval")
-        let autoPlay = UserDefaults.standard.bool(forKey: "ShouldAutoPlayOnSelection")
         
         // Estados actuales
         _autoStartWallpaper = State(initialValue: autoStart)
         _muteVideo = State(initialValue: mute)
         _isAutoChangeEnabled = State(initialValue: autoChangeEnabled)
         _autoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
-        _shouldAutoPlayOnSelection = State(initialValue: autoPlay)
         
         // Estados originales para poder cancelar
         _originalAutoStartWallpaper = State(initialValue: autoStart)
         _originalMuteVideo = State(initialValue: mute)
         _originalIsAutoChangeEnabled = State(initialValue: autoChangeEnabled)
         _originalAutoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
-        _originalShouldAutoPlayOnSelection = State(initialValue: autoPlay)
         _originalLaunchAtLogin = State(initialValue: false) // Se actualizará en onAppear
     }
 
@@ -67,9 +62,6 @@ struct SettingsView: View {
                                 .toggleStyle(SwitchToggleStyle())
                             
                             Toggle("Silenciar videos", isOn: $muteVideo)
-                                .toggleStyle(SwitchToggleStyle())
-                            
-                            Toggle("Reproducir video al seleccionarlo", isOn: $shouldAutoPlayOnSelection)
                                 .toggleStyle(SwitchToggleStyle())
                         }
                         .padding(12)
@@ -183,7 +175,6 @@ struct SettingsView: View {
         // Sincronizar con estados actuales
         self.isAutoChangeEnabled = wallpaperManager.isAutoChangeEnabled
         self.autoChangeIntervalMinutes = Int(wallpaperManager.autoChangeInterval / 60)
-        self.shouldAutoPlayOnSelection = wallpaperManager.shouldAutoPlayOnSelection
         
         // Cargar desde UserDefaults
         self.autoStartWallpaper = UserDefaults.standard.bool(forKey: "AutoStartWallpaper")
@@ -194,7 +185,6 @@ struct SettingsView: View {
         self.originalMuteVideo = muteVideo
         self.originalIsAutoChangeEnabled = isAutoChangeEnabled
         self.originalAutoChangeIntervalMinutes = autoChangeIntervalMinutes
-        self.originalShouldAutoPlayOnSelection = shouldAutoPlayOnSelection
         self.originalLaunchAtLogin = launchManager.isLaunchAtLoginEnabled
     }
     
@@ -203,12 +193,10 @@ struct SettingsView: View {
         // Guardar configuraciones en UserDefaults
         UserDefaults.standard.set(autoStartWallpaper, forKey: "AutoStartWallpaper")
         UserDefaults.standard.set(muteVideo, forKey: "MuteVideo")
-        UserDefaults.standard.set(shouldAutoPlayOnSelection, forKey: "ShouldAutoPlayOnSelection")
         UserDefaults.standard.set(isAutoChangeEnabled, forKey: "AutoChangeEnabled")
         UserDefaults.standard.set(TimeInterval(autoChangeIntervalMinutes * 60), forKey: "AutoChangeInterval")
         
         // Sincronizar con WallpaperManager
-        wallpaperManager.shouldAutoPlayOnSelection = shouldAutoPlayOnSelection
         wallpaperManager.isAutoChangeEnabled = isAutoChangeEnabled
         wallpaperManager.autoChangeInterval = TimeInterval(autoChangeIntervalMinutes * 60)
         wallpaperManager.saveAutoChangeSettings()
@@ -226,7 +214,6 @@ struct SettingsView: View {
         self.muteVideo = originalMuteVideo
         self.isAutoChangeEnabled = originalIsAutoChangeEnabled
         self.autoChangeIntervalMinutes = originalAutoChangeIntervalMinutes
-        self.shouldAutoPlayOnSelection = originalShouldAutoPlayOnSelection
         
         // Restaurar launch at login si cambió
         if launchManager.isLaunchAtLoginEnabled != originalLaunchAtLogin {

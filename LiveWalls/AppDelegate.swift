@@ -3,10 +3,9 @@ import os.log
 import UserNotifications
 import SwiftUI
 
-/// AppDelegate mejorado con protección contra cierres inesperados de la ventana principal
+/// AppDelegate simplificado que deja el manejo de ventanas a SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: "com.livewalls.app", category: "AppLifecycle")
-    private var mainWindow: NSWindow?
     
     /// Referencia al WallpaperManager
     var wallpaperManager: WallpaperManager? {
@@ -18,9 +17,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.info("🚀 Iniciando aplicación")
         
-        // Configurar la ventana principal
-        setupMainWindow()
-        
         // Configurar manejo de cierre de ventanas
         setupWindowCloseHandling()
         
@@ -31,8 +27,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         
-        // La política de activación ahora se maneja en LiveWallsApp.swift
-        logger.info("✅ AppDelegate configurado - política de activación manejada por LiveWallsApp")
+        // La política de activación y ventanas ahora se manejan completamente en LiveWallsApp.swift
+        logger.info("✅ AppDelegate configurado - ventanas manejadas por SwiftUI")
     }
     
     /// Configura el manejo de cierre de ventanas
@@ -70,21 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    
-    private func setupMainWindow() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.center()
-        window.title = "Live Walls"
-        window.isReleasedWhenClosed = false // Importante: no liberar la ventana al cerrarla
-        // Comentado: SwiftUI maneja la ventana principal automáticamente a través de LiveWallsApp
-        // window.contentView = NSHostingView(rootView: ContentView())
-        self.mainWindow = window
-    }
+
     
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         logger.info("🔄 Solicitud de reapertura - ventanas visibles: \(flag)")
