@@ -11,36 +11,45 @@ final class ContentViewUITests: XCTestCase {
     }
     
     func testVideoListInteraction() {
-        // Verificar que la lista de videos está vacía inicialmente
-        let videoList = app.tables.firstMatch
-        XCTAssertTrue(videoList.exists)
-        XCTAssertEqual(videoList.cells.count, 0)
+        // Verificar que los elementos principales de la UI existen
+        let importButton = app.buttons["Importar"]
+        XCTAssertTrue(importButton.exists, "El botón Importar debería existir")
         
-        // Verificar que el botón de agregar existe
-        let addButton = app.buttons["plus"]
-        XCTAssertTrue(addButton.exists)
+        let configButton = app.buttons["Configuración"] 
+        XCTAssertTrue(configButton.exists, "El botón Configuración debería existir")
+        
+        // Verificar que el título de la app existe
+        let titleText = app.staticTexts["LiveWalls"]
+        XCTAssertTrue(titleText.exists, "El título LiveWalls debería existir")
     }
     
     func testVideoSelection() {
-        // Agregar un video (esto abrirá el selector de archivos)
-        let addButton = app.buttons["plus"]
-        addButton.tap()
+        // Probar el botón de importar (este abrirá el selector de archivos)
+        let importButton = app.buttons["Importar"]
+        XCTAssertTrue(importButton.exists, "El botón Importar debería existir")
         
-        // Aquí deberías simular la selección de un archivo
-        // Nota: La selección real de archivos requiere permisos especiales en las pruebas de UI
+        // Verificar que podemos interactuar con el botón
+        importButton.tap()
+        
+        // Esperar un poco para que se abra el diálogo
+        sleep(1)
+        
+        // Presionar Escape para cancelar el diálogo si está abierto
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
     }
     
     func testVideoContextMenu() {
-        // Verificar que el menú contextual existe
-        let videoList = app.tables.firstMatch
-        let firstCell = videoList.cells.firstMatch
+        // Verificar que existen algunos elementos interactivos en la interfaz
+        let importButton = app.buttons["Importar"]
+        XCTAssertTrue(importButton.exists, "El botón Importar debería existir")
         
-        if firstCell.exists {
-            firstCell.rightClick()
-            
-            // Verificar que las opciones del menú contextual existen
-            XCTAssertTrue(app.menuItems["Fijar como Fondo"].exists)
-            XCTAssertTrue(app.menuItems["Eliminar"].exists)
-        }
+        let playButton = app.buttons["Reproducir"]  
+        XCTAssertTrue(playButton.exists, "El botón Reproducir debería existir")
+        
+        let wallpaperButton = app.buttons["Establecer como Wallpaper"]
+        XCTAssertTrue(wallpaperButton.exists, "El botón Establecer como Wallpaper debería existir")
+        
+        let deleteButton = app.buttons["Eliminar"]
+        XCTAssertTrue(deleteButton.exists, "El botón Eliminar debería existir")
     }
 } 

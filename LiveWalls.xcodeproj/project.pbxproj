@@ -19,6 +19,10 @@
 		8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D412B1F4A9000123456 /* NotificationManager.swift */; };
 		9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */; };
 		9A1B2C3D4E5F6789ABCDEF03 /* StatusBarMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */; };
+		AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA11112222333344440003 /* WallpaperManagerTests.swift */; };
+		AAAA11112222333344440008 /* ContentViewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA11112222333344440004 /* ContentViewUITests.swift */; };
+		AAAA11112222333344440009 /* LiveWallsTests.xctest */ = {isa = PBXBuildFile; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveWallsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAAA11112222333344440010 /* LiveWallsUITests.xctest */ = {isa = PBXBuildFile; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveWallsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,10 +41,28 @@
 		8B0C7D412B1F4A9000123456 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchManager.swift; sourceTree = "<group>"; };
 		9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarMenuView.swift; sourceTree = "<group>"; };
+		AAAA11112222333344440003 /* WallpaperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperManagerTests.swift; sourceTree = "<group>"; };
+		AAAA11112222333344440004 /* ContentViewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewUITests.swift; sourceTree = "<group>"; };
+		AAAA1111222233334444000F /* LiveWallsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveWallsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAAA11112222333344440010 /* LiveWallsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveWallsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		8B0C7D232B1F4A3000123456 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAA11112222333344440013 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAA11112222333344440014 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -54,6 +76,8 @@
 			isa = PBXGroup;
 			children = (
 				8B0C7D282B1F4A3000123456 /* LiveWalls */,
+				AAAA11112222333344440011 /* LiveWallsTests */,
+				AAAA11112222333344440012 /* LiveWallsUITests */,
 				8B0C7D272B1F4A3000123456 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -62,6 +86,8 @@
 			isa = PBXGroup;
 			children = (
 				8B0C7D262B1F4A3000123456 /* LiveWalls.app */,
+				AAAA1111222233334444000F /* LiveWallsTests.xctest */,
+				AAAA11112222333344440010 /* LiveWallsUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,6 +121,22 @@
 			path = "Preview Content";
 			sourceTree = "<group>";
 		};
+		AAAA11112222333344440011 /* LiveWallsTests */ = {
+			isa = PBXGroup;
+			children = (
+				AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
+			);
+			path = LiveWallsTests;
+			sourceTree = "<group>";
+		};
+		AAAA11112222333344440012 /* LiveWallsUITests */ = {
+			isa = PBXGroup;
+			children = (
+				AAAA11112222333344440004 /* ContentViewUITests.swift */,
+			);
+			path = LiveWallsUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -114,6 +156,40 @@
 			productName = LiveWalls;
 			productReference = 8B0C7D262B1F4A3000123456 /* LiveWalls.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AAAA11112222333344440001 /* LiveWallsTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAAA11112222333344440009 /* Build configuration list for PBXNativeTarget "LiveWallsTests" */;
+			buildPhases = (
+				AAAA11112222333344440005 /* Sources */,
+				AAAA11112222333344440013 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AAAA11112222333344440015 /* PBXTargetDependency */,
+			);
+			name = LiveWallsTests;
+			productName = LiveWallsTests;
+			productReference = AAAA1111222233334444000F /* LiveWallsTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AAAA11112222333344440002 /* LiveWallsUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAAA1111222233334444000A /* Build configuration list for PBXNativeTarget "LiveWallsUITests" */;
+			buildPhases = (
+				AAAA11112222333344440006 /* Sources */,
+				AAAA11112222333344440014 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AAAA11112222333344440016 /* PBXTargetDependency */,
+			);
+			name = LiveWallsUITests;
+			productName = LiveWallsUITests;
+			productReference = AAAA11112222333344440010 /* LiveWallsUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -144,6 +220,8 @@
 			projectRoot = "";
 			targets = (
 				8B0C7D252B1F4A3000123456 /* LiveWalls */,
+				AAAA11112222333344440001 /* LiveWallsTests */,
+				AAAA11112222333344440002 /* LiveWallsUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -178,7 +256,53 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AAAA11112222333344440005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAA11112222333344440006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAA11112222333344440008 /* ContentViewUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AAAA11112222333344440015 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8B0C7D252B1F4A3000123456 /* LiveWalls */;
+			targetProxy = AAAA11112222333344440017 /* PBXContainerItemProxy */;
+		};
+		AAAA11112222333344440016 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8B0C7D252B1F4A3000123456 /* LiveWalls */;
+			targetProxy = AAAA11112222333344440018 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		AAAA11112222333344440017 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8B0C7D1E2B1F4A3000123456 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8B0C7D252B1F4A3000123456;
+			remoteInfo = LiveWalls;
+		};
+		AAAA11112222333344440018 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8B0C7D1E2B1F4A3000123456 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8B0C7D252B1F4A3000123456;
+			remoteInfo = LiveWalls;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
 		8B0C7D332B1F4A3100123456 /* Debug */ = {
@@ -301,6 +425,76 @@
 			};
 			name = Release;
 		};
+		AAAA1111222233334444000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CED7KEV553;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.LiveWallsTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LiveWalls.app/Contents/MacOS/LiveWalls";
+			};
+			name = Debug;
+		};
+		AAAA1111222233334444000C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CED7KEV553;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.LiveWallsTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LiveWalls.app/Contents/MacOS/LiveWalls";
+			};
+			name = Release;
+		};
+		AAAA1111222233334444000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CED7KEV553;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.LiveWallsUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = LiveWalls;
+			};
+			name = Debug;
+		};
+		AAAA1111222233334444000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CED7KEV553;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.LiveWallsUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = LiveWalls;
+			};
+			name = Release;
+		};
 		8B0C7D362B1F4A3100123456 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -382,6 +576,24 @@
 			buildConfigurations = (
 				8B0C7D362B1F4A3100123456 /* Debug */,
 				8B0C7D372B1F4A3100123456 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAAA11112222333344440009 /* Build configuration list for PBXNativeTarget "LiveWallsTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAAA1111222233334444000B /* Debug */,
+				AAAA1111222233334444000C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAAA1111222233334444000A /* Build configuration list for PBXNativeTarget "LiveWallsUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAAA1111222233334444000D /* Debug */,
+				AAAA1111222233334444000E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
