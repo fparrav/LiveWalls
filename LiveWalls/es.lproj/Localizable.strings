@@ -1,0 +1,91 @@
+/* Archivo de localización en español para LiveWalls */
+
+/* Títulos principales */
+"app_title" = "LiveWalls";
+"settings_title" = "Configuración de Live Walls";
+
+/* Botones principales */
+"import_button" = "Importar";
+"settings_button" = "Configuración";
+"accept_button" = "Aceptar";
+"cancel_button" = "Cancelar";
+"delete_button" = "Eliminar";
+
+/* Acciones de video */
+"play_button" = "Reproducir";
+"stop_button" = "Detener";
+"import_videos_button" = "Importar Videos";
+
+/* Help text */
+"import_help" = "Agregar videos";
+"settings_help" = "Configuración de la aplicación";
+
+/* Estado vacío */
+"no_videos_title" = "No hay videos agregados";
+"no_videos_description" = "Haz clic en 'Importar' para agregar videos y establecerlos como fondo de pantalla";
+
+/* Estado del wallpaper */
+"active_wallpaper" = "Wallpaper activo: %@";
+"no_active_wallpaper" = "Sin wallpaper activo";
+"videos_total" = "%d videos total";
+
+/* Status Bar Menu */
+"current_wallpaper" = "🎬 Wallpaper Actual";
+"open_app" = "Abrir aplicación";
+"stop_wallpaper" = "Detener wallpaper";
+"play_wallpaper" = "Reproducir wallpaper";
+"auto_launch" = "Inicio automático";
+"quit_app" = "Salir de Live Walls";
+
+/* Configuraciones - Secciones */
+"general_playback_section" = "Reproducción General";
+"system_section" = "Sistema";
+"auto_change_section" = "Cambio Automático de Wallpaper";
+"video_management_section" = "Gestión de Videos";
+
+/* Configuraciones - Opciones */
+"auto_start_wallpaper" = "Iniciar wallpaper automáticamente al abrir la app";
+"mute_videos" = "Silenciar videos";
+"launch_at_login" = "Iniciar Live Walls con el sistema";
+"launch_at_login_help" = "Inicia automáticamente Live Walls cuando inicies sesión en macOS";
+"enable_auto_change" = "Activar cambio automático de wallpaper";
+"interval_label" = "Intervalo:";
+
+/* Configuraciones - Información */
+"videos_saved" = "Videos guardados: %d";
+"clear_all_videos" = "Limpiar todos los videos";
+"app_version" = "Live Walls v1.0";
+
+/* Alertas */
+"delete_all_videos_title" = "¿Eliminar todos los videos?";
+"delete_all_videos_message" = "Esta acción eliminará todos los videos guardados. ¿Deseas continuar?";
+
+/* Notificaciones y mensajes */
+"wallpaper_set" = "Video establecido como wallpaper";
+"wallpaper_error" = "Error al establecer wallpaper";
+"import_error" = "Error al importar videos";
+"wallpaper_started_notification" = "Fondo de pantalla iniciado: %@";
+"wallpaper_stopped_notification" = "Fondo de pantalla detenido";
+"error_title" = "Error";
+
+/* Intervalos de tiempo */
+"minutes_format" = "%d min";
+
+/* Compatibilidad */
+"macos_compatibility_warning" = "⚠️ Para macOS < 13.0, configure manualmente en Preferencias del Sistema";
+
+/* Mensajes de logging de WallpaperManager */
+"initializing_wallpaper_manager" = "🏗️ Inicializando WallpaperManager";
+"wallpaper_manager_initialized" = "✅ WallpaperManager inicializado correctamente";
+"deinitializing_wallpaper_manager" = "🔄 Deinicializando WallpaperManager";
+"adding_video_files" = "📁 Agregando %d archivos de video";
+"could_not_start_security_scoped_access" = "⚠️ No se pudo iniciar acceso security-scoped para: %@";
+"file_not_accessible" = "❌ Archivo no accesible: %@";
+"video_added" = "✅ Video agregado: %@";
+"videos_count_updated" = "📊 Videos en lista: %d → %d";
+"error_processing_file" = "❌ Error procesando %@: %@";
+"could_not_generate_thumbnail" = "⚠️ No se pudo generar miniatura para: %@";
+
+/* Debug messages */
+"videofiles_updated_debug" = "🔄 VideoFiles actualizado: %d videos";
+"names_debug" = "📝 Nombres: %@";

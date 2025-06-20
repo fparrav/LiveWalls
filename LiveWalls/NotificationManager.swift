@@ -25,8 +25,8 @@ class NotificationManager: ObservableObject {
             guard settings.authorizationStatus == .authorized else { return }
             
             let content = UNMutableNotificationContent()
-            content.title = "Live Walls"
-            content.body = "Fondo de pantalla iniciado: \(videoName)"
+            content.title = NSLocalizedString("app_title", comment: "App title")
+            content.body = String(format: NSLocalizedString("wallpaper_started_notification", comment: "Wallpaper started notification"), videoName)
             content.sound = nil // Sin sonido para no molestar
             
             let request = UNNotificationRequest(identifier: "wallpaper_started", content: content, trigger: nil)
@@ -39,8 +39,8 @@ class NotificationManager: ObservableObject {
             guard settings.authorizationStatus == .authorized else { return }
             
             let content = UNMutableNotificationContent()
-            content.title = "Live Walls"
-            content.body = "Fondo de pantalla detenido"
+            content.title = NSLocalizedString("app_title", comment: "App title")
+            content.body = NSLocalizedString("wallpaper_stopped_notification", comment: "Wallpaper stopped notification")
             content.sound = nil
             
             let request = UNNotificationRequest(identifier: "wallpaper_stopped", content: content, trigger: nil)
@@ -56,7 +56,7 @@ class NotificationManager: ObservableObject {
             }
             
             let content = UNMutableNotificationContent()
-            content.title = "Live Walls - Error"
+            content.title = String(format: "%@ - %@", NSLocalizedString("app_title", comment: "App title"), NSLocalizedString("error_title", comment: "Error title"))
             content.body = message
             content.sound = UNNotificationSound.default
             

@@ -50,27 +50,27 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Título
-                    Text("Configuración de Live Walls")
+                    Text(NSLocalizedString("settings_title", comment: "Settings title"))
                         .font(.title2)
                         .fontWeight(.semibold)
                         .padding(.top, 10)
                     
                     // Sección de Reproducción General
-                    GroupBox("Reproducción General") {
+                    GroupBox(NSLocalizedString("general_playback_section", comment: "General playback section")) {
                         VStack(alignment: .leading, spacing: 12) {
-                            Toggle("Iniciar wallpaper automáticamente al abrir la app", isOn: $autoStartWallpaper)
+                            Toggle(NSLocalizedString("auto_start_wallpaper", comment: "Auto start wallpaper"), isOn: $autoStartWallpaper)
                                 .toggleStyle(SwitchToggleStyle())
                             
-                            Toggle("Silenciar videos", isOn: $muteVideo)
+                            Toggle(NSLocalizedString("mute_videos", comment: "Mute videos"), isOn: $muteVideo)
                                 .toggleStyle(SwitchToggleStyle())
                         }
                         .padding(12)
                     }
                     
                     // Sección de Sistema
-                    GroupBox("Sistema") {
+                    GroupBox(NSLocalizedString("system_section", comment: "System section")) {
                         VStack(alignment: .leading, spacing: 12) {
-                            Toggle("Iniciar Live Walls con el sistema", isOn: Binding(
+                            Toggle(NSLocalizedString("launch_at_login", comment: "Launch at login"), isOn: Binding(
                                 get: { launchManager.isLaunchAtLoginEnabled },
                                 set: { newValue in
                                     // Solo actualizar visualmente, guardar en aceptar
@@ -78,10 +78,10 @@ struct SettingsView: View {
                                 }
                             ))
                             .toggleStyle(SwitchToggleStyle())
-                            .help("Inicia automáticamente Live Walls cuando inicies sesión en macOS")
+                            .help(NSLocalizedString("launch_at_login_help", comment: "Launch at login help"))
                             
                             if #unavailable(macOS 13.0) {
-                                Text("⚠️ Para macOS < 13.0, configura manualmente en Preferencias del Sistema")
+                                Text(NSLocalizedString("macos_compatibility_warning", comment: "macOS compatibility warning"))
                                     .font(.caption2)
                                     .foregroundColor(.orange)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -91,18 +91,18 @@ struct SettingsView: View {
                     }
 
                     // Sección de Cambio Automático
-                    GroupBox("Cambio Automático de Wallpaper") {
+                    GroupBox(NSLocalizedString("auto_change_section", comment: "Auto change section")) {
                         VStack(alignment: .leading, spacing: 12) {
-                            Toggle("Activar cambio automático de wallpaper", isOn: $isAutoChangeEnabled)
+                            Toggle(NSLocalizedString("enable_auto_change", comment: "Enable auto change"), isOn: $isAutoChangeEnabled)
                                 .toggleStyle(SwitchToggleStyle())
                             
                             if isAutoChangeEnabled {
                                 HStack {
-                                    Text("Intervalo:")
+                                    Text(NSLocalizedString("interval_label", comment: "Interval label"))
                                     Spacer()
                                     Picker("", selection: $autoChangeIntervalMinutes) {
                                         ForEach([1, 2, 5, 10, 15, 30, 60], id: \.self) { minutes in
-                                            Text("\(minutes) min").tag(minutes)
+                                            Text(String(format: NSLocalizedString("minutes_format", comment: "Minutes format"), minutes)).tag(minutes)
                                         }
                                     }
                                     .pickerStyle(MenuPickerStyle())
@@ -114,13 +114,13 @@ struct SettingsView: View {
                     }
                     
                     // Sección de Gestión de Videos
-                    GroupBox("Gestión de Videos") {
+                    GroupBox(NSLocalizedString("video_management_section", comment: "Video management section")) {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Videos guardados: \(wallpaperManager.videoFiles.count)")
+                            Text(String(format: NSLocalizedString("videos_saved", comment: "Videos saved"), wallpaperManager.videoFiles.count))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                             
-                            Button("Limpiar todos los videos") {
+                            Button(NSLocalizedString("clear_all_videos", comment: "Clear all videos")) {
                                 limpiarTodosLosVideos()
                             }
                             .buttonStyle(.bordered)
@@ -137,21 +137,21 @@ struct SettingsView: View {
             Divider()
             
             HStack {
-                Text("Live Walls v1.0")
+                Text(NSLocalizedString("app_version", comment: "App version"))
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
                 Spacer()
                 
                 HStack(spacing: 12) {
-                    Button("Cancelar") {
+                    Button(NSLocalizedString("cancel_button", comment: "Cancel button")) {
                         cancelarCambios()
                         cerrarVentana()
                     }
                     .buttonStyle(.bordered)
                     .keyboardShortcut(.cancelAction)
                     
-                    Button("Aceptar") {
+                    Button(NSLocalizedString("accept_button", comment: "Accept button")) {
                         guardarTodasLasConfiguraciones()
                         cerrarVentana()
                     }
@@ -226,10 +226,10 @@ struct SettingsView: View {
     /// Limpia todos los videos con confirmación
     private func limpiarTodosLosVideos() {
         let alert = NSAlert()
-        alert.messageText = "¿Eliminar todos los videos?"
-        alert.informativeText = "Esta acción eliminará todos los videos guardados. ¿Deseas continuar?"
-        alert.addButton(withTitle: "Eliminar")
-        alert.addButton(withTitle: "Cancelar")
+        alert.messageText = NSLocalizedString("delete_all_videos_title", comment: "Delete all videos title")
+        alert.informativeText = NSLocalizedString("delete_all_videos_message", comment: "Delete all videos message")
+        alert.addButton(withTitle: NSLocalizedString("delete_button", comment: "Delete button"))
+        alert.addButton(withTitle: NSLocalizedString("cancel_button", comment: "Cancel button"))
         alert.alertStyle = .warning
         
         if alert.runModal() == .alertFirstButtonReturn {

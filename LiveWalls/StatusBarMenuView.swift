@@ -15,7 +15,7 @@ struct StatusBarMenuView: View {
             // Información del wallpaper actual
             if let currentVideo = wallpaperManager.currentVideo {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("🎬 Wallpaper Actual")
+                    Text(NSLocalizedString("current_wallpaper", comment: "Current wallpaper"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(currentVideo.name)
@@ -32,18 +32,18 @@ struct StatusBarMenuView: View {
             }
             
             // Controles principales
-            Button("Abrir aplicación") {
+            Button(NSLocalizedString("open_app", comment: "Open app")) {
                 openMainApplication()
             }
             .keyboardShortcut("o", modifiers: .command)
             
             if wallpaperManager.isPlayingWallpaper {
-                Button("Detener wallpaper") {
+                Button(NSLocalizedString("stop_wallpaper", comment: "Stop wallpaper")) {
                     wallpaperManager.stopWallpaper()
                 }
                 .keyboardShortcut("s", modifiers: .command)
             } else if wallpaperManager.currentVideo != nil {
-                Button("Reproducir wallpaper") {
+                Button(NSLocalizedString("play_wallpaper", comment: "Play wallpaper")) {
                     wallpaperManager.toggleWallpaper()
                 }
                 .keyboardShortcut("p", modifiers: .command)
@@ -52,7 +52,7 @@ struct StatusBarMenuView: View {
             Divider()
             
             // Configuraciones rápidas
-            Toggle("Inicio automático", isOn: Binding(
+            Toggle(NSLocalizedString("auto_launch", comment: "Auto launch"), isOn: Binding(
                 get: { launchManager.isLaunchAtLoginEnabled },
                 set: { newValue in
                     launchManager.setLaunchAtLogin(newValue)
@@ -62,7 +62,7 @@ struct StatusBarMenuView: View {
             Divider()
             
             // Salir
-            Button("Salir de Live Walls") {
+            Button(NSLocalizedString("quit_app", comment: "Quit app")) {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)

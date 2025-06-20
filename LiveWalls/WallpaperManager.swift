@@ -55,7 +55,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         self.notificationManager = NotificationManager.shared
         super.init()
         
-        appLogger.info("🏗️ Inicializando WallpaperManager")
+        appLogger.info("\(NSLocalizedString("initializing_wallpaper_manager", comment: "Initializing WallpaperManager"), privacy: .public)")
         
         // Cargar configuración y datos guardados
         loadSavedVideos()
@@ -71,11 +71,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }
         }
         
-        appLogger.info("✅ WallpaperManager inicializado correctamente")
+        appLogger.info("\(NSLocalizedString("wallpaper_manager_initialized", comment: "WallpaperManager initialized"), privacy: .public)")
     }
     
     deinit {
-        appLogger.info("🔄 Deinicializando WallpaperManager")
+        appLogger.info("\(NSLocalizedString("deinitializing_wallpaper_manager", comment: "Deinitializing WallpaperManager"), privacy: .public)")
         stopAutoChangeTimer()
         cleanupAllResources()
     }
@@ -85,7 +85,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Agrega archivos de video a la lista de wallpapers disponibles
     /// - Parameter urls: URLs de los archivos de video a agregar
     func addVideoFiles(urls: [URL]) {
-        appLogger.info("📁 Agregando \(urls.count) archivos de video")
+        appLogger.info("\(String(format: NSLocalizedString("adding_video_files", comment: "Adding video files"), urls.count), privacy: .public)")
         
         for url in urls {
             // Verificar si ya tenemos acceso al archivo
@@ -93,7 +93,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             
             // Intentar iniciar acceso security-scoped si no está activo
             if !url.startAccessingSecurityScopedResource() {
-                appLogger.warning("⚠️ No se pudo iniciar acceso security-scoped para: \(url.lastPathComponent)")
+                appLogger.warning("\(String(format: NSLocalizedString("could_not_start_security_scoped_access", comment: "Could not start security scoped access"), url.lastPathComponent), privacy: .public)")
             } else {
                 accessGranted = true
             }
@@ -101,7 +101,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             do {
                 // Verificar que el archivo existe y es accesible
                 guard try url.checkResourceIsReachable() else {
-                    appLogger.error("❌ Archivo no accesible: \(url.lastPathComponent)")
+                    appLogger.error("\(String(format: NSLocalizedString("file_not_accessible", comment: "File not accessible"), url.lastPathComponent), privacy: .public)")
                     if accessGranted {
                         url.stopAccessingSecurityScopedResource()
                     }
@@ -131,12 +131,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     let countAfter = self.videoFiles.count
                     
                     self.saveVideos()
-                    self.appLogger.info("✅ Video agregado: \(videoFile.name)")
-                    self.appLogger.info("📊 Videos en lista: \(countBefore) → \(countAfter)")
+                    self.appLogger.info("\(String(format: NSLocalizedString("video_added", comment: "Video added"), videoFile.name), privacy: .public)")
+                    self.appLogger.info("\(String(format: NSLocalizedString("videos_count_updated", comment: "Videos count updated"), countBefore, countAfter), privacy: .public)")
                     
                     // Debug adicional para verificar que SwiftUI recibe la actualización
-                    print("🔄 VideoFiles actualizado: \(self.videoFiles.count) videos")
-                    print("📝 Nombres: \(self.videoFiles.map { $0.name })")
+                    print(String(format: NSLocalizedString("videofiles_updated_debug", comment: "VideoFiles updated debug"), self.videoFiles.count))
+                    print(String(format: NSLocalizedString("names_debug", comment: "Names debug"), self.videoFiles.map { $0.name }.joined(separator: ", ")))
                 }
                 
                 // Detener acceso temporal ya que tenemos el bookmark
@@ -145,7 +145,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 }
                 
             } catch {
-                appLogger.error("❌ Error procesando \(url.lastPathComponent): \(error)")
+                appLogger.error("\(String(format: NSLocalizedString("error_processing_file", comment: "Error processing file"), url.lastPathComponent, error.localizedDescription), privacy: .public)")
                 if accessGranted {
                     url.stopAccessingSecurityScopedResource()
                 }
@@ -167,7 +167,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: 120, height: 80))
             return nsImage.tiffRepresentation
         } catch {
-            appLogger.warning("⚠️ No se pudo generar miniatura para: \(url.lastPathComponent)")
+            appLogger.warning("\(String(format: NSLocalizedString("could_not_generate_thumbnail", comment: "Could not generate thumbnail"), url.lastPathComponent), privacy: .public)")
             return nil
         }
     }

@@ -61,7 +61,7 @@ struct ContentView: View {
     @ViewBuilder
     private var toolbarView: some View {
         HStack {
-            Text("LiveWalls")
+            Text(NSLocalizedString("app_title", comment: "Application title"))
                 .font(.title2)
                 .fontWeight(.bold)
             
@@ -72,17 +72,17 @@ struct ContentView: View {
                 Button(action: {
                     isImporting = true
                 }) {
-                    Label("Importar", systemImage: "plus")
+                    Label(NSLocalizedString("import_button", comment: "Import button"), systemImage: "plus")
                 }
-                .help("Agregar videos")
+                .help(NSLocalizedString("import_help", comment: "Import help text"))
                 .buttonStyle(.bordered)
                 
                 Button(action: {
                     showSettings = true
                 }) {
-                    Label("Configuración", systemImage: "gear")
+                    Label(NSLocalizedString("settings_button", comment: "Settings button"), systemImage: "gear")
                 }
-                .help("Configuración de la aplicación")
+                .help(NSLocalizedString("settings_help", comment: "Settings help text"))
                 .buttonStyle(.bordered)
             }
         }
@@ -131,11 +131,11 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
             
             VStack(spacing: 8) {
-                Text("No hay videos agregados")
+                Text(NSLocalizedString("no_videos_title", comment: "No videos title"))
                     .font(.title2)
                     .fontWeight(.medium)
                 
-                Text("Haz clic en 'Importar' para agregar videos y establecerlos como fondo de pantalla")
+                Text(NSLocalizedString("no_videos_description", comment: "No videos description"))
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -145,7 +145,7 @@ struct ContentView: View {
             Button(action: {
                 isImporting = true
             }) {
-                Label("Importar Videos", systemImage: "plus.circle.fill")
+                Label(NSLocalizedString("import_videos_button", comment: "Import videos button"), systemImage: "plus.circle.fill")
                     .font(.title3)
             }
             .buttonStyle(.borderedProminent)
@@ -165,17 +165,17 @@ struct ContentView: View {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
-                        Text("Wallpaper activo: \(currentVideo.name)")
+                        Text(String(format: NSLocalizedString("active_wallpaper", comment: "Active wallpaper status"), currentVideo.name))
                             .font(.caption)
                             .lineLimit(1)
                     }
                 } else {
-                    Text("Sin wallpaper activo")
+                    Text(NSLocalizedString("no_active_wallpaper", comment: "No active wallpaper"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 
-                Text("\(wallpaperManager.videoFiles.count) videos total")
+                Text(String(format: NSLocalizedString("videos_total", comment: "Videos total count"), wallpaperManager.videoFiles.count))
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -194,7 +194,7 @@ struct ContentView: View {
                 }) {
                     HStack {
                         Image(systemName: wallpaperManager.isPlayingWallpaper ? "stop.fill" : "play.fill")
-                        Text(wallpaperManager.isPlayingWallpaper ? "Detener" : "Reproducir")
+                        Text(wallpaperManager.isPlayingWallpaper ? NSLocalizedString("stop_button", comment: "Stop button") : NSLocalizedString("play_button", comment: "Play button"))
                     }
                 }
                 .buttonStyle(.bordered)
