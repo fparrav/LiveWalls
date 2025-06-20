@@ -54,7 +54,7 @@
 /* Paramètres - Informations */
 "videos_saved" = "Vidéos sauvegardées : %d";
 "clear_all_videos" = "Effacer toutes les vidéos";
-"app_version" = "Live Walls v1.0";
+"app_version" = "Live Walls";
 
 /* Alertes */
 "delete_all_videos_title" = "Supprimer toutes les vidéos ?";
@@ -67,6 +67,9 @@
 "wallpaper_started_notification" = "Fond d'écran démarré : %@";
 "wallpaper_stopped_notification" = "Fond d'écran arrêté";
 "error_title" = "Erreur";
+
+/* Description d'utilisation des notifications (Info.plist) */
+"notification_usage_description" = "LiveWalls a besoin d'autorisations de notification pour vous informer des changements de fond d'écran et des erreurs importantes.";
 
 /* Intervalles de temps */
 "minutes_format" = "%d min";

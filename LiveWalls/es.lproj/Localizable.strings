@@ -54,7 +54,7 @@
 /* Configuraciones - Información */
 "videos_saved" = "Videos guardados: %d";
 "clear_all_videos" = "Limpiar todos los videos";
-"app_version" = "Live Walls v1.0";
+"app_version" = "Live Walls";
 
 /* Alertas */
 "delete_all_videos_title" = "¿Eliminar todos los videos?";
@@ -86,6 +86,9 @@
 "error_processing_file" = "❌ Error procesando %@: %@";
 "could_not_generate_thumbnail" = "⚠️ No se pudo generar miniatura para: %@";
 
-/* Debug messages */
+/* Descripción de notificaciones (Info.plist) */
+"notification_usage_description" = "LiveWalls necesita permisos de notificación para informarte sobre cambios en el fondo de pantalla y errores importantes.";
+
+/* Mensajes de debug */
 "videofiles_updated_debug" = "🔄 VideoFiles actualizado: %d videos";
 "names_debug" = "📝 Nombres: %@";

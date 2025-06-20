@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.1.0</string>
 	<key>CFBundleVersion</key>
 	<string>202506200130</string>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
 	<key>NSUserNotificationUsageDescription</key>
-	<string>LiveWalls necesita permisos de notificación para informarte sobre cambios en el fondo de pantalla y errores importantes.</string>
+	<string>NSLocalizedString(@"notification_usage_description", @"Notification permission description")</string>
 </dict>
 </plist>

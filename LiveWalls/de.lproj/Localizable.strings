@@ -54,7 +54,7 @@
 /* Einstellungen - Informationen */
 "videos_saved" = "Gespeicherte Videos: %d";
 "clear_all_videos" = "Alle Videos löschen";
-"app_version" = "Live Walls v1.0";
+"app_version" = "Live Walls";
 
 /* Warnungen */
 "delete_all_videos_title" = "Alle Videos löschen?";
@@ -89,3 +89,6 @@
 /* Debug-Nachrichten */
 "videofiles_updated_debug" = "🔄 VideoFiles aktualisiert: %d Videos";
 "names_debug" = "📝 Namen: %@";
+
+/* Notification usage description (Info.plist) */
+"notification_usage_description" = "LiveWalls는 배경화면 변경 및 중요한 오류에 대해 알려주기 위해 알림 권한이 필요합니다.";

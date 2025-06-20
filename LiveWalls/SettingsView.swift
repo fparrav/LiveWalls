@@ -137,9 +137,15 @@ struct SettingsView: View {
             Divider()
             
             HStack {
-                Text(NSLocalizedString("app_version", comment: "App version"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                    Text("Live Walls v\(version)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text(NSLocalizedString("app_version", comment: "App version"))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 
                 Spacer()
                 

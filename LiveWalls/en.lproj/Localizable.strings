@@ -54,7 +54,7 @@
 /* Settings - Information */
 "videos_saved" = "Videos saved: %d";
 "clear_all_videos" = "Clear all videos";
-"app_version" = "Live Walls v1.0";
+"app_version" = "Live Walls";
 
 /* Alerts */
 "delete_all_videos_title" = "Delete all videos?";
@@ -85,6 +85,9 @@
 "videos_count_updated" = "📊 Videos in list: %d → %d";
 "error_processing_file" = "❌ Error processing %@: %@";
 "could_not_generate_thumbnail" = "⚠️ Could not generate thumbnail for: %@";
+
+/* Notification usage description (Info.plist) */
+"notification_usage_description" = "LiveWalls needs notification permissions to inform you about wallpaper changes and important errors.";
 
 /* Debug messages */
 "videofiles_updated_debug" = "🔄 VideoFiles updated: %d videos";

@@ -54,7 +54,7 @@
 /* 設定 - 情報 */
 "videos_saved" = "保存されたビデオ: %d";
 "clear_all_videos" = "すべてのビデオをクリア";
-"app_version" = "Live Walls v1.0";
+"app_version" = "Live Walls";
 
 /* アラート */
 "delete_all_videos_title" = "すべてのビデオを削除しますか？";
@@ -89,3 +89,6 @@
 /* デバッグメッセージ */
 "videofiles_updated_debug" = "🔄 VideoFiles が更新されました: %d 個のビデオ";
 "names_debug" = "📝 名前: %@";
+
+/* Notification usage description (Info.plist) */
+"notification_usage_description" = "LiveWalls는 배경화면 변경 및 중요한 오류에 대해 알려주기 위해 알림 권한이 필요합니다.";
