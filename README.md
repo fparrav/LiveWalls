@@ -46,7 +46,14 @@ Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámi
 
 ## ⚙️ Instalación
 
-### Compilar desde código fuente
+### 📥 Descarga Release (Recomendado)
+
+1. Ve a [GitHub Releases](https://github.com/fparrav/LiveWalls/releases)
+2. Descarga el archivo `.dmg` más reciente
+3. Abre el DMG y arrastra LiveWalls a Aplicaciones
+4. ¡Listo para usar!
+
+### 🛠️ Compilar desde código fuente
 
 1. **Clonar el repositorio**:
    ```bash
@@ -71,7 +78,7 @@ La aplicación requiere:
 
 ## 🤝 Contribuir
 
-¡Las contribuciones son bienvenidas! 
+¡Las contribuciones son bienvenidas!
 
 1. Fork el proyecto
 2. Crea una rama para tu feature (`git checkout -b feature/mi-mejora`)
@@ -79,7 +86,41 @@ La aplicación requiere:
 4. Push a la rama (`git push origin feature/mi-mejora`)
 5. Abre un Pull Request
 
-##  Licencia
+## 🚀 Releases y Desarrollo
+
+### 📦 Crear un Release
+
+Este proyecto sigue **versionado semántico** y usa **tags para releases** (no cada commit):
+
+```bash
+# Crear release automático (incrementa patch)
+./scripts/create-release.sh
+
+# Crear release específico
+./scripts/create-release.sh 1.2.0
+
+# Pre-release
+./scripts/create-release.sh 1.3.0-beta.1
+```
+
+### 🔄 Proceso Automatizado
+
+1. **Tag → Release**: Solo los tags disparan releases automáticos
+2. **GitHub Actions**: Compila, firma y crea DMG automáticamente  
+3. **Versionado semántico**: `v1.0.0`, `v1.1.0`, `v2.0.0-beta.1`
+4. **Code signing**: Firmado digital y notarización de Apple
+5. **Distribución**: DMG listo para descargar en GitHub Releases
+
+### 🛠️ Configuración de Desarrollo
+
+Para contribuir al proyecto necesitas:
+
+- **macOS 14.0+** (Sonoma o superior)
+- **Xcode 15.0+**
+- **Git** configurado
+- **Certificados Apple** (solo para releases oficiales)
+
+## Licencia
 
 Este proyecto está licenciado bajo la **MIT License** - consulta el archivo [LICENSE](LICENSE) para más detalles.
 
