@@ -1,0 +1,91 @@
+/* LiveWalls 日本語ローカライゼーションファイル */
+
+/* メインタイトル */
+"app_title" = "LiveWalls";
+"settings_title" = "Live Walls 設定";
+
+/* メインボタン */
+"import_button" = "インポート";
+"settings_button" = "設定";
+"accept_button" = "OK";
+"cancel_button" = "キャンセル";
+"delete_button" = "削除";
+
+/* ビデオアクション */
+"play_button" = "再生";
+"stop_button" = "停止";
+"import_videos_button" = "ビデオをインポート";
+
+/* ヘルプテキスト */
+"import_help" = "ビデオを追加";
+"settings_help" = "アプリケーション設定";
+
+/* 空の状態 */
+"no_videos_title" = "ビデオが追加されていません";
+"no_videos_description" = "「インポート」をクリックしてビデオを追加し、壁紙として設定してください";
+
+/* 壁紙ステータス */
+"active_wallpaper" = "アクティブな壁紙: %@";
+"no_active_wallpaper" = "アクティブな壁紙なし";
+"videos_total" = "合計 %d 個のビデオ";
+
+/* ステータスバーメニュー */
+"current_wallpaper" = "🎬 現在の壁紙";
+"open_app" = "アプリケーションを開く";
+"stop_wallpaper" = "壁紙を停止";
+"play_wallpaper" = "壁紙を再生";
+"auto_launch" = "自動起動";
+"quit_app" = "Live Walls を終了";
+
+/* 設定 - セクション */
+"general_playback_section" = "一般再生";
+"system_section" = "システム";
+"auto_change_section" = "壁紙の自動変更";
+"video_management_section" = "ビデオ管理";
+
+/* 設定 - オプション */
+"auto_start_wallpaper" = "アプリ起動時に壁紙を自動開始";
+"mute_videos" = "ビデオをミュート";
+"launch_at_login" = "ログイン時に Live Walls を起動";
+"launch_at_login_help" = "macOS ログイン時に Live Walls を自動的に開始";
+"enable_auto_change" = "壁紙の自動変更を有効化";
+"interval_label" = "間隔:";
+
+/* 設定 - 情報 */
+"videos_saved" = "保存されたビデオ: %d";
+"clear_all_videos" = "すべてのビデオをクリア";
+"app_version" = "Live Walls v1.0";
+
+/* アラート */
+"delete_all_videos_title" = "すべてのビデオを削除しますか？";
+"delete_all_videos_message" = "この操作により、保存されたすべてのビデオが削除されます。続行しますか？";
+
+/* 通知とメッセージ */
+"wallpaper_set" = "ビデオが壁紙として設定されました";
+"wallpaper_error" = "壁紙設定エラー";
+"import_error" = "ビデオインポートエラー";
+"wallpaper_started_notification" = "壁紙が開始されました: %@";
+"wallpaper_stopped_notification" = "壁紙が停止されました";
+"error_title" = "エラー";
+
+/* 時間間隔 */
+"minutes_format" = "%d 分";
+
+/* 互換性 */
+"macos_compatibility_warning" = "⚠️ macOS < 13.0 の場合、システム環境設定で手動設定してください";
+
+/* WallpaperManager ログメッセージ */
+"initializing_wallpaper_manager" = "🏗️ WallpaperManager を初期化中";
+"wallpaper_manager_initialized" = "✅ WallpaperManager が正常に初期化されました";
+"deinitializing_wallpaper_manager" = "🔄 WallpaperManager を非初期化中";
+"adding_video_files" = "📁 %d 個のビデオファイルを追加中";
+"could_not_start_security_scoped_access" = "⚠️ %@ のセキュリティスコープアクセスを開始できませんでした";
+"file_not_accessible" = "❌ ファイルにアクセスできません: %@";
+"video_added" = "✅ ビデオが追加されました: %@";
+"videos_count_updated" = "📊 リスト内のビデオ: %d → %d";
+"error_processing_file" = "❌ %@ の処理エラー: %@";
+"could_not_generate_thumbnail" = "⚠️ %@ のサムネイルを生成できませんでした";
+
+/* デバッグメッセージ */
+"videofiles_updated_debug" = "🔄 VideoFiles が更新されました: %d 個のビデオ";
+"names_debug" = "📝 名前: %@";
