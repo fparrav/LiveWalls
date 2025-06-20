@@ -1,0 +1,91 @@
+/* LiveWalls 繁體中文本地化檔案 */
+
+/* 主標題 */
+"app_title" = "LiveWalls";
+"settings_title" = "Live Walls 設定";
+
+/* 主要按鈕 */
+"import_button" = "匯入";
+"settings_button" = "設定";
+"accept_button" = "確定";
+"cancel_button" = "取消";
+"delete_button" = "刪除";
+
+/* 影片操作 */
+"play_button" = "播放";
+"stop_button" = "停止";
+"import_videos_button" = "匯入影片";
+
+/* 說明文字 */
+"import_help" = "新增影片";
+"settings_help" = "應用程式設定";
+
+/* 空狀態 */
+"no_videos_title" = "未新增影片";
+"no_videos_description" = "點按「匯入」新增影片並設定為桌布";
+
+/* 桌布狀態 */
+"active_wallpaper" = "使用中桌布：%@";
+"no_active_wallpaper" = "無使用中桌布";
+"videos_total" = "共 %d 部影片";
+
+/* 狀態列選單 */
+"current_wallpaper" = "🎬 目前桌布";
+"open_app" = "開啟應用程式";
+"stop_wallpaper" = "停止桌布";
+"play_wallpaper" = "播放桌布";
+"auto_launch" = "自動啟動";
+"quit_app" = "結束 Live Walls";
+
+/* 設定 - 區段 */
+"general_playback_section" = "一般播放";
+"system_section" = "系統";
+"auto_change_section" = "自動更換桌布";
+"video_management_section" = "影片管理";
+
+/* 設定 - 選項 */
+"auto_start_wallpaper" = "開啟應用程式時自動啟動桌布";
+"mute_videos" = "將影片靜音";
+"launch_at_login" = "登入時啟動 Live Walls";
+"launch_at_login_help" = "登入 macOS 時自動啟動 Live Walls";
+"enable_auto_change" = "啟用自動更換桌布";
+"interval_label" = "間隔：";
+
+/* 設定 - 資訊 */
+"videos_saved" = "已儲存影片：%d";
+"clear_all_videos" = "清除所有影片";
+"app_version" = "Live Walls v1.0";
+
+/* 警告 */
+"delete_all_videos_title" = "刪除所有影片？";
+"delete_all_videos_message" = "此操作將刪除所有已儲存的影片。是否繼續？";
+
+/* 通知和訊息 */
+"wallpaper_set" = "影片已設定為桌布";
+"wallpaper_error" = "設定桌布錯誤";
+"import_error" = "匯入影片錯誤";
+"wallpaper_started_notification" = "桌布已啟動：%@";
+"wallpaper_stopped_notification" = "桌布已停止";
+"error_title" = "錯誤";
+
+/* 時間間隔 */
+"minutes_format" = "%d 分鐘";
+
+/* 相容性 */
+"macos_compatibility_warning" = "⚠️ 對於 macOS < 13.0，請在「系統偏好設定」中手動設定";
+
+/* WallpaperManager 記錄訊息 */
+"initializing_wallpaper_manager" = "🏗️ 正在初始化 WallpaperManager";
+"wallpaper_manager_initialized" = "✅ WallpaperManager 初始化正確";
+"deinitializing_wallpaper_manager" = "🔄 正在反初始化 WallpaperManager";
+"adding_video_files" = "📁 正在新增 %d 個影片檔案";
+"could_not_start_security_scoped_access" = "⚠️ 無法啟動安全範圍存取：%@";
+"file_not_accessible" = "❌ 檔案無法存取：%@";
+"video_added" = "✅ 影片已新增：%@";
+"videos_count_updated" = "📊 清單中的影片：%d → %d";
+"error_processing_file" = "❌ 處理 %@ 時發生錯誤：%@";
+"could_not_generate_thumbnail" = "⚠️ 無法為以下項目產生縮圖：%@";
+
+/* 除錯訊息 */
+"videofiles_updated_debug" = "🔄 VideoFiles 已更新：%d 部影片";
+"names_debug" = "📝 名稱：%@";

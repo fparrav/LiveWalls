@@ -1,0 +1,91 @@
+/* Arquivo de localização em português brasileiro para LiveWalls */
+
+/* Títulos principais */
+"app_title" = "LiveWalls";
+"settings_title" = "Configurações do Live Walls";
+
+/* Botões principais */
+"import_button" = "Importar";
+"settings_button" = "Configurações";
+"accept_button" = "Aceitar";
+"cancel_button" = "Cancelar";
+"delete_button" = "Excluir";
+
+/* Ações de vídeo */
+"play_button" = "Reproduzir";
+"stop_button" = "Parar";
+"import_videos_button" = "Importar Vídeos";
+
+/* Texto de ajuda */
+"import_help" = "Adicionar vídeos";
+"settings_help" = "Configurações do aplicativo";
+
+/* Estado vazio */
+"no_videos_title" = "Nenhum vídeo adicionado";
+"no_videos_description" = "Clique em 'Importar' para adicionar vídeos e defini-los como papel de parede";
+
+/* Status do papel de parede */
+"active_wallpaper" = "Papel de parede ativo: %@";
+"no_active_wallpaper" = "Nenhum papel de parede ativo";
+"videos_total" = "%d vídeos no total";
+
+/* Menu da barra de status */
+"current_wallpaper" = "🎬 Papel de Parede Atual";
+"open_app" = "Abrir aplicativo";
+"stop_wallpaper" = "Parar papel de parede";
+"play_wallpaper" = "Reproduzir papel de parede";
+"auto_launch" = "Início automático";
+"quit_app" = "Sair do Live Walls";
+
+/* Configurações - Seções */
+"general_playback_section" = "Reprodução Geral";
+"system_section" = "Sistema";
+"auto_change_section" = "Mudança Automática de Papel de Parede";
+"video_management_section" = "Gerenciamento de Vídeos";
+
+/* Configurações - Opções */
+"auto_start_wallpaper" = "Iniciar papel de parede automaticamente ao abrir o app";
+"mute_videos" = "Silenciar vídeos";
+"launch_at_login" = "Iniciar Live Walls no login";
+"launch_at_login_help" = "Iniciar automaticamente o Live Walls quando você fizer login no macOS";
+"enable_auto_change" = "Ativar mudança automática de papel de parede";
+"interval_label" = "Intervalo:";
+
+/* Configurações - Informações */
+"videos_saved" = "Vídeos salvos: %d";
+"clear_all_videos" = "Limpar todos os vídeos";
+"app_version" = "Live Walls v1.0";
+
+/* Alertas */
+"delete_all_videos_title" = "Excluir todos os vídeos?";
+"delete_all_videos_message" = "Esta ação excluirá todos os vídeos salvos. Deseja continuar?";
+
+/* Notificações e mensagens */
+"wallpaper_set" = "Vídeo definido como papel de parede";
+"wallpaper_error" = "Erro ao definir papel de parede";
+"import_error" = "Erro ao importar vídeos";
+"wallpaper_started_notification" = "Papel de parede iniciado: %@";
+"wallpaper_stopped_notification" = "Papel de parede parado";
+"error_title" = "Erro";
+
+/* Intervalos de tempo */
+"minutes_format" = "%d min";
+
+/* Compatibilidade */
+"macos_compatibility_warning" = "⚠️ Para macOS < 13.0, configure manualmente nas Preferências do Sistema";
+
+/* Mensagens de log do WallpaperManager */
+"initializing_wallpaper_manager" = "🏗️ Inicializando WallpaperManager";
+"wallpaper_manager_initialized" = "✅ WallpaperManager inicializado corretamente";
+"deinitializing_wallpaper_manager" = "🔄 Desinicializando WallpaperManager";
+"adding_video_files" = "📁 Adicionando %d arquivos de vídeo";
+"could_not_start_security_scoped_access" = "⚠️ Não foi possível iniciar acesso com escopo de segurança para: %@";
+"file_not_accessible" = "❌ Arquivo não acessível: %@";
+"video_added" = "✅ Vídeo adicionado: %@";
+"videos_count_updated" = "📊 Vídeos na lista: %d → %d";
+"error_processing_file" = "❌ Erro ao processar %@: %@";
+"could_not_generate_thumbnail" = "⚠️ Não foi possível gerar miniatura para: %@";
+
+/* Mensagens de debug */
+"videofiles_updated_debug" = "🔄 VideoFiles atualizado: %d vídeos";
+"names_debug" = "📝 Nomes: %@";

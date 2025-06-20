@@ -1,0 +1,91 @@
+/* LiveWalls 简体中文本地化文件 */
+
+/* 主标题 */
+"app_title" = "LiveWalls";
+"settings_title" = "Live Walls 设置";
+
+/* 主要按钮 */
+"import_button" = "导入";
+"settings_button" = "设置";
+"accept_button" = "确定";
+"cancel_button" = "取消";
+"delete_button" = "删除";
+
+/* 视频操作 */
+"play_button" = "播放";
+"stop_button" = "停止";
+"import_videos_button" = "导入视频";
+
+/* 帮助文本 */
+"import_help" = "添加视频";
+"settings_help" = "应用程序设置";
+
+/* 空状态 */
+"no_videos_title" = "未添加视频";
+"no_videos_description" = "点击"导入"添加视频并设置为壁纸";
+
+/* 壁纸状态 */
+"active_wallpaper" = "活动壁纸：%@";
+"no_active_wallpaper" = "无活动壁纸";
+"videos_total" = "共 %d 个视频";
+
+/* 状态栏菜单 */
+"current_wallpaper" = "🎬 当前壁纸";
+"open_app" = "打开应用程序";
+"stop_wallpaper" = "停止壁纸";
+"play_wallpaper" = "播放壁纸";
+"auto_launch" = "自动启动";
+"quit_app" = "退出 Live Walls";
+
+/* 设置 - 部分 */
+"general_playback_section" = "常规播放";
+"system_section" = "系统";
+"auto_change_section" = "自动更换壁纸";
+"video_management_section" = "视频管理";
+
+/* 设置 - 选项 */
+"auto_start_wallpaper" = "打开应用时自动启动壁纸";
+"mute_videos" = "静音视频";
+"launch_at_login" = "登录时启动 Live Walls";
+"launch_at_login_help" = "登录 macOS 时自动启动 Live Walls";
+"enable_auto_change" = "启用自动更换壁纸";
+"interval_label" = "间隔：";
+
+/* 设置 - 信息 */
+"videos_saved" = "已保存视频：%d";
+"clear_all_videos" = "清除所有视频";
+"app_version" = "Live Walls v1.0";
+
+/* 警告 */
+"delete_all_videos_title" = "删除所有视频？";
+"delete_all_videos_message" = "此操作将删除所有已保存的视频。是否继续？";
+
+/* 通知和消息 */
+"wallpaper_set" = "视频已设置为壁纸";
+"wallpaper_error" = "设置壁纸错误";
+"import_error" = "导入视频错误";
+"wallpaper_started_notification" = "壁纸已启动：%@";
+"wallpaper_stopped_notification" = "壁纸已停止";
+"error_title" = "错误";
+
+/* 时间间隔 */
+"minutes_format" = "%d 分钟";
+
+/* 兼容性 */
+"macos_compatibility_warning" = "⚠️ 对于 macOS < 13.0，请在系统偏好设置中手动配置";
+
+/* WallpaperManager 日志消息 */
+"initializing_wallpaper_manager" = "🏗️ 正在初始化 WallpaperManager";
+"wallpaper_manager_initialized" = "✅ WallpaperManager 初始化正确";
+"deinitializing_wallpaper_manager" = "🔄 正在反初始化 WallpaperManager";
+"adding_video_files" = "📁 正在添加 %d 个视频文件";
+"could_not_start_security_scoped_access" = "⚠️ 无法启动安全作用域访问：%@";
+"file_not_accessible" = "❌ 文件不可访问：%@";
+"video_added" = "✅ 视频已添加：%@";
+"videos_count_updated" = "📊 列表中的视频：%d → %d";
+"error_processing_file" = "❌ 处理 %@ 时出错：%@";
+"could_not_generate_thumbnail" = "⚠️ 无法为以下项生成缩略图：%@";
+
+/* 调试消息 */
+"videofiles_updated_debug" = "🔄 VideoFiles 已更新：%d 个视频";
+"names_debug" = "📝 名称：%@";

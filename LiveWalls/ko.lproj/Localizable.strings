@@ -1,0 +1,91 @@
+/* LiveWalls 한국어 현지화 파일 */
+
+/* 주요 제목 */
+"app_title" = "LiveWalls";
+"settings_title" = "Live Walls 설정";
+
+/* 주요 버튼 */
+"import_button" = "가져오기";
+"settings_button" = "설정";
+"accept_button" = "확인";
+"cancel_button" = "취소";
+"delete_button" = "삭제";
+
+/* 비디오 작업 */
+"play_button" = "재생";
+"stop_button" = "정지";
+"import_videos_button" = "비디오 가져오기";
+
+/* 도움말 텍스트 */
+"import_help" = "비디오 추가";
+"settings_help" = "애플리케이션 설정";
+
+/* 빈 상태 */
+"no_videos_title" = "추가된 비디오 없음";
+"no_videos_description" = "'가져오기'를 클릭하여 비디오를 추가하고 배경화면으로 설정하세요";
+
+/* 배경화면 상태 */
+"active_wallpaper" = "활성 배경화면: %@";
+"no_active_wallpaper" = "활성 배경화면 없음";
+"videos_total" = "총 %d개 비디오";
+
+/* 상태 표시줄 메뉴 */
+"current_wallpaper" = "🎬 현재 배경화면";
+"open_app" = "애플리케이션 열기";
+"stop_wallpaper" = "배경화면 정지";
+"play_wallpaper" = "배경화면 재생";
+"auto_launch" = "자동 시작";
+"quit_app" = "Live Walls 종료";
+
+/* 설정 - 섹션 */
+"general_playback_section" = "일반 재생";
+"system_section" = "시스템";
+"auto_change_section" = "자동 배경화면 변경";
+"video_management_section" = "비디오 관리";
+
+/* 설정 - 옵션 */
+"auto_start_wallpaper" = "앱 열 때 배경화면 자동 시작";
+"mute_videos" = "비디오 음소거";
+"launch_at_login" = "로그인 시 Live Walls 시작";
+"launch_at_login_help" = "macOS 로그인 시 Live Walls 자동 시작";
+"enable_auto_change" = "자동 배경화면 변경 활성화";
+"interval_label" = "간격:";
+
+/* 설정 - 정보 */
+"videos_saved" = "저장된 비디오: %d";
+"clear_all_videos" = "모든 비디오 지우기";
+"app_version" = "Live Walls v1.0";
+
+/* 경고 */
+"delete_all_videos_title" = "모든 비디오를 삭제하시겠습니까?";
+"delete_all_videos_message" = "이 작업으로 저장된 모든 비디오가 삭제됩니다. 계속하시겠습니까?";
+
+/* 알림 및 메시지 */
+"wallpaper_set" = "비디오가 배경화면으로 설정됨";
+"wallpaper_error" = "배경화면 설정 오류";
+"import_error" = "비디오 가져오기 오류";
+"wallpaper_started_notification" = "배경화면 시작됨: %@";
+"wallpaper_stopped_notification" = "배경화면 정지됨";
+"error_title" = "오류";
+
+/* 시간 간격 */
+"minutes_format" = "%d분";
+
+/* 호환성 */
+"macos_compatibility_warning" = "⚠️ macOS < 13.0의 경우 시스템 환경설정에서 수동으로 구성하세요";
+
+/* WallpaperManager 로그 메시지 */
+"initializing_wallpaper_manager" = "🏗️ WallpaperManager 초기화 중";
+"wallpaper_manager_initialized" = "✅ WallpaperManager가 올바르게 초기화됨";
+"deinitializing_wallpaper_manager" = "🔄 WallpaperManager 해제 중";
+"adding_video_files" = "📁 %d개 비디오 파일 추가 중";
+"could_not_start_security_scoped_access" = "⚠️ %@에 대한 보안 범위 액세스를 시작할 수 없음";
+"file_not_accessible" = "❌ 파일에 액세스할 수 없음: %@";
+"video_added" = "✅ 비디오 추가됨: %@";
+"videos_count_updated" = "📊 목록의 비디오: %d → %d";
+"error_processing_file" = "❌ %@ 처리 중 오류: %@";
+"could_not_generate_thumbnail" = "⚠️ %@에 대한 썸네일을 생성할 수 없음";
+
+/* 디버그 메시지 */
+"videofiles_updated_debug" = "🔄 VideoFiles 업데이트됨: %d개 비디오";
+"names_debug" = "📝 이름: %@";
