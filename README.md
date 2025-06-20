@@ -1,5 +1,9 @@
 # LiveWalls
 
+<p align="center">
+  <img src="icon_asset/icono-macOS-Default-1024x1024@2x.png" alt="LiveWalls" width="200" height="200">
+</p>
+
 Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámicos.
 
 ## 🎥 ¿Qué es LiveWalls?
@@ -19,7 +23,7 @@ Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámi
 - 🚀 **Inicio automático**: Opción para iniciar con el sistema
 - ⚙️ **Persistencia**: Recuerda tu último wallpaper al reiniciar
 
-## � Uso
+## 🎮 Uso
 
 ### 1. Agregar Videos
 - Haz clic en el botón "+" para seleccionar videos
@@ -40,7 +44,7 @@ Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámi
 - macOS 14.0 (Sonoma) o superior
 - Xcode 15.0 o superior (para compilar desde código)
 
-## �️ Instalación
+## ⚙️ Instalación
 
 ### Compilar desde código fuente
 

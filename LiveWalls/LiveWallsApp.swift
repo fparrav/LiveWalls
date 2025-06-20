@@ -33,7 +33,7 @@ struct LiveWallsApp: App {
             CommandGroup(replacing: .newItem) { }
         }
         
-        MenuBarExtra("Live Walls", systemImage: "play.circle.fill") {
+        MenuBarExtra("Live Walls", image: "statusbar-icon") {
             StatusBarMenuView()
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
