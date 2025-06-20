@@ -13,6 +13,9 @@ jobs:
   build-and-release:
     runs-on: macos-latest
     
+    permissions:
+      contents: write  # Necesario para crear releases
+      
     steps:
     - name: 📥 Checkout Code
       uses: actions/checkout@v4

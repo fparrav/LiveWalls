@@ -110,6 +110,8 @@ xattr -d com.apple.quarantine /Applications/LiveWalls.app
 2. **Compila la aplicación** desde el código fuente (instrucciones abajo)
 3. **Verifica** que hace exactamente lo que promete
 
+**📋 Nota importante**: Este es un proyecto de código abierto sin fines de lucro. No pagamos la suscripción de Apple Developer para este tipo de aplicaciones. Si prefieres máxima seguridad, recomendamos compilar el código tú mismo siguiendo las instrucciones de abajo.
+
 ## 🤝 Contribuir
 
 ¡Las contribuciones son bienvenidas!
