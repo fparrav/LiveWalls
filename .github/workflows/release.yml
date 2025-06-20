@@ -43,25 +43,24 @@ jobs:
           -archivePath "./build/$APP_NAME.xcarchive" \
           archive \
           CODE_SIGN_STYLE=Automatic \
-          CODE_SIGN_IDENTITY="Apple Development" \
-          DEVELOPMENT_TEAM="${{ secrets.DEVELOPMENT_TEAM_ID }}"
+          CODE_SIGN_IDENTITY="-"
           
     - name: 📦 Export App
       run: |
         echo "📦 Exporting $APP_NAME.app..."
         
-        # Create ExportOptions.plist
+        # Create ExportOptions.plist for unsigned export
         cat > ExportOptions.plist << EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
             <key>method</key>
-            <string>developer-id</string>
-            <key>teamID</key>
-            <string>${{ secrets.DEVELOPMENT_TEAM_ID }}</string>
+            <string>mac-application</string>
             <key>signingStyle</key>
             <string>automatic</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
         </dict>
         </plist>
         EOF
@@ -73,29 +72,7 @@ jobs:
           -exportPath "./build/export" \
           -exportOptionsPlist ExportOptions.plist
           
-    - name: 🔐 Code Sign and Notarize (Optional)
-      if: ${{ secrets.APPLE_ID && secrets.APP_PASSWORD }}
-      run: |
-        echo "🔐 Code signing and notarizing..."
-        
-        # Code sign the app
-        codesign --force --deep --sign "Developer ID Application: ${{ secrets.DEVELOPER_ID_NAME }}" "./build/export/$APP_NAME.app"
-        
-        # Create zip for notarization
-        cd "./build/export"
-        zip -r "$APP_NAME.zip" "$APP_NAME.app"
-        
-        # Submit for notarization
-        xcrun notarytool submit "$APP_NAME.zip" \
-          --apple-id "${{ secrets.APPLE_ID }}" \
-          --password "${{ secrets.APP_PASSWORD }}" \
-          --team-id "${{ secrets.DEVELOPMENT_TEAM_ID }}" \
-          --wait
-          
-        # Staple the notarization ticket
-        xcrun stapler staple "$APP_NAME.app"
-        
-    - name: 💿 Create DMG
+    - name:  Create DMG
       run: |
         echo "💿 Creating DMG..."
         
@@ -152,7 +129,17 @@ jobs:
           - macOS 14.0 (Sonoma) o superior
           
           ## 🔒 Seguridad
-          Esta aplicación está firmada digitalmente y notarizada por Apple.
+          ⚠️ **Aplicación sin firma digital**: Esta es una aplicación open source distribuida sin certificado de desarrollador de Apple.
+          
+          Para abrir la aplicación por primera vez:
+          ```bash
+          # Opción 1: Desactivar quarantine (recomendado)
+          xattr -d com.apple.quarantine /Applications/LiveWalls.app
+          
+          # Opción 2: Ir a Preferencias > Seguridad y permitir la app
+          ```
+          
+          💡 **Recomendación**: Para mayor seguridad, considera compilar la aplicación desde el código fuente.
           
         files: |
           ./build/${{ env.APP_NAME }}-${{ github.ref_name }}.dmg

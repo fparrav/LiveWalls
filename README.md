@@ -51,7 +51,26 @@ Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámi
 1. Ve a [GitHub Releases](https://github.com/fparrav/LiveWalls/releases)
 2. Descarga el archivo `.dmg` más reciente
 3. Abre el DMG y arrastra LiveWalls a Aplicaciones
-4. ¡Listo para usar!
+
+### ⚠️ Importante: Aplicación sin firma digital
+
+**LiveWalls es un proyecto open source** y no cuenta con certificado de desarrollador de Apple ($99/año).
+Para abrir la aplicación por primera vez:
+
+#### Método 1: Comando Terminal (Recomendado)
+```bash
+xattr -d com.apple.quarantine /Applications/LiveWalls.app
+```
+
+#### Método 2: Configuración del Sistema
+1. Intenta abrir LiveWalls (aparecerá un aviso de seguridad)
+2. Ve a **Configuración del Sistema** → **Privacidad y Seguridad**  
+3. En la sección "Seguridad", haz clic en **"Abrir de todos modos"**
+
+#### Método 3: Click derecho
+1. Haz **click derecho** en LiveWalls.app
+2. Selecciona **"Abrir"**
+3. Confirma **"Abrir"** en el diálogo de seguridad
 
 ### 🛠️ Compilar desde código fuente
 
@@ -70,11 +89,26 @@ Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámi
    - Presiona `⌘+R` en Xcode
    - O usa el script: `./build.sh run`
 
-## 🔒 Permisos
+## 🔒 Permisos y Seguridad
 
-La aplicación requiere:
+### Permisos requeridos:
+
 - ✅ Acceso a archivos seleccionados por el usuario
 - ✅ App Sandbox habilitado para seguridad
+
+### 🛡️ Sobre la seguridad de LiveWalls
+
+**LiveWalls es un proyecto 100% open source** que puedes revisar y compilar tú mismo. 
+
+**¿Por qué no está firmada digitalmente?**
+- La membresía de Apple Developer cuesta $99 USD/año
+- Como proyecto gratuito y open source, preferimos esos recursos para desarrollo
+- El código fuente está disponible para inspección completa
+
+**💡 Para máxima seguridad:**
+1. **Revisa el código fuente** en este repositorio
+2. **Compila la aplicación** desde el código fuente (instrucciones abajo)
+3. **Verifica** que hace exactamente lo que promete
 
 ## 🤝 Contribuir
 
@@ -85,40 +119,6 @@ La aplicación requiere:
 3. Commit tus cambios (`git commit -m 'Agrega mi-mejora'`)
 4. Push a la rama (`git push origin feature/mi-mejora`)
 5. Abre un Pull Request
-
-## 🚀 Releases y Desarrollo
-
-### 📦 Crear un Release
-
-Este proyecto sigue **versionado semántico** y usa **tags para releases** (no cada commit):
-
-```bash
-# Crear release automático (incrementa patch)
-./scripts/create-release.sh
-
-# Crear release específico
-./scripts/create-release.sh 1.2.0
-
-# Pre-release
-./scripts/create-release.sh 1.3.0-beta.1
-```
-
-### 🔄 Proceso Automatizado
-
-1. **Tag → Release**: Solo los tags disparan releases automáticos
-2. **GitHub Actions**: Compila, firma y crea DMG automáticamente  
-3. **Versionado semántico**: `v1.0.0`, `v1.1.0`, `v2.0.0-beta.1`
-4. **Code signing**: Firmado digital y notarización de Apple
-5. **Distribución**: DMG listo para descargar en GitHub Releases
-
-### 🛠️ Configuración de Desarrollo
-
-Para contribuir al proyecto necesitas:
-
-- **macOS 14.0+** (Sonoma o superior)
-- **Xcode 15.0+**
-- **Git** configurado
-- **Certificados Apple** (solo para releases oficiales)
 
 ## Licencia
 
