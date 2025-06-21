@@ -104,15 +104,61 @@ jobs:
         VERSION=${{ github.ref_name }}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         
-        # Extract changelog for this version if exists
-        if [ -f CHANGELOG.md ]; then
-          CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/{if(/^## \[/ && !/^## \[$VERSION\]/)exit;print}" CHANGELOG.md | head -n -1)
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+        # Obtener el tag anterior para generar changelog automático
+        PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "$VERSION" | head -n 1)
+        
+        if [ -z "$PREVIOUS_TAG" ]; then
+          echo "📝 Primer release - generando changelog completo"
+          CHANGELOG="🎉 Primera versión de LiveWalls disponible!"
         else
-          echo "changelog=🎉 Nueva versión de LiveWalls disponible!" >> $GITHUB_OUTPUT
+          echo "📝 Generando changelog desde $PREVIOUS_TAG hasta $VERSION"
+          
+          # Generar changelog automático basado en conventional commits
+          CHANGELOG_CONTENT=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..$VERSION 2>/dev/null || git log --pretty=format:"- %s (%h)" --since="1 month ago")
+          
+          # Categorizar commits por tipo
+          FEATURES=$(echo "$CHANGELOG_CONTENT" | grep -E "^- (feat|feature)" | sed 's/^- //')
+          FIXES=$(echo "$CHANGELOG_CONTENT" | grep -E "^- (fix|bugfix)" | sed 's/^- //')
+          CHORES=$(echo "$CHANGELOG_CONTENT" | grep -E "^- (chore|docs|style|refactor|test)" | sed 's/^- //')
+          OTHERS=$(echo "$CHANGELOG_CONTENT" | grep -vE "^- (feat|feature|fix|bugfix|chore|docs|style|refactor|test)" | sed 's/^- //')
+          
+          # Construir changelog estructurado
+          CHANGELOG="## 🚀 Cambios en esta versión"
+          
+          if [ ! -z "$FEATURES" ]; then
+            CHANGELOG="$CHANGELOG\n\n### ✨ Nuevas características\n$FEATURES"
+          fi
+          
+          if [ ! -z "$FIXES" ]; then
+            CHANGELOG="$CHANGELOG\n\n### 🐛 Correcciones\n$FIXES"
+          fi
+          
+          if [ ! -z "$CHORES" ]; then
+            CHANGELOG="$CHANGELOG\n\n### 🔧 Mantenimiento\n$CHORES"
+          fi
+          
+          if [ ! -z "$OTHERS" ]; then
+            CHANGELOG="$CHANGELOG\n\n### 📝 Otros cambios\n$OTHERS"
+          fi
+          
+          # Si no hay commits categorizados, mostrar todos
+          if [ -z "$FEATURES$FIXES$CHORES$OTHERS" ]; then
+            CHANGELOG="## 🚀 Cambios en esta versión\n\n$CHANGELOG_CONTENT"
+          fi
         fi
+        
+        # Verificar si existe CHANGELOG.md manual y usarlo si existe
+        if [ -f CHANGELOG.md ]; then
+          MANUAL_CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/{if(/^## \[/ && !/^## \[$VERSION\]/)exit;print}" CHANGELOG.md | head -n -1)
+          if [ ! -z "$MANUAL_CHANGELOG" ]; then
+            echo "📋 Usando changelog manual de CHANGELOG.md"
+            CHANGELOG="$MANUAL_CHANGELOG"
+          fi
+        fi
+        
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
         
     - name: 🚀 Create GitHub Release
       uses: softprops/action-gh-release@v1
