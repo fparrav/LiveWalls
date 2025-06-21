@@ -22,7 +22,7 @@
 
 /* 空状态 */
 "no_videos_title" = "未添加视频";
-"no_videos_description" = "点击"导入"添加视频并设置为壁纸";
+"no_videos_description" = "点击「导入」添加视频并设置为壁纸";
 
 /* 壁纸状态 */
 "active_wallpaper" = "活动壁纸：%@";

@@ -99,7 +99,39 @@ Icon
 
 # Thumbnails
 ._*
+# Ignorar archivos de configuración de usuario de Xcode
+*.xcuserstate
 
+# Ignorar archivos de configuración de esquemas de Xcode
+xcshareddata/
+
+# Ignorar archivos de configuración de workspaces de Xcode
+*.xcworkspace
+
+# Ignorar archivos de configuración de proyectos de Xcode
+*.xcodeproj
+
+# Ignorar archivos de configuración de paquetes de Swift
+.swiftpm/
+Package.resolved
+Package.pins
+
+# Ignorar archivos de Pods de CocoaPods
+Pods/
+
+# Ignorar dependencias de Carthage
+Carthage/Checkouts/
+
+# Ignorar archivos de configuración de Prettier y SwiftLint
+.prettierrc
+.prettierignore
+.swiftlint.yml
+
+# Ignorar archivos de configuración de GitHub Copilot
+*.copilot*
+
+# Ignorar archivos de configuración de editorconfig
+.editorconfig
 # Files that might appear in the root of a volume
 .DocumentRevisions-V100
 .fseventsd

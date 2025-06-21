@@ -6,9 +6,24 @@
 	<string>1.1.0</string>
 	<key>CFBundleVersion</key>
 	<string>202506200130</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
 	<key>NSUserNotificationUsageDescription</key>
-	<string>NSLocalizedString(@"notification_usage_description", @"Notification permission description")</string>
+	<string>notification_usage_description</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>es</string>
+		<string>fr</string>
+		<string>de</string>
+		<string>it</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>pt-BR</string>
+		<string>zh-CN</string>
+		<string>zh-TW</string>
+	</array>
 </dict>
 </plist>

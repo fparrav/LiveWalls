@@ -34,15 +34,18 @@ Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámi
 ## 🎮 Uso
 
 ### 1. Agregar Videos
+
 - Haz clic en el botón "+" para seleccionar videos
 - Arrastra archivos MP4 o MOV a la aplicación
 
 ### 2. Establecer Wallpaper
+
 - Selecciona un video de la lista
 - Haz clic en "Establecer como Wallpaper"
 - ¡Disfruta tu fondo dinámico!
 
 ### 3. Control Rápido
+
 - Usa el ícono en la barra de menú para controlar la reproducción
 - Activa/desactiva el inicio automático
 - Abre la aplicación desde el background
@@ -56,90 +59,83 @@ Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámi
 
 ### 📥 Descarga Release (Recomendado)
 
-1. Ve a [GitHub Releases](https://github.com/fparrav/LiveWalls/releases)
-2. Descarga el archivo `.dmg` más reciente
-3. Abre el DMG y arrastra LiveWalls a Aplicaciones
+Descarga la última versión compilada desde [GitHub Releases](https://github.com/fparrav/LiveWalls/releases/latest).
 
-### ⚠️ Importante: Aplicación sin firma digital
-
-**LiveWalls es un proyecto open source** y no cuenta con certificado de desarrollador de Apple ($99/año).
-Para abrir la aplicación por primera vez:
+**⚠️ Importante:** Como la app no está firmada con un certificado de Apple Developer, necesitarás permitir manualmente que se ejecute.
 
 #### Método 1: Comando Terminal (Recomendado)
+
 ```bash
-xattr -d com.apple.quarantine /Applications/LiveWalls.app
+sudo xattr -rd com.apple.quarantine /ruta/a/LiveWalls.app
 ```
 
 #### Método 2: Configuración del Sistema
+
 1. Intenta abrir LiveWalls (aparecerá un aviso de seguridad)
-2. Ve a **Configuración del Sistema** → **Privacidad y Seguridad**  
-3. En la sección "Seguridad", haz clic en **"Abrir de todos modos"**
+2. Ve a **Configuración del Sistema** → **Privacidad y Seguridad**
+3. Busca "LiveWalls fue bloqueado" y haz clic en **"Abrir de todas formas"**
 
 #### Método 3: Click derecho
+
 1. Haz **click derecho** en LiveWalls.app
-2. Selecciona **"Abrir"**
-3. Confirma **"Abrir"** en el diálogo de seguridad
+2. Selecciona **"Abrir"** del menú contextual
+3. Haz clic en **"Abrir"** en el diálogo de seguridad
 
-### 🛠️ Compilar desde código fuente
+### 🛠️ Compilar desde Código
 
-1. **Clonar el repositorio**:
    ```bash
    git clone https://github.com/fparrav/LiveWalls.git
    cd LiveWalls
    ```
 
-2. **Abrir en Xcode**:
    ```bash
-   open LiveWalls.xcodeproj
+   ./build.sh
    ```
 
-3. **Compilar y ejecutar**:
-   - Presiona `⌘+R` en Xcode
-   - O usa el script: `./build.sh run`
+   La app compilada estará en la carpeta `build/Debug/`.
 
-## 🔒 Permisos y Seguridad
+## 🔒 Seguridad y Privacidad
 
-### Permisos requeridos:
+### Permisos requeridos
 
-- ✅ Acceso a archivos seleccionados por el usuario
-- ✅ App Sandbox habilitado para seguridad
+- **Accesibilidad**: Para establecer el wallpaper en el escritorio
+- **Archivos y Carpetas**: Para acceder a los videos seleccionados
 
-### 🛡️ Sobre la seguridad de LiveWalls
+**LiveWalls es un proyecto 100% open source** que puedes revisar y compilar tú mismo.
 
-**LiveWalls es un proyecto 100% open source** que puedes revisar y compilar tú mismo. 
+### ¿Por qué la app no está firmada?
 
-**¿Por qué no está firmada digitalmente?**
 - La membresía de Apple Developer cuesta $99 USD/año
-- Como proyecto gratuito y open source, preferimos esos recursos para desarrollo
-- El código fuente está disponible para inspección completa
+- Este es un proyecto gratuito sin fines comerciales
+- Puedes verificar la seguridad revisando el código fuente
 
-**💡 Para máxima seguridad:**
+### Cómo verificar la seguridad
+
 1. **Revisa el código fuente** en este repositorio
-2. **Compila la aplicación** desde el código fuente (instrucciones abajo)
-3. **Verifica** que hace exactamente lo que promete
+2. **Compila tú mismo** usando Xcode
+3. **Inspecciona el build** antes de ejecutarlo
 
-**📋 Nota importante**: Este es un proyecto de código abierto sin fines de lucro. No pagamos la suscripción de Apple Developer para este tipo de aplicaciones. Si prefieres máxima seguridad, recomendamos compilar el código tú mismo siguiendo las instrucciones de abajo.
+## 🚀 Desarrollo
 
-## 🤝 Contribuir
+Para desarrolladores que quieran contribuir o entender mejor el código, consulta la documentación de desarrollo.
 
-¡Las contribuciones son bienvenidas!
+## 📄 Licencia
 
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/mi-mejora`)
-3. Commit tus cambios (`git commit -m 'Agrega mi-mejora'`)
-4. Push a la rama (`git push origin feature/mi-mejora`)
-5. Abre un Pull Request
+Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
 
-## Licencia
+## 🤝 Contribuciones
 
-Este proyecto está licenciado bajo la **MIT License** - consulta el archivo [LICENSE](LICENSE) para más detalles.
+¡Las contribuciones son bienvenidas! Por favor:
 
-## 🙏 Créditos y Agradecimientos
+1. Haz fork del repositorio
+2. Crea una rama para tu característica
+3. Realiza tus cambios
+4. Envía un pull request
 
-- **Inspiración**: Este proyecto fue inspirado por [LiveWallpaperMacOS](https://github.com/thusvill/LiveWallpaperMacOS), reimplementado desde cero en Swift/SwiftUI
-- **Desarrollado con**: Swift, SwiftUI y AVFoundation
-- **Iconos**: SF Symbols de Apple
+## ⭐ Apoyo
+
+Si te gusta LiveWalls, ¡por favor dale una estrella en GitHub! Esto ayuda a otros usuarios a descubrir el proyecto.
 
 ---
 
-**¡Transforma tu escritorio con fondos de pantalla dinámicos!** 🎉
+Hecho con ❤️ para la comunidad de macOS
