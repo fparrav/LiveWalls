@@ -21,6 +21,7 @@
 		8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D412B1F4A9000123456 /* NotificationManager.swift */; };
 		9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */; };
 		9A1B2C3D4E5F6789ABCDEF03 /* StatusBarMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */; };
+		9A1B2C3D4E5F6789ABCDEF05 /* VideoOptimizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF04 /* VideoOptimizer.swift */; };
 		AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA11112222333344440003 /* WallpaperManagerTests.swift */; };
 		AAAA11112222333344440008 /* ContentViewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA11112222333344440004 /* ContentViewUITests.swift */; };
 /* End PBXBuildFile section */
@@ -98,6 +99,7 @@
 		8B0C7D412B1F4A9000123456 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchManager.swift; sourceTree = "<group>"; };
 		9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarMenuView.swift; sourceTree = "<group>"; };
+		9A1B2C3D4E5F6789ABCDEF04 /* VideoOptimizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoOptimizer.swift; sourceTree = "<group>"; };
 		AAAA11112222333344440003 /* WallpaperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperManagerTests.swift; sourceTree = "<group>"; };
 		AAAA11112222333344440004 /* ContentViewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewUITests.swift; sourceTree = "<group>"; };
 		AAAA1111222233334444000F /* LiveWallsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveWallsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -209,6 +211,7 @@
 				8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */,
 				8B0C7D412B1F4A9000123456 /* NotificationManager.swift */,
 				8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */,
+				9A1B2C3D4E5F6789ABCDEF04 /* VideoOptimizer.swift */,
 				8B0C7D2D2B1F4A3100123456 /* Assets.xcassets */,
 				8B0C7D322B1F4A3100123456 /* LiveWalls.entitlements */,
 				8B0C7D2F2B1F4A3100123456 /* Preview Content */,
@@ -366,6 +369,7 @@
 				9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */,
 				8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */,
 				8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */,
+				9A1B2C3D4E5F6789ABCDEF05 /* VideoOptimizer.swift in Sources */,
 				8B0C7D2A2B1F4A3000123456 /* LiveWallsApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

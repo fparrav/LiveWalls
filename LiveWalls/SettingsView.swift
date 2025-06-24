@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AVFoundation
+import CoreGraphics
 
 struct SettingsView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
