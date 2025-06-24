@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
     @EnvironmentObject var launchManager: LaunchManager
     @Environment(\.dismiss) private var dismiss
+    @State private var screenSaverManager: ScreenSaverManager?
     
     // Estados locales para las configuraciones
     @State private var autoStartWallpaper: Bool
@@ -42,6 +43,8 @@ struct SettingsView: View {
         _originalIsAutoChangeEnabled = State(initialValue: autoChangeEnabled)
         _originalAutoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
         _originalLaunchAtLogin = State(initialValue: false) // Se actualizará en onAppear
+        
+        // ScreenSaverManager se inicializará en onAppear
     }
 
     var body: some View {
@@ -113,6 +116,67 @@ struct SettingsView: View {
                         .padding(12)
                     }
                     
+                    // Sección de Protector de Pantalla
+                    GroupBox("🌟 Protector de Pantalla") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Configura cómo se comporta el fondo de pantalla")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            if let screenSaverManager = screenSaverManager {
+                                Picker("Modo de funcionamiento:", selection: Binding(
+                                    get: { screenSaverManager.modoActual },
+                                    set: { screenSaverManager.cambiarModo($0) }
+                                )) {
+                                    Text("Animado siempre").tag(ModoFondoPantalla.animadoSiempre)
+                                    Text("Dinámico tipo Sonoma").tag(ModoFondoPantalla.dinamicoSonoma)
+                                }
+                                .pickerStyle(SegmentedPickerStyle())
+                                
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Estado: \(screenSaverManager.videoActivo ? "🎬 Video activo" : "🖼️ Imagen estática")")
+                                            .font(.caption)
+                                            .foregroundColor(screenSaverManager.videoActivo ? .green : .orange)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    VStack(spacing: 8) {
+                                        Button("Probar Animado") {
+                                            // Usar el video actual del wallpaper manager si existe
+                                            if let currentVideo = wallpaperManager.currentVideo {
+                                                screenSaverManager.seleccionarVideoFile(currentVideo)
+                                            }
+                                            screenSaverManager.probarModoAnimado()
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .disabled(wallpaperManager.currentVideo == nil)
+                                        
+                                        Button("Probar Dinámico") {
+                                            if let currentVideo = wallpaperManager.currentVideo {
+                                                screenSaverManager.seleccionarVideoFile(currentVideo)
+                                            }
+                                            screenSaverManager.probarModoDinamico()
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .disabled(wallpaperManager.currentVideo == nil)
+                                    }
+                                }
+                            } else {
+                                Text("Inicializando...")
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            if wallpaperManager.currentVideo == nil {
+                                Text("Selecciona un video primero para probar la funcionalidad")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                        .padding(12)
+                    }
+                    
                     // Sección de Gestión de Videos
                     GroupBox(NSLocalizedString("video_management_section", comment: "Video management section")) {
                         VStack(alignment: .leading, spacing: 12) {
@@ -170,7 +234,17 @@ struct SettingsView: View {
         }
         .frame(width: 480, height: 500)
         .onAppear {
+            // Inicializar ScreenSaverManager con wallpaperManager
+            if screenSaverManager == nil {
+                screenSaverManager = ScreenSaverManager(wallpaperManager: wallpaperManager)
+            }
+            
             cargarConfiguracionesActuales()
+            // Sincronizar video actual con ScreenSaverManager
+            if let currentVideo = wallpaperManager.currentVideo,
+               let screenSaverManager = screenSaverManager {
+                screenSaverManager.seleccionarVideoFile(currentVideo)
+            }
         }
     }
     
@@ -269,8 +343,9 @@ struct SettingsView: View {
 // MARK: - Vista previa
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
+        let wallpaperManager = WallpaperManager()
         SettingsView()
-            .environmentObject(WallpaperManager())
+            .environmentObject(wallpaperManager)
             .environmentObject(LaunchManager())
     }
 }
