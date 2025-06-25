@@ -2,16 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleShortVersionString</key>
-	<string>1.1.0</string>
-	<key>CFBundleVersion</key>
-	<string>202506200130</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
-	<key>NSUserNotificationAlertStyle</key>
-	<string>alert</string>
-	<key>NSUserNotificationUsageDescription</key>
-	<string>notification_usage_description</string>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
@@ -25,5 +17,13 @@
 		<string>zh-CN</string>
 		<string>zh-TW</string>
 	</array>
+	<key>CFBundleShortVersionString</key>
+	<string>1.2.1</string>
+	<key>CFBundleVersion</key>
+	<string>202506251753</string>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>notification_usage_description</string>
 </dict>
 </plist>
