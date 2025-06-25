@@ -98,66 +98,49 @@ jobs:
           "./build/$APP_NAME-${{ github.ref_name }}.dmg" \
           "./build/export/"
           
-    - name: 📋 Get Release Info
+    - name: 🛠️ Install git-cliff
+      run: |
+        echo "📥 Installing git-cliff..."
+        brew install git-cliff
+        
+    - name: 📋 Generate Changelog
       id: release_info
       run: |
         VERSION=${{ github.ref_name }}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         
-        # Obtener el tag anterior para generar changelog automático
+        # Obtener el tag anterior para generar changelog desde ese punto
         PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "$VERSION" | head -n 1)
         
         if [ -z "$PREVIOUS_TAG" ]; then
           echo "📝 Primer release - generando changelog completo"
-          CHANGELOG="🎉 Primera versión de LiveWalls disponible!"
+          # Para el primer release, generar changelog completo
+          CHANGELOG=$(git cliff --tag "$VERSION" --strip all)
+          
+          # Si no hay commits convencionales, usar mensaje por defecto
+          if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "## [${VERSION#v}] - $(date +%Y-%m-%d)" ]; then
+            CHANGELOG="## 🚀 Cambios en esta versión
+        
+        🎉 **Primera versión de LiveWalls disponible!**
+        
+        Esta es la versión inicial de LiveWalls, una aplicación para gestionar fondos de pantalla dinámicos en macOS."
+          fi
         else
           echo "📝 Generando changelog desde $PREVIOUS_TAG hasta $VERSION"
+          # Generar changelog solo para los commits desde el tag anterior
+          CHANGELOG=$(git cliff --tag "$VERSION" "$PREVIOUS_TAG".."$VERSION" --strip all)
           
-          # Generar changelog automático basado en conventional commits
-          CHANGELOG_CONTENT=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..$VERSION 2>/dev/null || git log --pretty=format:"- %s (%h)" --since="1 month ago")
-          
-          # Categorizar commits por tipo
-          FEATURES=$(echo "$CHANGELOG_CONTENT" | grep -E "^- (feat|feature)" | sed 's/^- //')
-          FIXES=$(echo "$CHANGELOG_CONTENT" | grep -E "^- (fix|bugfix)" | sed 's/^- //')
-          CHORES=$(echo "$CHANGELOG_CONTENT" | grep -E "^- (chore|docs|style|refactor|test)" | sed 's/^- //')
-          OTHERS=$(echo "$CHANGELOG_CONTENT" | grep -vE "^- (feat|feature|fix|bugfix|chore|docs|style|refactor|test)" | sed 's/^- //')
-          
-          # Construir changelog estructurado
-          CHANGELOG="## 🚀 Cambios en esta versión"
-          
-          if [ ! -z "$FEATURES" ]; then
-            CHANGELOG="$CHANGELOG\n\n### ✨ Nuevas características\n$FEATURES"
-          fi
-          
-          if [ ! -z "$FIXES" ]; then
-            CHANGELOG="$CHANGELOG\n\n### 🐛 Correcciones\n$FIXES"
-          fi
-          
-          if [ ! -z "$CHORES" ]; then
-            CHANGELOG="$CHANGELOG\n\n### 🔧 Mantenimiento\n$CHORES"
-          fi
-          
-          if [ ! -z "$OTHERS" ]; then
-            CHANGELOG="$CHANGELOG\n\n### 📝 Otros cambios\n$OTHERS"
-          fi
-          
-          # Si no hay commits categorizados, mostrar todos
-          if [ -z "$FEATURES$FIXES$CHORES$OTHERS" ]; then
-            CHANGELOG="## 🚀 Cambios en esta versión\n\n$CHANGELOG_CONTENT"
-          fi
-        fi
+          # Si git-cliff no encuentra commits convencionales, usar fallback
+          if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "## [${VERSION#v}] - $(date +%Y-%m-%d)" ]; then
+            echo "⚠️ No se encontraron commits convencionales, usando fallback"
+            CHANGELOG="## 🚀 Cambios en esta versión
         
-        # Verificar si existe CHANGELOG.md manual y usarlo si existe
-        if [ -f CHANGELOG.md ]; then
-          MANUAL_CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/{if(/^## \[/ && !/^## \[$VERSION\]/)exit;print}" CHANGELOG.md | head -n -1)
-          if [ ! -z "$MANUAL_CHANGELOG" ]; then
-            echo "📋 Usando changelog manual de CHANGELOG.md"
-            CHANGELOG="$MANUAL_CHANGELOG"
+        $(git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" "$PREVIOUS_TAG".."$VERSION")"
           fi
         fi
         
         echo "changelog<<EOF" >> $GITHUB_OUTPUT
-        echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
         
     - name: 🚀 Create GitHub Release
