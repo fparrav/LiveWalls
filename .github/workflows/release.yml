@@ -19,6 +19,9 @@ jobs:
     steps:
     - name: 📥 Checkout Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        fetch-tags: true
       
     - name: 🔧 Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1
