@@ -54,11 +54,27 @@
 /* Configuraciones - Información */
 "videos_saved" = "Videos guardados: %d";
 "clear_all_videos" = "Limpiar todos los videos";
+"optimize_videos_hevc" = "Optimizar videos a HEVC";
 "app_version" = "Live Walls";
 
 /* Alertas */
 "delete_all_videos_title" = "¿Eliminar todos los videos?";
 "delete_all_videos_message" = "Esta acción eliminará todos los videos guardados. ¿Deseas continuar?";
+
+/* Optimización HEVC */
+"optimize_videos_title" = "Optimizar videos a HEVC";
+"optimize_videos_message" = "Esto convertirá tus videos al formato HEVC para mejor compresión y rendimiento. Los archivos originales serán reemplazados. ¿Deseas continuar?";
+"optimize_button" = "Optimizar";
+"optimizing_videos_progress" = "Optimizando videos a HEVC";
+"processing_video" = "Procesando:";
+"progress_label" = "Progreso:";
+"optimization_completed_title" = "Optimización completada";
+"optimization_completed_message" = "%d videos han sido optimizados al formato HEVC.";
+"no_videos_to_optimize_title" = "No hay videos para optimizar";
+"no_videos_to_optimize_message" = "Todos tus videos ya están en formato HEVC.";
+"hevc_conversion_completed" = "Completado";
+"permissions_required_title" = "Permisos Requeridos";
+"permissions_required_message" = "Se requieren permisos de escritura para todos los directorios que contienen videos para reemplazarlos con versiones optimizadas.";
 
 /* Notificaciones y mensajes */
 "wallpaper_set" = "Video establecido como wallpaper";

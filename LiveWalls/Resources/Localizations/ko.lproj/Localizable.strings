@@ -54,11 +54,27 @@
 /* 설정 - 정보 */
 "videos_saved" = "저장된 비디오: %d";
 "clear_all_videos" = "모든 비디오 지우기";
+"optimize_videos_hevc" = "비디오를 HEVC로 최적화";
 "app_version" = "Live Walls";
 
 /* 경고 */
 "delete_all_videos_title" = "모든 비디오를 삭제하시겠습니까?";
 "delete_all_videos_message" = "이 작업으로 저장된 모든 비디오가 삭제됩니다. 계속하시겠습니까?";
+
+/* HEVC 최적화 */
+"optimize_videos_title" = "비디오를 HEVC로 최적화";
+"optimize_videos_message" = "더 나은 압축과 성능을 위해 비디오를 HEVC 형식으로 변환합니다. 원본 파일이 교체됩니다. 계속하시겠습니까?";
+"optimize_button" = "최적화";
+"optimizing_videos_progress" = "비디오를 HEVC로 최적화 중";
+"processing_video" = "처리 중:";
+"progress_label" = "진행률:";
+"optimization_completed_title" = "최적화 완료";
+"optimization_completed_message" = "%d개의 비디오가 HEVC 형식으로 최적화되었습니다.";
+"no_videos_to_optimize_title" = "최적화할 비디오 없음";
+"no_videos_to_optimize_message" = "모든 비디오가 이미 HEVC 형식입니다.";
+"hevc_conversion_completed" = "완료";
+"permissions_required_title" = "권한 필요";
+"permissions_required_message" = "비디오가 포함된 모든 디렉토리에 대한 쓰기 권한이 최적화된 버전으로 교체하는 데 필요합니다.";
 
 /* 알림 및 메시지 */
 "wallpaper_set" = "비디오가 배경화면으로 설정됨";

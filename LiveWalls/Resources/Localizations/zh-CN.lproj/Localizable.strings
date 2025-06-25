@@ -54,11 +54,27 @@
 /* 设置 - 信息 */
 "videos_saved" = "已保存视频：%d";
 "clear_all_videos" = "清除所有视频";
+"optimize_videos_hevc" = "优化视频为HEVC";
 "app_version" = "Live Walls";
 
 /* 警告 */
 "delete_all_videos_title" = "删除所有视频？";
 "delete_all_videos_message" = "此操作将删除所有已保存的视频。是否继续？";
+
+/* HEVC优化 */
+"optimize_videos_title" = "优化视频为HEVC";
+"optimize_videos_message" = "这将把您的视频转换为HEVC格式以获得更好的压缩和性能。原始文件将被替换。是否继续？";
+"optimize_button" = "优化";
+"optimizing_videos_progress" = "正在优化视频为HEVC";
+"processing_video" = "处理中：";
+"progress_label" = "进度：";
+"optimization_completed_title" = "优化完成";
+"optimization_completed_message" = "%d个视频已优化为HEVC格式。";
+"no_videos_to_optimize_title" = "没有视频需要优化";
+"no_videos_to_optimize_message" = "您的所有视频都已经是HEVC格式。";
+"hevc_conversion_completed" = "已完成";
+"permissions_required_title" = "需要权限";
+"permissions_required_message" = "需要对包含视频的所有目录的写入权限才能将其替换为优化版本。";
 
 /* 通知和消息 */
 "wallpaper_set" = "视频已设置为壁纸";
