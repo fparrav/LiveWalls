@@ -108,3 +108,15 @@
 /* Messages de débogage */
 "videofiles_updated_debug" = "🔄 VideoFiles mis à jour : %d vidéos";
 "names_debug" = "📝 Noms : %@";
+
+/* Duplicate video handling */
+"duplicate_video_title" = "Vidéo Dupliquée Détectée";
+"duplicate_video_message" = "La vidéo '%@' existe déjà dans votre bibliothèque sous le nom '%@'. Que souhaitez-vous faire ?";
+"duplicate_action_skip" = "Ignorer";
+"duplicate_action_replace" = "Remplacer l'Existant";
+"duplicate_action_keep_both" = "Garder les Deux";
+
+/* Import summary messages */
+"import_summary_added" = "%d vidéos ajoutées";
+"import_summary_skipped" = "%d vidéos ignorées (doublons)";
+"import_summary_replaced" = "%d vidéos remplacées";

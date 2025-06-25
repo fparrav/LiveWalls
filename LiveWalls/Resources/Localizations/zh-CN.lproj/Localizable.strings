@@ -108,3 +108,15 @@
 
 /* Notification usage description (Info.plist) */
 "notification_usage_description" = "LiveWalls는 배경화면 변경 및 중요한 오류에 대해 알려주기 위해 알림 권한이 필요합니다.";
+
+/* Duplicate video handling */
+"duplicate_video_title" = "检测到重复视频";
+"duplicate_video_message" = "视频 '%@' 已作为 '%@' 存在于您的库中。您想要做什么？";
+"duplicate_action_skip" = "跳过";
+"duplicate_action_replace" = "替换现有";
+"duplicate_action_keep_both" = "保留两者";
+
+/* Import summary messages */
+"import_summary_added" = "已添加 %d 个视频";
+"import_summary_skipped" = "已跳过 %d 个视频（重复）";
+"import_summary_replaced" = "已替换 %d 个视频";

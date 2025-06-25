@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var muteVideo: Bool
     @State private var isAutoChangeEnabled: Bool
     @State private var autoChangeIntervalMinutes: Int
+    @State private var duplicateHandlingPreference: WallpaperManager.DuplicateHandling
     
     // Estados originales para poder cancelar cambios
     @State private var originalAutoStartWallpaper: Bool
@@ -20,6 +21,7 @@ struct SettingsView: View {
     @State private var originalIsAutoChangeEnabled: Bool
     @State private var originalAutoChangeIntervalMinutes: Int
     @State private var originalLaunchAtLogin: Bool
+    @State private var originalDuplicateHandlingPreference: WallpaperManager.DuplicateHandling
     
     // Estados para el progreso de optimización HEVC
     @State private var isOptimizing = false
@@ -38,11 +40,26 @@ struct SettingsView: View {
         let autoChangeEnabled = UserDefaults.standard.bool(forKey: "AutoChangeEnabled")
         let savedInterval = UserDefaults.standard.double(forKey: "AutoChangeInterval")
         
+        // Cargar preferencia de manejo de duplicados
+        let duplicateHandlingRawValue = UserDefaults.standard.string(forKey: "DuplicateHandlingPreference") ?? "askAlways"
+        let duplicateHandling: WallpaperManager.DuplicateHandling
+        switch duplicateHandlingRawValue {
+        case "skip":
+            duplicateHandling = .skip
+        case "replace":
+            duplicateHandling = .replace
+        case "keepBoth":
+            duplicateHandling = .keepBoth
+        default:
+            duplicateHandling = .skip // Default to skip for "askAlways" or unknown values
+        }
+        
         // Estados actuales
         _autoStartWallpaper = State(initialValue: autoStart)
         _muteVideo = State(initialValue: mute)
         _isAutoChangeEnabled = State(initialValue: autoChangeEnabled)
         _autoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
+        _duplicateHandlingPreference = State(initialValue: duplicateHandling)
         
         // Estados originales para poder cancelar
         _originalAutoStartWallpaper = State(initialValue: autoStart)
@@ -50,6 +67,7 @@ struct SettingsView: View {
         _originalIsAutoChangeEnabled = State(initialValue: autoChangeEnabled)
         _originalAutoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
         _originalLaunchAtLogin = State(initialValue: false) // Se actualizará en onAppear
+        _originalDuplicateHandlingPreference = State(initialValue: duplicateHandling)
     }
 
     var body: some View {
@@ -165,6 +183,8 @@ struct SettingsView: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
+                duplicateHandlingSection
+                
                 Button(NSLocalizedString("optimize_videos_hevc", comment: "Optimize videos to HEVC")) {
                     optimizarVideosAHEVC()
                 }
@@ -180,6 +200,28 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $isOptimizing) {
             optimizationProgressSheet
+        }
+    }
+    
+    private var duplicateHandlingSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(NSLocalizedString("duplicate_handling_title", comment: "Duplicate handling title"))
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            HStack {
+                Text(NSLocalizedString("duplicate_handling_description", comment: "Duplicate handling description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Picker("", selection: $duplicateHandlingPreference) {
+                    Text(NSLocalizedString("duplicate_preference_skip", comment: "Skip duplicates")).tag(WallpaperManager.DuplicateHandling.skip)
+                    Text(NSLocalizedString("duplicate_preference_replace", comment: "Replace existing")).tag(WallpaperManager.DuplicateHandling.replace)
+                    Text(NSLocalizedString("duplicate_preference_keep_both", comment: "Keep both")).tag(WallpaperManager.DuplicateHandling.keepBoth)
+                }
+                .pickerStyle(MenuPickerStyle())
+                .frame(width: 150)
+            }
         }
     }
     
@@ -239,12 +281,26 @@ struct SettingsView: View {
         self.autoStartWallpaper = UserDefaults.standard.bool(forKey: "AutoStartWallpaper")
         self.muteVideo = UserDefaults.standard.bool(forKey: "MuteVideo")
         
+        // Cargar preferencia de manejo de duplicados
+        let duplicateHandlingRawValue = UserDefaults.standard.string(forKey: "DuplicateHandlingPreference") ?? "askAlways"
+        switch duplicateHandlingRawValue {
+        case "skip":
+            self.duplicateHandlingPreference = .skip
+        case "replace":
+            self.duplicateHandlingPreference = .replace
+        case "keepBoth":
+            self.duplicateHandlingPreference = .keepBoth
+        default:
+            self.duplicateHandlingPreference = .skip // Default to skip for "askAlways" or unknown values
+        }
+        
         // Guardar estados originales para poder cancelar
         self.originalAutoStartWallpaper = autoStartWallpaper
         self.originalMuteVideo = muteVideo
         self.originalIsAutoChangeEnabled = isAutoChangeEnabled
         self.originalAutoChangeIntervalMinutes = autoChangeIntervalMinutes
         self.originalLaunchAtLogin = launchManager.isLaunchAtLoginEnabled
+        self.originalDuplicateHandlingPreference = duplicateHandlingPreference
     }
     
     /// Guarda todas las configuraciones en UserDefaults y sincroniza con los managers
@@ -254,6 +310,18 @@ struct SettingsView: View {
         UserDefaults.standard.set(muteVideo, forKey: "MuteVideo")
         UserDefaults.standard.set(isAutoChangeEnabled, forKey: "AutoChangeEnabled")
         UserDefaults.standard.set(TimeInterval(autoChangeIntervalMinutes * 60), forKey: "AutoChangeInterval")
+        
+        // Guardar preferencia de manejo de duplicados
+        let duplicateHandlingRawValue: String
+        switch duplicateHandlingPreference {
+        case .skip:
+            duplicateHandlingRawValue = "skip"
+        case .replace:
+            duplicateHandlingRawValue = "replace"
+        case .keepBoth:
+            duplicateHandlingRawValue = "keepBoth"
+        }
+        UserDefaults.standard.set(duplicateHandlingRawValue, forKey: "DuplicateHandlingPreference")
         
         // Sincronizar con WallpaperManager
         wallpaperManager.isAutoChangeEnabled = isAutoChangeEnabled
@@ -273,6 +341,7 @@ struct SettingsView: View {
         self.muteVideo = originalMuteVideo
         self.isAutoChangeEnabled = originalIsAutoChangeEnabled
         self.autoChangeIntervalMinutes = originalAutoChangeIntervalMinutes
+        self.duplicateHandlingPreference = originalDuplicateHandlingPreference
         
         // Restaurar launch at login si cambió
         if launchManager.isLaunchAtLoginEnabled != originalLaunchAtLogin {

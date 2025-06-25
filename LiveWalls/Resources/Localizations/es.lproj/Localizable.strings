@@ -108,3 +108,23 @@
 /* Mensajes de debug */
 "videofiles_updated_debug" = "🔄 VideoFiles actualizado: %d videos";
 "names_debug" = "📝 Nombres: %@";
+
+/* Manejo de videos duplicados */
+"duplicate_video_title" = "Video Duplicado Detectado";
+"duplicate_video_message" = "El video '%@' ya existe en tu biblioteca como '%@'. ¿Qué te gustaría hacer?";
+"duplicate_action_skip" = "Omitir";
+"duplicate_action_replace" = "Reemplazar Existente";
+"duplicate_action_keep_both" = "Mantener Ambos";
+
+/* Mensajes de resumen de importación */
+"import_completed_title" = "Importación Completada";
+"import_summary_added" = "%d videos agregados";
+"import_summary_skipped" = "%d videos omitidos (duplicados)";
+"import_summary_replaced" = "%d videos reemplazados";
+
+/* Configuración de manejo de duplicados */
+"duplicate_handling_title" = "Videos Duplicados";
+"duplicate_handling_description" = "Al importar videos duplicados:";
+"duplicate_preference_skip" = "Omitir duplicados";
+"duplicate_preference_replace" = "Reemplazar existente";
+"duplicate_preference_keep_both" = "Mantener ambos";

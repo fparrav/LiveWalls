@@ -82,12 +82,163 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Video Management
     
+    // MARK: - Duplicate Detection
+    
+    /// Enum para las opciones de manejo de duplicados
+    enum DuplicateHandling: CaseIterable {
+        case skip
+        case replace
+        case keepBoth
+        
+        var localizedString: String {
+            switch self {
+            case .skip:
+                return NSLocalizedString("duplicate_action_skip", comment: "Skip duplicate video")
+            case .replace:
+                return NSLocalizedString("duplicate_action_replace", comment: "Replace existing video")
+            case .keepBoth:
+                return NSLocalizedString("duplicate_action_keep_both", comment: "Keep both videos")
+            }
+        }
+    }
+    
+    /// Verifica si una URL representa un video duplicado basado en la ruta del archivo
+    /// - Parameter url: URL a verificar
+    /// - Returns: true si ya existe un video con la misma ruta
+    private func isDuplicateByURL(_ url: URL) -> Bool {
+        let normalizedPath = url.standardizedFileURL.path
+        return videoFiles.contains { videoFile in
+            let existingPath = videoFile.url.standardizedFileURL.path
+            return existingPath == normalizedPath
+        }
+    }
+    
+    /// Verifica si una URL representa un video duplicado basado en bookmark data
+    /// - Parameter url: URL a verificar
+    /// - Returns: true si ya existe un video con bookmark data equivalente
+    private func isDuplicateByBookmark(_ bookmarkData: Data) -> Bool {
+        return videoFiles.contains { videoFile in
+            guard let existingBookmarkData = videoFile.bookmarkData else { return false }
+            return existingBookmarkData == bookmarkData
+        }
+    }
+    
+    /// Encuentra un video duplicado existente para la URL dada
+    /// - Parameter url: URL del nuevo video
+    /// - Returns: VideoFile existente que es duplicado, o nil si no hay duplicados
+    private func findDuplicateVideo(for url: URL) -> VideoFile? {
+        let normalizedPath = url.standardizedFileURL.path
+        return videoFiles.first { videoFile in
+            let existingPath = videoFile.url.standardizedFileURL.path
+            return existingPath == normalizedPath
+        }
+    }
+    
+    /// Muestra un diálogo para manejar un video duplicado
+    /// - Parameters:
+    ///   - originalVideo: VideoFile existente en la biblioteca
+    ///   - newURL: URL del nuevo video que es duplicado
+    /// - Returns: Acción elegida por el usuario
+    private func showDuplicateDialog(originalVideo: VideoFile, newURL: URL) -> DuplicateHandling {
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("duplicate_video_title", comment: "Duplicate video detected")
+        alert.informativeText = String(format: NSLocalizedString("duplicate_video_message", comment: "Duplicate video message"), newURL.lastPathComponent, originalVideo.name)
+        alert.alertStyle = .informational
+        alert.icon = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: nil)
+        
+        // Agregar botones en orden inverso (NSAlert los muestra de derecha a izquierda)
+        alert.addButton(withTitle: DuplicateHandling.keepBoth.localizedString)
+        alert.addButton(withTitle: DuplicateHandling.replace.localizedString)
+        alert.addButton(withTitle: DuplicateHandling.skip.localizedString)
+        
+        let response = alert.runModal()
+        
+        // NSAlert.ButtonType.alertFirstButtonReturn corresponde al último botón agregado
+        switch response {
+        case .alertFirstButtonReturn:
+            return .keepBoth
+        case .alertSecondButtonReturn:
+            return .replace
+        case .alertThirdButtonReturn:
+            return .skip
+        default:
+            return .skip // Default fallback
+        }
+    }
+    
+    /// Genera un nombre único para un video duplicado
+    /// - Parameter originalName: Nombre original del video
+    /// - Returns: Nuevo nombre único
+    private func generateUniqueName(for originalName: String) -> String {
+        let baseName = originalName
+        var counter = 2
+        var candidateName = "\(baseName) (\(counter))"
+        
+        while videoFiles.contains(where: { $0.name == candidateName }) {
+            counter += 1
+            candidateName = "\(baseName) (\(counter))"
+        }
+        
+        return candidateName
+    }
+    
     /// Agrega archivos de video a la lista de wallpapers disponibles
     /// - Parameter urls: URLs de los archivos de video a agregar
     func addVideoFiles(urls: [URL]) {
         appLogger.info("\(String(format: NSLocalizedString("adding_video_files", comment: "Adding video files"), urls.count), privacy: .public)")
         
+        var addedCount = 0
+        var skippedCount = 0
+        var replacedCount = 0
+        
         for url in urls {
+            // Verificar si es un duplicado antes de procesar
+            if let existingVideo = findDuplicateVideo(for: url) {
+                appLogger.info("🔍 Duplicado detectado: \(url.lastPathComponent) ya existe como '\(existingVideo.name)'")
+                
+                // Verificar si hay una preferencia guardada
+                let duplicateHandlingRawValue = UserDefaults.standard.string(forKey: "DuplicateHandlingPreference") ?? "askAlways"
+                let userChoice: DuplicateHandling
+                
+                if duplicateHandlingRawValue == "askAlways" {
+                    // Mostrar diálogo para manejar duplicado
+                    userChoice = showDuplicateDialog(originalVideo: existingVideo, newURL: url)
+                } else {
+                    // Usar preferencia guardada
+                    switch duplicateHandlingRawValue {
+                    case "skip":
+                        userChoice = .skip
+                    case "replace":
+                        userChoice = .replace
+                    case "keepBoth":
+                        userChoice = .keepBoth
+                    default:
+                        userChoice = .skip
+                    }
+                    appLogger.info("🔧 Usando preferencia guardada: \(duplicateHandlingRawValue)")
+                }
+                
+                switch userChoice {
+                case .skip:
+                    appLogger.info("⏭️ Saltando duplicado: \(url.lastPathComponent)")
+                    skippedCount += 1
+                    continue
+                    
+                case .replace:
+                    appLogger.info("🔄 Reemplazando existente: \(existingVideo.name)")
+                    // Remover el video existente y continuar con el procesamiento normal
+                    DispatchQueue.main.async {
+                        self.videoFiles.removeAll { $0.id == existingVideo.id }
+                    }
+                    replacedCount += 1
+                    
+                case .keepBoth:
+                    appLogger.info("📂 Manteniendo ambos: \(url.lastPathComponent)")
+                    // Continuar con procesamiento normal pero con nombre único
+                    break
+                }
+            }
+            
             // Verificar si ya tenemos acceso al archivo
             var accessGranted = false
             
@@ -118,9 +269,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 // Generar miniatura del video
                 let thumbnail = generateThumbnail(for: url)
                 
+                // Determinar el nombre del video (único si es necesario)
+                var videoName = url.deletingPathExtension().lastPathComponent
+                if let existingVideo = findDuplicateVideo(for: url),
+                   videoFiles.contains(where: { $0.id == existingVideo.id }) {
+                    // Solo si el video existente aún está en la lista (no fue reemplazado)
+                    videoName = generateUniqueName(for: videoName)
+                }
+                
                 let videoFile = VideoFile(
                     url: url,
-                    name: url.deletingPathExtension().lastPathComponent,
+                    name: videoName,
                     thumbnailData: thumbnail,
                     bookmarkData: bookmarkData
                 )
@@ -139,6 +298,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     print(String(format: NSLocalizedString("names_debug", comment: "Names debug"), self.videoFiles.map { $0.name }.joined(separator: ", ")))
                 }
                 
+                addedCount += 1
+                
                 // Detener acceso temporal ya que tenemos el bookmark
                 if accessGranted {
                     url.stopAccessingSecurityScopedResource()
@@ -149,6 +310,27 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 if accessGranted {
                     url.stopAccessingSecurityScopedResource()
                 }
+            }
+        }
+        
+        // Mostrar resumen de la importación
+        DispatchQueue.main.async {
+            var summaryMessage = ""
+            if addedCount > 0 {
+                summaryMessage += String(format: NSLocalizedString("import_summary_added", comment: "Import summary added"), addedCount)
+            }
+            if skippedCount > 0 {
+                if !summaryMessage.isEmpty { summaryMessage += "\n" }
+                summaryMessage += String(format: NSLocalizedString("import_summary_skipped", comment: "Import summary skipped"), skippedCount)
+            }
+            if replacedCount > 0 {
+                if !summaryMessage.isEmpty { summaryMessage += "\n" }
+                summaryMessage += String(format: NSLocalizedString("import_summary_replaced", comment: "Import summary replaced"), replacedCount)
+            }
+            
+            if !summaryMessage.isEmpty {
+                self.notificationManager.showMessage(title: NSLocalizedString("import_completed_title", comment: "Import completed"), message: summaryMessage)
+                self.appLogger.info("📊 Resumen de importación: \(summaryMessage)")
             }
         }
     }
