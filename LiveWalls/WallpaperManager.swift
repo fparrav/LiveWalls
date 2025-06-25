@@ -62,6 +62,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         loadCurrentVideo()
         loadAutoChangeSettings()
         setupScreenChangeNotifications()
+        setupWorkspaceNotifications()
         setupTerminationHandling()
         
         // Auto-start solo si está configurado
@@ -746,6 +747,37 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             if self.isPlayingWallpaper {
                 self.startWallpaperSafe() // Recrear ventanas para nueva configuración
             }
+        }
+    }
+
+    private func setupWorkspaceNotifications() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(willSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(didWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func willSleep(notification: NSNotification) {
+        appLogger.info("💤 El sistema va a suspenderse. Deteniendo temporalmente el wallpaper.")
+        // No es necesario detenerlo explícitamente, el sistema lo pausa.
+        // Si se detiene aquí, isPlayingWallpaper sería falso al despertar.
+    }
+
+    @objc private func didWake(notification: NSNotification) {
+        appLogger.info("🌅 El sistema se ha despertado.")
+        // Si el wallpaper estaba activo antes de suspender, lo reiniciamos.
+        if isPlayingWallpaper {
+            appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
+            // Se reinicia inmediatamente para una transición más rápida.
+            self.startWallpaperSafe()
         }
     }
     

@@ -57,6 +57,9 @@ validate_version() {
     fi
 }
 
+# Variable global para el build number
+BUILD_NUMBER=""
+
 # Función para actualizar Info.plist
 update_info_plist() {
     local version=$1
@@ -69,14 +72,34 @@ update_info_plist() {
     
     echo -e "${BLUE}📝 Actualizando Info.plist...${NC}"
     
-    # Actualizar CFBundleShortVersionString
+    # Actualizar CFBundleShortVersionString (versión de marketing)
     plutil -replace CFBundleShortVersionString -string "$version" "$plist_path"
     
     # Actualizar CFBundleVersion (usar timestamp para build number)
-    local build_number=$(date +%Y%m%d%H%M)
-    plutil -replace CFBundleVersion -string "$build_number" "$plist_path"
+    plutil -replace CFBundleVersion -string "$BUILD_NUMBER" "$plist_path"
     
-    echo -e "${GREEN}✅ Version actualizada a $version (build: $build_number)${NC}"
+    echo -e "${GREEN}✅ Info.plist actualizado a $version (build: $BUILD_NUMBER)${NC}"
+}
+
+# Función para actualizar el archivo de proyecto de Xcode
+update_xcode_project() {
+    local version=$1
+    local build_number=$2
+    local project_file="LiveWalls.xcodeproj/project.pbxproj"
+
+    if [ ! -f "$project_file" ]; then
+        echo -e "${YELLOW}⚠️  project.pbxproj no encontrado, saltando actualización...${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}📝 Actualizando proyecto de Xcode...${NC}"
+
+    # Usar sed para actualizar las versiones en todas las configuraciones (Debug/Release)
+    # La opción -i '' es para la compatibilidad con sed de macOS (BSD)
+    sed -i '' "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = $version;/g" "$project_file"
+    sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = $build_number;/g" "$project_file"
+
+    echo -e "${GREEN}✅ Proyecto de Xcode actualizado a $version (build: $build_number)${NC}"
 }
 
 # Verificar argumentos
@@ -125,13 +148,17 @@ fi
 
 echo -e "${BLUE}🚀 Creando release $TAG${NC}"
 
-# Actualizar Info.plist
-update_info_plist "$VERSION"
+# Generar BUILD_NUMBER antes de usarlo
+BUILD_NUMBER=$(date +%Y%m%d%H%M)
 
-# Commitear cambios en Info.plist si hay
+# Actualizar Info.plist y el proyecto de Xcode
+update_info_plist "$VERSION"
+update_xcode_project "$VERSION" "$BUILD_NUMBER"
+
+# Commitear cambios de versión si los hay
 if [ -n "$(git status --porcelain)" ]; then
     echo -e "${BLUE}📦 Commiteando actualización de versión...${NC}"
-    git add LiveWalls/Info.plist
+    git add LiveWalls/Info.plist LiveWalls.xcodeproj/project.pbxproj
     git commit -m "🔖 chore: bump version to $VERSION"
 fi
 
