@@ -105,6 +105,8 @@ jobs:
         
     - name: 📋 Generate Changelog
       id: release_info
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         VERSION=${{ github.ref_name }}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -115,7 +117,7 @@ jobs:
         if [ -z "$PREVIOUS_TAG" ]; then
           echo "📝 Primer release - generando changelog completo"
           # Para el primer release, generar changelog completo
-          CHANGELOG=$(git cliff --tag "$VERSION" --strip all)
+          CHANGELOG=$(git cliff --tag "$VERSION" --strip all --github-token "$GITHUB_TOKEN")
           
           # Si no hay commits convencionales, usar mensaje por defecto
           if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "## [${VERSION#v}] - $(date +%Y-%m-%d)" ]; then
@@ -128,7 +130,7 @@ jobs:
         else
           echo "📝 Generando changelog desde $PREVIOUS_TAG hasta $VERSION"
           # Generar changelog solo para los commits desde el tag anterior
-          CHANGELOG=$(git cliff --tag "$VERSION" "$PREVIOUS_TAG".."$VERSION" --strip all)
+          CHANGELOG=$(git cliff --tag "$VERSION" "$PREVIOUS_TAG".."$VERSION" --strip all --github-token "$GITHUB_TOKEN")
           
           # Si git-cliff no encuentra commits convencionales, usar fallback
           if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "## [${VERSION#v}] - $(date +%Y-%m-%d)" ]; then

@@ -54,6 +54,5 @@ topo_order = false
 sort_commits = "oldest"
 
 [remote.github]
-owner = "FelipeGarVaz"
+owner = "fparrav"
 repo = "LiveWalls"
-token = ""
