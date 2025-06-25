@@ -114,12 +114,33 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
-# Verificar que el working tree esté limpio
-if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${RED}❌ Error: Hay cambios sin commitear${NC}"
-    echo "   Commit todos los cambios antes de crear un release"
-    git status --short
+# Verificar que el working tree esté limpio (excepto cambios de versión previos)
+STAGED_CHANGES=$(git diff --cached --name-only)
+UNSTAGED_CHANGES=$(git diff --name-only)
+VERSION_FILES="LiveWalls/Info.plist LiveWalls.xcodeproj/project.pbxproj"
+
+# Verificar cambios no relacionados con versioning
+NON_VERSION_CHANGES=$(git status --porcelain | grep -v -E "^\s*[MA]\s+(LiveWalls/Info\.plist|LiveWalls\.xcodeproj/project\.pbxproj)$" || true)
+
+if [ -n "$NON_VERSION_CHANGES" ]; then
+    echo -e "${RED}❌ Error: Hay cambios sin commitear no relacionados con versioning${NC}"
+    echo "   Commit todos los cambios antes de crear un release, excepto Info.plist y project.pbxproj"
+    echo ""
+    echo "Cambios detectados:"
+    echo "$NON_VERSION_CHANGES"
     exit 1
+fi
+
+# Mostrar cambios de versión previos si existen
+if [ -n "$STAGED_CHANGES" ] || [ -n "$UNSTAGED_CHANGES" ]; then
+    echo -e "${YELLOW}⚠️  Se detectaron cambios previos de versioning que serán sobrescritos:${NC}"
+    if [ -n "$STAGED_CHANGES" ]; then
+        echo "  📁 Staged: $STAGED_CHANGES"
+    fi
+    if [ -n "$UNSTAGED_CHANGES" ]; then
+        echo "  📝 Modified: $UNSTAGED_CHANGES"
+    fi
+    echo ""
 fi
 
 # Determinar versión
@@ -138,6 +159,21 @@ else
     fi
 fi
 
+# Mostrar información y solicitar confirmación
+echo ""
+echo -e "${BLUE}📋 Información del release:${NC}"
+echo "  🏷️  Tag: v$VERSION"
+echo "  📁 Última versión: $(git tag -l 'v*.*.*' | sort -V | tail -n1 || echo 'ninguna')"
+echo "  📝 Se actualizarán: Info.plist y project.pbxproj"
+echo "  🚀 Se creará y hará push del tag v$VERSION"
+echo ""
+echo -e "${YELLOW}⚠️  ¿Continuar con la creación del release v$VERSION? (y/N)${NC}"
+read -r response
+if [[ ! "$response" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+    echo -e "${BLUE}🚫 Release cancelado${NC}"
+    exit 0
+fi
+
 TAG="v$VERSION"
 
 # Verificar que el tag no exista
@@ -150,6 +186,7 @@ echo -e "${BLUE}🚀 Creando release $TAG${NC}"
 
 # Generar BUILD_NUMBER antes de usarlo
 BUILD_NUMBER=$(date +%Y%m%d%H%M)
+echo -e "${BLUE}🔢 Build number generado: $BUILD_NUMBER${NC}"
 
 # Actualizar Info.plist y el proyecto de Xcode
 update_info_plist "$VERSION"
@@ -158,7 +195,8 @@ update_xcode_project "$VERSION" "$BUILD_NUMBER"
 # Commitear cambios de versión si los hay
 if [ -n "$(git status --porcelain)" ]; then
     echo -e "${BLUE}📦 Commiteando actualización de versión...${NC}"
-    git add LiveWalls/Info.plist LiveWalls.xcodeproj/project.pbxproj
+    # Usar -f para forzar la adición de archivos que pueden estar en .gitignore
+    git add -f LiveWalls/Info.plist LiveWalls.xcodeproj/project.pbxproj
     git commit -m "🔖 chore: bump version to $VERSION"
 fi
 
