@@ -24,7 +24,7 @@ struct LiveWallsApp: App {
                 .onAppear {
                     // Configurar el AppDelegate después de que la vista aparezca
                     appDelegate.wallpaperManager = wallpaperManager
-                    appLogger.info("📱 Ventana principal apareció - manteniendo política regular")
+                    appLogger.info("📱 Ventana principal apareció - manteniendo política accessory")
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -46,13 +46,13 @@ struct LiveWallsApp: App {
         
         // Configuración inicial de la aplicación
         DispatchQueue.main.async {
-            // Iniciar como aplicación regular para permitir ventana principal
-            NSApp.setActivationPolicy(.regular)
+            // Iniciar como aplicación accessory para mantener comportamiento de background
+            NSApp.setActivationPolicy(.accessory)
             
             // Configurar comportamiento inicial
             appLogger.info("🔧 Configurando comportamiento inicial de ventanas")
             
-            appLogger.info("✅ Política de activación regular configurada - app lista para mostrar ventanas")
+            appLogger.info("✅ Política de activación accessory configurada - app sin icono en dock")
         }
     }
 }

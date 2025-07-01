@@ -85,7 +85,7 @@ struct StatusBarMenuView: View {
             
             // Activar app y crear ventana con SwiftUI - simple y directo
             self.logger.info("🆕 Creando nueva ventana con SwiftUI")
-            NSApp.setActivationPolicy(.regular)
+            NSApp.setActivationPolicy(.accessory)
             NSApp.activate(ignoringOtherApps: true)
             self.openWindow(id: "main")
         }
