@@ -57,6 +57,9 @@ validate_version() {
     fi
 }
 
+# Variable global para el build number
+BUILD_NUMBER=""
+
 # Función para actualizar Info.plist
 update_info_plist() {
     local version=$1
@@ -69,14 +72,34 @@ update_info_plist() {
     
     echo -e "${BLUE}📝 Actualizando Info.plist...${NC}"
     
-    # Actualizar CFBundleShortVersionString
+    # Actualizar CFBundleShortVersionString (versión de marketing)
     plutil -replace CFBundleShortVersionString -string "$version" "$plist_path"
     
     # Actualizar CFBundleVersion (usar timestamp para build number)
-    local build_number=$(date +%Y%m%d%H%M)
-    plutil -replace CFBundleVersion -string "$build_number" "$plist_path"
+    plutil -replace CFBundleVersion -string "$BUILD_NUMBER" "$plist_path"
     
-    echo -e "${GREEN}✅ Version actualizada a $version (build: $build_number)${NC}"
+    echo -e "${GREEN}✅ Info.plist actualizado a $version (build: $BUILD_NUMBER)${NC}"
+}
+
+# Función para actualizar el archivo de proyecto de Xcode
+update_xcode_project() {
+    local version=$1
+    local build_number=$2
+    local project_file="LiveWalls.xcodeproj/project.pbxproj"
+
+    if [ ! -f "$project_file" ]; then
+        echo -e "${YELLOW}⚠️  project.pbxproj no encontrado, saltando actualización...${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}📝 Actualizando proyecto de Xcode...${NC}"
+
+    # Usar sed para actualizar las versiones en todas las configuraciones (Debug/Release)
+    # La opción -i '' es para la compatibilidad con sed de macOS (BSD)
+    sed -i '' "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = $version;/g" "$project_file"
+    sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = $build_number;/g" "$project_file"
+
+    echo -e "${GREEN}✅ Proyecto de Xcode actualizado a $version (build: $build_number)${NC}"
 }
 
 # Verificar argumentos
@@ -91,12 +114,33 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
-# Verificar que el working tree esté limpio
-if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${RED}❌ Error: Hay cambios sin commitear${NC}"
-    echo "   Commit todos los cambios antes de crear un release"
-    git status --short
+# Verificar que el working tree esté limpio (excepto cambios de versión previos)
+STAGED_CHANGES=$(git diff --cached --name-only)
+UNSTAGED_CHANGES=$(git diff --name-only)
+VERSION_FILES="LiveWalls/Info.plist LiveWalls.xcodeproj/project.pbxproj"
+
+# Verificar cambios no relacionados con versioning
+NON_VERSION_CHANGES=$(git status --porcelain | grep -v -E "^\s*[MA]\s+(LiveWalls/Info\.plist|LiveWalls\.xcodeproj/project\.pbxproj)$" || true)
+
+if [ -n "$NON_VERSION_CHANGES" ]; then
+    echo -e "${RED}❌ Error: Hay cambios sin commitear no relacionados con versioning${NC}"
+    echo "   Commit todos los cambios antes de crear un release, excepto Info.plist y project.pbxproj"
+    echo ""
+    echo "Cambios detectados:"
+    echo "$NON_VERSION_CHANGES"
     exit 1
+fi
+
+# Mostrar cambios de versión previos si existen
+if [ -n "$STAGED_CHANGES" ] || [ -n "$UNSTAGED_CHANGES" ]; then
+    echo -e "${YELLOW}⚠️  Se detectaron cambios previos de versioning que serán sobrescritos:${NC}"
+    if [ -n "$STAGED_CHANGES" ]; then
+        echo "  📁 Staged: $STAGED_CHANGES"
+    fi
+    if [ -n "$UNSTAGED_CHANGES" ]; then
+        echo "  📝 Modified: $UNSTAGED_CHANGES"
+    fi
+    echo ""
 fi
 
 # Determinar versión
@@ -115,6 +159,21 @@ else
     fi
 fi
 
+# Mostrar información y solicitar confirmación
+echo ""
+echo -e "${BLUE}📋 Información del release:${NC}"
+echo "  🏷️  Tag: v$VERSION"
+echo "  📁 Última versión: $(git tag -l 'v*.*.*' | sort -V | tail -n1 || echo 'ninguna')"
+echo "  📝 Se actualizarán: Info.plist y project.pbxproj"
+echo "  🚀 Se creará y hará push del tag v$VERSION"
+echo ""
+echo -e "${YELLOW}⚠️  ¿Continuar con la creación del release v$VERSION? (y/N)${NC}"
+read -r response
+if [[ ! "$response" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+    echo -e "${BLUE}🚫 Release cancelado${NC}"
+    exit 0
+fi
+
 TAG="v$VERSION"
 
 # Verificar que el tag no exista
@@ -125,13 +184,19 @@ fi
 
 echo -e "${BLUE}🚀 Creando release $TAG${NC}"
 
-# Actualizar Info.plist
-update_info_plist "$VERSION"
+# Generar BUILD_NUMBER antes de usarlo
+BUILD_NUMBER=$(date +%Y%m%d%H%M)
+echo -e "${BLUE}🔢 Build number generado: $BUILD_NUMBER${NC}"
 
-# Commitear cambios en Info.plist si hay
+# Actualizar Info.plist y el proyecto de Xcode
+update_info_plist "$VERSION"
+update_xcode_project "$VERSION" "$BUILD_NUMBER"
+
+# Commitear cambios de versión si los hay
 if [ -n "$(git status --porcelain)" ]; then
     echo -e "${BLUE}📦 Commiteando actualización de versión...${NC}"
-    git add LiveWalls/Info.plist
+    # Usar -f para forzar la adición de archivos que pueden estar en .gitignore
+    git add -f LiveWalls/Info.plist LiveWalls.xcodeproj/project.pbxproj
     git commit -m "🔖 chore: bump version to $VERSION"
 fi
 

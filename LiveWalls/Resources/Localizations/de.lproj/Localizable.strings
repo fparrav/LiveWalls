@@ -54,11 +54,27 @@
 /* Einstellungen - Informationen */
 "videos_saved" = "Gespeicherte Videos: %d";
 "clear_all_videos" = "Alle Videos löschen";
+"optimize_videos_hevc" = "Videos zu HEVC optimieren";
 "app_version" = "Live Walls";
 
 /* Warnungen */
 "delete_all_videos_title" = "Alle Videos löschen?";
 "delete_all_videos_message" = "Diese Aktion löscht alle gespeicherten Videos. Möchten Sie fortfahren?";
+
+/* HEVC-Optimierung */
+"optimize_videos_title" = "Videos zu HEVC optimieren";
+"optimize_videos_message" = "Dies konvertiert Ihre Videos in das HEVC-Format für bessere Kompression und Leistung. Originaldateien werden ersetzt. Möchten Sie fortfahren?";
+"optimize_button" = "Optimieren";
+"optimizing_videos_progress" = "Videos werden zu HEVC optimiert";
+"processing_video" = "Verarbeitung:";
+"progress_label" = "Fortschritt:";
+"optimization_completed_title" = "Optimierung abgeschlossen";
+"optimization_completed_message" = "%d Videos wurden in das HEVC-Format optimiert.";
+"no_videos_to_optimize_title" = "Keine Videos zu optimieren";
+"no_videos_to_optimize_message" = "Alle Ihre Videos sind bereits im HEVC-Format.";
+"hevc_conversion_completed" = "Abgeschlossen";
+"permissions_required_title" = "Berechtigungen Erforderlich";
+"permissions_required_message" = "Schreibberechtigungen sind für alle Verzeichnisse erforderlich, die Videos enthalten, um sie durch optimierte Versionen zu ersetzen.";
 
 /* Benachrichtigungen und Nachrichten */
 "wallpaper_set" = "Video als Hintergrundbild festgelegt";
@@ -92,3 +108,15 @@
 
 /* Notification usage description (Info.plist) */
 "notification_usage_description" = "LiveWalls는 배경화면 변경 및 중요한 오류에 대해 알려주기 위해 알림 권한이 필요합니다.";
+
+/* Duplicate video handling */
+"duplicate_video_title" = "Video-Duplikat Erkannt";
+"duplicate_video_message" = "Das Video '%@' existiert bereits in Ihrer Bibliothek als '%@'. Was möchten Sie tun?";
+"duplicate_action_skip" = "Überspringen";
+"duplicate_action_replace" = "Vorhandenes Ersetzen";
+"duplicate_action_keep_both" = "Beide Behalten";
+
+/* Import summary messages */
+"import_summary_added" = "%d Videos hinzugefügt";
+"import_summary_skipped" = "%d Videos übersprungen (Duplikate)";
+"import_summary_replaced" = "%d Videos ersetzt";

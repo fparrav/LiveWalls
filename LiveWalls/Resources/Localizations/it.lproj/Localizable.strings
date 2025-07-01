@@ -54,11 +54,27 @@
 /* Impostazioni - Informazioni */
 "videos_saved" = "Video salvati: %d";
 "clear_all_videos" = "Cancella tutti i video";
+"optimize_videos_hevc" = "Ottimizza video in HEVC";
 "app_version" = "Live Walls";
 
 /* Avvisi */
 "delete_all_videos_title" = "Eliminare tutti i video?";
 "delete_all_videos_message" = "Questa azione eliminerà tutti i video salvati. Vuoi continuare?";
+
+/* Ottimizzazione HEVC */
+"optimize_videos_title" = "Ottimizza video in HEVC";
+"optimize_videos_message" = "Questo convertirà i tuoi video nel formato HEVC per una migliore compressione e prestazioni. I file originali verranno sostituiti. Vuoi continuare?";
+"optimize_button" = "Ottimizza";
+"optimizing_videos_progress" = "Ottimizzazione video in HEVC";
+"processing_video" = "Elaborazione:";
+"progress_label" = "Progresso:";
+"optimization_completed_title" = "Ottimizzazione completata";
+"optimization_completed_message" = "%d video sono stati ottimizzati nel formato HEVC.";
+"no_videos_to_optimize_title" = "Nessun video da ottimizzare";
+"no_videos_to_optimize_message" = "Tutti i tuoi video sono già nel formato HEVC.";
+"hevc_conversion_completed" = "Completato";
+"permissions_required_title" = "Permessi Richiesti";
+"permissions_required_message" = "Sono richiesti permessi di scrittura per tutte le directory contenenti video per sostituirli con versioni ottimizzate.";
 
 /* Notifiche e messaggi */
 "wallpaper_set" = "Video impostato come sfondo";
@@ -92,3 +108,15 @@
 
 /* Notification usage description (Info.plist) */
 "notification_usage_description" = "LiveWalls는 배경화면 변경 및 중요한 오류에 대해 알려주기 위해 알림 권한이 필요합니다.";
+
+/* Duplicate video handling */
+"duplicate_video_title" = "Video Duplicato Rilevato";
+"duplicate_video_message" = "Il video '%@' esiste già nella tua libreria come '%@'. Cosa vorresti fare?";
+"duplicate_action_skip" = "Salta";
+"duplicate_action_replace" = "Sostituisci Esistente";
+"duplicate_action_keep_both" = "Mantieni Entrambi";
+
+/* Import summary messages */
+"import_summary_added" = "%d video aggiunti";
+"import_summary_skipped" = "%d video saltati (duplicati)";
+"import_summary_replaced" = "%d video sostituiti";
