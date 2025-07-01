@@ -18,9 +18,9 @@
 		<string>zh-TW</string>
 	</array>
 	<key>CFBundleShortVersionString</key>
-	<string>1.2.1</string>
+	<string>1.2.2</string>
 	<key>CFBundleVersion</key>
-	<string>202506251759</string>
+	<string>202507011548</string>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
 	<key>NSUserNotificationUsageDescription</key>
