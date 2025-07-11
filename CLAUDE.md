@@ -69,6 +69,13 @@ LiveWalls is a native macOS application for using videos as dynamic wallpapers. 
 - **Prefer structs for models, classes for managers**
 - **Keep files under 500 lines** when possible
 
+### Git Commit Guidelines
+- **NO include AI/Claude references** in commit messages
+- **NO add "Generated with Claude Code" or similar AI attribution**
+- **Write clear, concise commit messages** focusing on the actual changes
+- **Use conventional commit format** when appropriate (feat:, fix:, docs:, etc.)
+- **Focus on the technical changes** rather than the tool used to create them
+
 ### Resource Management
 - Always use security-scoped bookmarks for file access
 - Properly release AVFoundation resources (players, layers, assets)
