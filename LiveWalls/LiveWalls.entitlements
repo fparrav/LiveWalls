@@ -16,5 +16,16 @@
 	<false/>
 	<key>com.apple.security.print</key>
 	<false/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	<key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+	<array>
+		<string>/var/folders/</string>
+		<string>/tmp/</string>
+	</array>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+	<key>com.apple.security.assets.pictures.read-write</key>
+	<true/>
 </dict>
 </plist>

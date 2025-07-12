@@ -382,6 +382,26 @@ public class DesktopVideoWindowMejorada: NSWindow {
         }
     }
 
+    // MARK: - Public API para acceso al reproductor
+    
+    /// Obtiene el tiempo actual de reproducción del video
+    /// - Returns: CMTime actual del reproductor o nil si no hay reproductor activo
+    public func getCurrentTime() -> CMTime? {
+        return player?.currentTime()
+    }
+    
+    /// Obtiene el estado actual del reproductor
+    /// - Returns: Velocidad de reproducción actual (0.0 = pausado, 1.0 = reproduciendo normal)
+    public func getPlaybackRate() -> Float? {
+        return player?.rate
+    }
+    
+    /// Obtiene la duración total del video actual
+    /// - Returns: CMTime con la duración total o nil si no está disponible
+    public func getTotalDuration() -> CMTime? {
+        return player?.currentItem?.duration
+    }
+    
     private func showErrorInWindow(_ message: String) {
         guard let contentView = self.contentView else { return }
         for subview in contentView.subviews {

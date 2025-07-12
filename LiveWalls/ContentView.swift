@@ -43,6 +43,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+                .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowMainWindow"))) { _ in
@@ -84,6 +85,8 @@ struct ContentView: View {
                 }
                 .help(NSLocalizedString("settings_help", comment: "Settings help text"))
                 .buttonStyle(.bordered)
+                
+                
             }
         }
         .padding()
