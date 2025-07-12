@@ -3,6 +3,8 @@ import AppKit
 import Combine
 import AVFoundation
 import os.log
+import ImageIO
+import UniformTypeIdentifiers
 
 // Asegurarse de que Logger esté disponible
 #if canImport(os)
@@ -874,6 +876,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         staticFrameUpdateTimer?.invalidate()
         staticFrameUpdateTimer = nil
     }
+    
     
     
     private func changeToNextVideo() {

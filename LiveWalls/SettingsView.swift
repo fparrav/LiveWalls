@@ -7,7 +7,11 @@ struct SettingsView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
     @EnvironmentObject var launchManager: LaunchManager
     @Environment(\.dismiss) private var dismiss
-    @State private var screenSaverManager: ScreenSaverManager?
+    @StateObject private var updateNotifier = UpdateNotifier(
+        repoOwner: "fparrav",
+        repoName: "LiveWalls",
+        currentVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+    )
     
     // Estados locales para las configuraciones
     @State private var autoStartWallpaper: Bool
@@ -76,9 +80,20 @@ struct SettingsView: View {
             mainContentView
             bottomButtonsView
         }
-        .frame(width: 480, height: 500)
+        .frame(width: 480, height: 600)
         .onAppear {
             cargarConfiguracionesActuales()
+            
+            // Verificar actualizaciones al abrir configuración
+            Task {
+                await updateNotifier.checkForUpdates()
+                if updateNotifier.updateAvailable {
+                    // Mostrar diálogo automáticamente si hay actualización
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        updateNotifier.showUpdateDialog()
+                    }
+                }
+            }
         }
     }
     
@@ -123,6 +138,9 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 launchAtLoginToggle
                 
+                // Sección de actualizaciones
+                updateSection
+                
                 if #unavailable(macOS 13.0) {
                     Text(NSLocalizedString("macos_compatibility_warning", comment: "macOS compatibility warning"))
                         .font(.caption2)
@@ -131,6 +149,56 @@ struct SettingsView: View {
                 }
             }
             .padding(12)
+        }
+    }
+    
+    private var updateSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Versión actual: \(updateNotifier.currentVersion)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                if updateNotifier.updateAvailable {
+                    Text("Actualización disponible: \(updateNotifier.updateInfo?.tagName ?? "")")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                }
+            }
+            
+            HStack(spacing: 12) {
+                Button(action: {
+                    Task {
+                        await updateNotifier.checkForUpdates()
+                    }
+                }) {
+                    HStack {
+                        if updateNotifier.isChecking {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Text("Buscar Actualizaciones")
+                    }
+                }
+                .disabled(updateNotifier.isChecking)
+                .buttonStyle(.bordered)
+                
+                if updateNotifier.updateAvailable {
+                    Button(action: {
+                        updateNotifier.showUpdateDialog()
+                    }) {
+                        HStack {
+                            Image(systemName: "safari")
+                            Text("Ver Nueva Versión")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
         }
     }
     

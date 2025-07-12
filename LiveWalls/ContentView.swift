@@ -86,14 +86,7 @@ struct ContentView: View {
                 .help(NSLocalizedString("settings_help", comment: "Settings help text"))
                 .buttonStyle(.bordered)
                 
-                // Botón de prueba para wallpaper estático
-                Button(action: {
-                    wallpaperManager.testStaticWallpaper()
-                }) {
-                    Label("Test Static", systemImage: "photo")
-                }
-                .help("Probar wallpaper estático para Mission Control")
-                .buttonStyle(.bordered)
+                
             }
         }
         .padding()
