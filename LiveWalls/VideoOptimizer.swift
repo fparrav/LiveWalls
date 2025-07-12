@@ -142,23 +142,31 @@ class VideoOptimizer: ObservableObject {
         // Store export session for progress tracking
         exportSessions[videoFile.id] = exportSession
         
-        // Start export with progress tracking
+        // Start export with progress tracking using async/await approach
         return try await withCheckedThrowingContinuation { continuation in
-            // Start progress tracking
-            let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                Task { @MainActor in
-                    self.processingProgress[videoFile.id] = Double(exportSession.progress)
-                }
-            }
+            // Create local copies to avoid capturing self in @Sendable closures
+            let videoID = videoFile.id
             
-            exportSession.exportAsynchronously {
-                timer.invalidate()
-                
-                Task { @MainActor in
-                    self.exportSessions.removeValue(forKey: videoFile.id)
-                    self.processingProgress.removeValue(forKey: videoFile.id)
+            Task { @MainActor in
+                // Track progress using a timer on the main actor
+                var progressTimer: Timer?
+                progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                    Task { @MainActor in
+                        self.processingProgress[videoID] = Double(exportSession.progress)
+                    }
                 }
                 
+                // Start export
+                await exportSession.export()
+                
+                // Clean up timer
+                progressTimer?.invalidate()
+                
+                // Clean up tracking
+                self.exportSessions.removeValue(forKey: videoID)
+                self.processingProgress.removeValue(forKey: videoID)
+                
+                // Handle result
                 switch exportSession.status {
                 case .completed:
                     continuation.resume(returning: outputURL)

@@ -573,7 +573,11 @@ struct SettingsView: View {
         }
         
         print("▶️ Iniciando exportación HEVC...")
-        await exportSession.export()
+        await withCheckedContinuation { continuation in
+            exportSession.exportAsynchronously {
+                continuation.resume()
+            }
+        }
         
         guard exportSession.status == .completed else {
             // Limpiar archivo temporal en caso de error
@@ -620,6 +624,7 @@ struct SettingsView: View {
     private func actualizarVideoEnLista(originalVideoFile: VideoFile, optimizado: URL, directoriosPermitidos: Set<URL> = []) async {
         await MainActor.run {
             if let index = wallpaperManager.videoFiles.firstIndex(where: { $0.id == originalVideoFile.id }) {
+                var directorioParaLimpiar: URL?
                 do {
                     // Resolver bookmark del archivo original
                     guard let originalURL = wallpaperManager.resolveBookmark(for: originalVideoFile) else {
@@ -640,18 +645,16 @@ struct SettingsView: View {
                     // Si se proporcionaron directorios permitidos, usarlos para acceso sandbox
                     if !directoriosPermitidos.isEmpty {
                         // Buscar el directorio permitido que corresponde
-                        guard let directorioPermitido = directoriosPermitidos.first(where: { $0.path == originalDirectory.path }) else {
+                        guard let encontrado = directoriosPermitidos.first(where: { $0.path == originalDirectory.path }) else {
                             throw NSError(domain: "OptimizationError", code: 9, userInfo: [NSLocalizedDescriptionKey: "No se encontraron permisos para el directorio: \(originalDirectory.path)"])
                         }
                         
                         // Acceder al directorio con permisos sandbox
-                        guard directorioPermitido.startAccessingSecurityScopedResource() else {
+                        guard encontrado.startAccessingSecurityScopedResource() else {
                             throw NSError(domain: "OptimizationError", code: 10, userInfo: [NSLocalizedDescriptionKey: "No se pudo acceder al directorio con permisos sandbox"])
                         }
                         
-                        defer {
-                            directorioPermitido.stopAccessingSecurityScopedResource()
-                        }
+                        directorioParaLimpiar = encontrado
                     }
                     
                     // Crear directorio destino si no existe
@@ -688,10 +691,10 @@ struct SettingsView: View {
                         
                         // Validar que el bookmark se puede resolver inmediatamente
                         var isStale = false
-                        let resolvedURL = try URL(resolvingBookmarkData: bookmarkData!, 
-                                                 options: [.withSecurityScope], 
-                                                 relativeTo: nil, 
-                                                 bookmarkDataIsStale: &isStale)
+                        let _ = try URL(resolvingBookmarkData: bookmarkData!, 
+                                       options: [.withSecurityScope], 
+                                       relativeTo: nil, 
+                                       bookmarkDataIsStale: &isStale)
                         
                         if isStale {
                             print("⚠️ Bookmark creado pero está obsoleto, regenerando...")
@@ -748,6 +751,9 @@ struct SettingsView: View {
                     // Limpiar archivo temporal en caso de error
                     try? FileManager.default.removeItem(at: optimizado)
                 }
+                
+                // Limpiar acceso security-scoped si se usó
+                directorioParaLimpiar?.stopAccessingSecurityScopedResource()
             } else {
                 print("⚠️ VideoFile no encontrado en la lista")
                 // Limpiar archivo temporal

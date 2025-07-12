@@ -516,8 +516,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             
             createdWindows.append((window: window, accessibleURL: accessibleURL))
             
-            // Usar RunLoop en lugar de Thread.sleep para no bloquear
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+            // Reducir demora para mejorar latencia en wake-up
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
         }
         
         if createdWindows.isEmpty {
@@ -776,8 +776,22 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // Si el wallpaper estaba activo antes de suspender, lo reiniciamos.
         if isPlayingWallpaper {
             appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
-            // Se reinicia inmediatamente para una transición más rápida.
-            self.startWallpaperSafe()
+            // Reinicio optimizado: primero verificar pantallas y luego iniciar
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                // Verificar que aún tenemos un video actual
+                guard let currentVideo = self.currentVideo else { return }
+                
+                // Pre-resolver el bookmark para reducir latencia
+                guard let accessibleURL = self.resolveBookmark(for: currentVideo) else {
+                    self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
+                    return
+                }
+                
+                // Crear ventanas inmediatamente con URL ya resuelta
+                self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+                self.isPlayingWallpaper = true
+                self.startAutoChangeTimerIfNeeded()
+            }
         }
     }
     
