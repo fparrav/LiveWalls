@@ -13,6 +13,7 @@
 "next_wallpaper" = "Next Wallpaper";
 "disable_for_random" = "Disable for Random Rotation";
 "enable_for_random" = "Enable for Random Rotation";
+"set_as_wallpaper" = "Set as Wallpaper";
 "cancel_button" = "Cancel";
 "delete_button" = "Delete";
 

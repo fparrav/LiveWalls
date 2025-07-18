@@ -217,7 +217,7 @@ struct ContentView: View {
                         print("❌ No hay video seleccionado para establecer como wallpaper")
                     }
                 }) {
-                    Label("Establecer como Wallpaper", systemImage: "pin.fill")
+                    Label(NSLocalizedString("set_as_wallpaper", comment: "Set as wallpaper"), systemImage: "pin.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedVideo == nil)
@@ -229,7 +229,7 @@ struct ContentView: View {
                         selectedVideo = nil
                     }
                 }) {
-                    Label("Eliminar", systemImage: "trash")
+                    Label(NSLocalizedString("delete_button", comment: "Delete"), systemImage: "trash")
                 }
                 .buttonStyle(.bordered)
                 .disabled(selectedVideo == nil)
@@ -336,7 +336,7 @@ struct VideoThumbnailCard: View {
             onTap()
         }
         .contextMenu {
-            Button("Establecer como Wallpaper", systemImage: "pin.fill") {
+            Button(NSLocalizedString("set_as_wallpaper", comment: "Set as wallpaper"), systemImage: "pin.fill") {
                 wallpaperManager.setAsCurrentWallpaper(video: video)
             }
             
@@ -349,7 +349,7 @@ struct VideoThumbnailCard: View {
             
             Divider()
             
-            Button("Eliminar", systemImage: "trash", role: .destructive) {
+            Button(NSLocalizedString("delete_button", comment: "Delete"), systemImage: "trash", role: .destructive) {
                 wallpaperManager.removeVideo(video)
             }
         }
