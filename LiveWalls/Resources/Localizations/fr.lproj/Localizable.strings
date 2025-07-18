@@ -8,6 +8,12 @@
 "import_button" = "Importer";
 "settings_button" = "Paramètres";
 "accept_button" = "Accepter";
+
+/* Nouvelles fonctionnalités de contrôle de papier peint */
+"next_wallpaper" = "Papier Peint Suivant";
+"disable_for_random" = "Désactiver pour la rotation aléatoire";
+"enable_for_random" = "Activer pour la rotation aléatoire";
+"set_as_wallpaper" = "Définir comme Papier Peint";
 "cancel_button" = "Annuler";
 "delete_button" = "Supprimer";
 

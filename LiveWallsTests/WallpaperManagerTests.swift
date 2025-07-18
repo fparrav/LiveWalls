@@ -1,6 +1,7 @@
 import XCTest
 @testable import LiveWalls
 
+@MainActor
 final class WallpaperManagerTests: XCTestCase {
     var wallpaperManager: WallpaperManager!
     
@@ -19,7 +20,7 @@ final class WallpaperManagerTests: XCTestCase {
     func testAddVideoFiles() async {
         // Given
         let videoURL = URL(fileURLWithPath: "/test/video.mp4")
-        let videoName = "Test Video"
+        let videoName = "video"
         
         // When
         await wallpaperManager.addVideoFiles(urls: [videoURL])
@@ -27,13 +28,15 @@ final class WallpaperManagerTests: XCTestCase {
         // Then
         XCTAssertEqual(wallpaperManager.videoFiles.count, 1)
         XCTAssertEqual(wallpaperManager.videoFiles.first?.name, videoName)
+        XCTAssertTrue(wallpaperManager.videoFiles.first?.isEnabledForRandomPlay ?? false)
     }
     
     func testSetActiveVideo() async {
         // Given
         let video = VideoFile(url: URL(fileURLWithPath: "/test/video.mp4"),
                             name: "Test Video",
-                            bookmarkData: nil)
+                            bookmarkData: nil,
+                            isEnabledForRandomPlay: true)
         
         // When
         await wallpaperManager.setActiveVideo(video)
@@ -42,15 +45,16 @@ final class WallpaperManagerTests: XCTestCase {
         XCTAssertEqual(wallpaperManager.currentVideo?.name, video.name)
     }
     
-    func testRemoveVideo() {
+    func testRemoveVideo() async {
         // Given
         let video = VideoFile(url: URL(fileURLWithPath: "/test/video.mp4"),
                             name: "Test Video",
-                            bookmarkData: nil)
+                            bookmarkData: nil,
+                            isEnabledForRandomPlay: true)
         wallpaperManager.videoFiles = [video]
         
         // When
-        wallpaperManager.removeVideo(video)
+        await wallpaperManager.removeVideo(video)
         
         // Then
         XCTAssertTrue(wallpaperManager.videoFiles.isEmpty)
@@ -58,26 +62,27 @@ final class WallpaperManagerTests: XCTestCase {
     
     // MARK: - Wallpaper Control Tests
     
-    func testStartWallpaper() {
+    func testStartWallpaper() async {
         // Given
         let video = VideoFile(url: URL(fileURLWithPath: "/test/video.mp4"),
                             name: "Test Video",
-                            bookmarkData: nil)
+                            bookmarkData: nil,
+                            isEnabledForRandomPlay: true)
         wallpaperManager.currentVideo = video
         
         // When
-        wallpaperManager.startWallpaperSafe()
+        await wallpaperManager.startWallpaperSafe()
         
         // Then
         XCTAssertTrue(wallpaperManager.isPlayingWallpaper)
     }
     
-    func testStopWallpaper() {
+    func testStopWallpaper() async {
         // Given
         wallpaperManager.isPlayingWallpaper = true
         
         // When
-        wallpaperManager.stopWallpaper()
+        await wallpaperManager.stopWallpaper()
         
         // Then
         XCTAssertFalse(wallpaperManager.isPlayingWallpaper)
@@ -85,17 +90,84 @@ final class WallpaperManagerTests: XCTestCase {
     
     // MARK: - Bookmark Resolution Tests
     
-    func testResolveBookmark() {
+    func testResolveBookmark() async {
         // Given
         let video = VideoFile(url: URL(fileURLWithPath: "/test/video.mp4"),
                             name: "Test Video",
-                            bookmarkData: nil)
+                            bookmarkData: nil,
+                            isEnabledForRandomPlay: true)
         
         // When
-        let resolvedURL = wallpaperManager.resolveBookmark(for: video)
+        let resolvedURL = await wallpaperManager.resolveBookmark(for: video)
         
         // Then
         XCTAssertNil(resolvedURL) // Debería ser nil porque no hay bookmark data
+    }
+    
+    // MARK: - Nueva Funcionalidad Tests
+    
+    func testToggleVideoRandomPlayEnabled() async {
+        // Given
+        let video = VideoFile(url: URL(fileURLWithPath: "/test/video.mp4"),
+                            name: "Test Video",
+                            bookmarkData: nil,
+                            isEnabledForRandomPlay: true)
+        wallpaperManager.videoFiles = [video]
+        
+        // When
+        await wallpaperManager.toggleVideoRandomPlayEnabled(video)
+        
+        // Then
+        XCTAssertFalse(wallpaperManager.videoFiles.first?.isEnabledForRandomPlay ?? true)
+        
+        // When - toggle again
+        await wallpaperManager.toggleVideoRandomPlayEnabled(video)
+        
+        // Then
+        XCTAssertTrue(wallpaperManager.videoFiles.first?.isEnabledForRandomPlay ?? false)
+    }
+    
+    func testCanGoToNextWallpaper() {
+        // Given - videos with different random play settings
+        let enabledVideo = VideoFile(url: URL(fileURLWithPath: "/test/video1.mp4"),
+                                   name: "Enabled Video",
+                                   bookmarkData: nil,
+                                   isEnabledForRandomPlay: true)
+        let disabledVideo = VideoFile(url: URL(fileURLWithPath: "/test/video2.mp4"),
+                                    name: "Disabled Video",
+                                    bookmarkData: nil,
+                                    isEnabledForRandomPlay: false)
+        wallpaperManager.videoFiles = [enabledVideo, disabledVideo]
+        
+        // Then - should have at least one video available for next wallpaper
+        XCTAssertTrue(wallpaperManager.canGoToNextWallpaper)
+        
+        // Given - no videos enabled for random play
+        wallpaperManager.videoFiles = [disabledVideo]
+        
+        // Then - should not be able to go to next wallpaper
+        XCTAssertFalse(wallpaperManager.canGoToNextWallpaper)
+    }
+    
+    func testNextWallpaper() async {
+        // Given
+        let video1 = VideoFile(url: URL(fileURLWithPath: "/test/video1.mp4"),
+                             name: "Video 1",
+                             bookmarkData: nil,
+                             isEnabledForRandomPlay: true)
+        let video2 = VideoFile(url: URL(fileURLWithPath: "/test/video2.mp4"),
+                             name: "Video 2",
+                             bookmarkData: nil,
+                             isEnabledForRandomPlay: true)
+        wallpaperManager.videoFiles = [video1, video2]
+        wallpaperManager.currentVideo = video1
+        
+        // When
+        await wallpaperManager.nextWallpaper()
+        
+        // Then - current video should still be set (might be same due to randomness)
+        XCTAssertNotNil(wallpaperManager.currentVideo)
+        XCTAssertTrue([video1.id, video2.id].contains(wallpaperManager.currentVideo?.id))
     }
 }
 
@@ -115,6 +187,7 @@ extension WallpaperManagerTests {
     func createTestVideoFile() -> VideoFile {
         return VideoFile(url: URL(fileURLWithPath: "/test/video.mp4"),
                         name: "Test Video",
-                        bookmarkData: nil)
+                        bookmarkData: nil,
+                        isEnabledForRandomPlay: true)
     }
 } 

@@ -8,6 +8,12 @@
 "import_button" = "Importieren";
 "settings_button" = "Einstellungen";
 "accept_button" = "Akzeptieren";
+
+/* Neue Wallpaper-Kontrollfunktionen */
+"next_wallpaper" = "Nächstes Wallpaper";
+"disable_for_random" = "Für zufällige Rotation deaktivieren";
+"enable_for_random" = "Für zufällige Rotation aktivieren";
+"set_as_wallpaper" = "Als Wallpaper festlegen";
 "cancel_button" = "Abbrechen";
 "delete_button" = "Löschen";
 

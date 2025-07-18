@@ -8,6 +8,12 @@
 "import_button" = "导入";
 "settings_button" = "设置";
 "accept_button" = "确定";
+
+/* 新壁纸控制功能 */
+"next_wallpaper" = "下一个壁纸";
+"disable_for_random" = "禁用随机轮播";
+"enable_for_random" = "启用随机轮播";
+"set_as_wallpaper" = "设为壁纸";
 "cancel_button" = "取消";
 "delete_button" = "删除";
 

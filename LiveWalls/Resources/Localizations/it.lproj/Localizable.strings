@@ -8,6 +8,12 @@
 "import_button" = "Importa";
 "settings_button" = "Impostazioni";
 "accept_button" = "Accetta";
+
+/* Nuove funzionalità di controllo sfondo */
+"next_wallpaper" = "Sfondo Successivo";
+"disable_for_random" = "Disabilita per rotazione casuale";
+"enable_for_random" = "Abilita per rotazione casuale";
+"set_as_wallpaper" = "Imposta come Sfondo";
 "cancel_button" = "Annulla";
 "delete_button" = "Elimina";
 

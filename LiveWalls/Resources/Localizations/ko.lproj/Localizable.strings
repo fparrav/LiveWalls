@@ -8,6 +8,12 @@
 "import_button" = "가져오기";
 "settings_button" = "설정";
 "accept_button" = "확인";
+
+/* 새로운 배경화면 제어 기능 */
+"next_wallpaper" = "다음 배경화면";
+"disable_for_random" = "무작위 회전 비활성화";
+"enable_for_random" = "무작위 회전 활성화";
+"set_as_wallpaper" = "배경화면으로 설정";
 "cancel_button" = "취소";
 "delete_button" = "삭제";
 

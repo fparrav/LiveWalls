@@ -8,6 +8,12 @@
 "import_button" = "Importar";
 "settings_button" = "Configurações";
 "accept_button" = "Aceitar";
+
+/* Novas funcionalidades de controle de papel de parede */
+"next_wallpaper" = "Próximo Papel de Parede";
+"disable_for_random" = "Desabilitar para rotação aleatória";
+"enable_for_random" = "Habilitar para rotação aleatória";
+"set_as_wallpaper" = "Definir como Papel de Parede";
 "cancel_button" = "Cancelar";
 "delete_button" = "Excluir";
 

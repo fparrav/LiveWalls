@@ -8,6 +8,12 @@
 "import_button" = "匯入";
 "settings_button" = "設定";
 "accept_button" = "確定";
+
+/* 新桌布控制功能 */
+"next_wallpaper" = "下一個桌布";
+"disable_for_random" = "停用隨機輪播";
+"enable_for_random" = "啟用隨機輪播";
+"set_as_wallpaper" = "設為桌布";
 "cancel_button" = "取消";
 "delete_button" = "刪除";
 

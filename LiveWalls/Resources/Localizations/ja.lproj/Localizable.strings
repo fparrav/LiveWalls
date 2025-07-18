@@ -8,6 +8,12 @@
 "import_button" = "インポート";
 "settings_button" = "設定";
 "accept_button" = "OK";
+
+/* 新しい壁紙コントロール機能 */
+"next_wallpaper" = "次の壁紙";
+"disable_for_random" = "ランダム回転を無効にする";
+"enable_for_random" = "ランダム回転を有効にする";
+"set_as_wallpaper" = "壁紙に設定";
 "cancel_button" = "キャンセル";
 "delete_button" = "削除";
 
