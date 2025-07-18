@@ -120,3 +120,24 @@
 "import_summary_added" = "%d개 비디오 추가됨";
 "import_summary_skipped" = "%d개 비디오 건너뜀 (중복)";
 "import_summary_replaced" = "%d개 비디오 교체됨";
+
+/* 검은 프레임 감지 최적화 */
+"optimize_remove_black_frames" = "최적화 + 검은 프레임 제거";
+"optimize_remove_black_frames_title" = "최적화 및 검은 프레임 제거";
+"optimize_remove_black_frames_message" = "모든 비디오를 HEVC 형식으로 최적화하고 시작과 끝의 검은 프레임을 자동으로 감지하여 제거합니다. 비디오 수와 크기에 따라 시간이 걸릴 수 있습니다.";
+"select_directory_black_frames_permission" = "검은 프레임 최적화를 위한 쓰기 권한을 부여하려면 디렉토리 '%@'를 선택하세요:";
+"no_videos_available_title" = "사용 가능한 비디오 없음";
+"no_videos_available_message" = "라이브러리에 처리할 비디오가 없습니다.";
+
+/* 검은 프레임 제거만 */
+"remove_black_frames" = "검은 프레임 제거";
+"remove_black_frames_title" = "검은 프레임 제거";
+"remove_black_frames_message" = "비디오 형식을 변경하지 않고 비디오 시작과 끝의 검은 프레임을 감지하여 제거합니다. 비디오 수와 크기에 따라 시간이 걸릴 수 있습니다.";
+"processing_video_black_frames" = "처리 중: %@";
+"video_skipped_no_black_frames" = "건너뜀: %@ (검은 프레임을 찾을 수 없음)";
+"black_frames_complete_title" = "검은 프레임 제거 완료";
+"black_frames_complete_message" = "%d개 비디오를 성공적으로 처리했습니다. %d개 비디오에서 검은 프레임을 제거했고, %d개 비디오를 건너뛰었습니다(검은 프레임을 찾을 수 없음).";
+
+/* 최적화 오류 */
+"optimization_errors_title" = "처리 오류";
+"optimization_errors_message" = "일부 비디오를 처리할 수 없습니다:\n%@";

@@ -34,6 +34,13 @@ struct SettingsView: View {
     @State private var totalVideos = 0
     @State private var currentVideoName = ""
     @State private var optimizationProgress: Double = 0.0
+    
+    // Estados adicionales para optimización con frames negros
+    @State private var videosProcessed = 0
+    @State private var totalVideosToProcess = 0
+    @State private var currentVideoBeingProcessed = ""
+    @State private var optimizationErrors: [String] = []
+    @StateObject private var videoOptimizer = VideoOptimizer()
 
     private let minIntervalMinutes = 1
     private let maxIntervalMinutes = 120
@@ -259,11 +266,20 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(wallpaperManager.videoFiles.isEmpty || isOptimizing)
+                .accessibilityIdentifier("optimize_hevc_button")
+                
+                Button(NSLocalizedString("remove_black_frames", comment: "Remove black frames")) {
+                    eliminarFramesNegros()
+                }
+                .buttonStyle(.bordered)
+                .disabled(wallpaperManager.videoFiles.isEmpty || isOptimizing)
+                .accessibilityIdentifier("remove_black_frames_button")
                 
                 Button(NSLocalizedString("clear_all_videos", comment: "Clear all videos")) {
                     limpiarTodosLosVideos()
                 }
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier("clear_videos_button")
             }
             .padding(12)
         }
@@ -450,6 +466,344 @@ struct SettingsView: View {
             Task {
                 await solicitarPermisosYConvertir()
             }
+        }
+    }
+    
+    /// Elimina frames negros de los videos sin optimización HEVC
+    private func eliminarFramesNegros() {
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("remove_black_frames_title", comment: "Remove black frames title")
+        alert.informativeText = NSLocalizedString("remove_black_frames_message", comment: "Remove black frames message")
+        alert.addButton(withTitle: NSLocalizedString("optimize_button", comment: "Optimize button"))
+        alert.addButton(withTitle: NSLocalizedString("cancel_button", comment: "Cancel button"))
+        alert.alertStyle = .informational
+        
+        if alert.runModal() == .alertFirstButtonReturn {
+            Task {
+                await solicitarPermisosYEliminarFramesNegros()
+            }
+        }
+    }
+    
+    /// Optimiza videos con detección y eliminación de frames negros
+    private func optimizarVideosConDeteccionFramesNegros() {
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("optimize_remove_black_frames_title", comment: "Optimize and remove black frames title")
+        alert.informativeText = NSLocalizedString("optimize_remove_black_frames_message", comment: "Optimize and remove black frames message")
+        alert.addButton(withTitle: NSLocalizedString("optimize_button", comment: "Optimize button"))
+        alert.addButton(withTitle: NSLocalizedString("cancel_button", comment: "Cancel button"))
+        alert.alertStyle = .informational
+        
+        if alert.runModal() == .alertFirstButtonReturn {
+            Task {
+                await solicitarPermisosYConvertirConFramesNegros()
+            }
+        }
+    }
+    
+    /// Solicita permisos para los directorios donde están los videos y luego convierte con detección de frames negros
+    private func solicitarPermisosYConvertirConFramesNegros() async {
+        // Para esta función, procesamos todos los videos (no solo los no-HEVC)
+        let todosLosVideos = wallpaperManager.videoFiles
+        
+        guard !todosLosVideos.isEmpty else {
+            await mostrarAlerta(
+                titulo: NSLocalizedString("no_videos_available_title", comment: "No videos available title"),
+                mensaje: NSLocalizedString("no_videos_available_message", comment: "No videos available message")
+            )
+            return
+        }
+        
+        // Obtener directorios únicos donde están los videos
+        var directoriosUnicos = Set<URL>()
+        for videoFile in todosLosVideos {
+            if let url = wallpaperManager.resolveBookmark(for: videoFile) {
+                let directorio = url.deletingLastPathComponent()
+                directoriosUnicos.insert(directorio)
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        // Solicitar permisos para cada directorio único
+        var directoriosPermitidos = Set<URL>()
+        
+        await MainActor.run {
+            for directorio in directoriosUnicos {
+                let openPanel = NSOpenPanel()
+                openPanel.canChooseFiles = false
+                openPanel.canChooseDirectories = true
+                openPanel.allowsMultipleSelection = false
+                openPanel.directoryURL = directorio
+                openPanel.message = String(format: NSLocalizedString("select_directory_black_frames_permission", comment: "Select directory for black frames permission"), directorio.lastPathComponent)
+                
+                if openPanel.runModal() == .OK, let selectedURL = openPanel.url {
+                    directoriosPermitidos.insert(selectedURL)
+                }
+            }
+        }
+        
+        // Si no se otorgaron permisos para todos los directorios, mostrar alerta y cancelar
+        guard directoriosPermitidos.count == directoriosUnicos.count else {
+            await mostrarAlerta(
+                titulo: NSLocalizedString("insufficient_permissions_title", comment: "Insufficient permissions title"),
+                mensaje: NSLocalizedString("insufficient_permissions_message", comment: "Insufficient permissions message")
+            )
+            return
+        }
+        
+        // Iniciar la conversión con detección de frames negros
+        await iniciarConversionConFramesNegros(videos: todosLosVideos, directoriosPermitidos: directoriosPermitidos)
+    }
+    
+    /// Inicia la conversión de videos con detección de frames negros
+    private func iniciarConversionConFramesNegros(videos: [VideoFile], directoriosPermitidos: Set<URL>) async {
+        await MainActor.run {
+            isOptimizing = true
+            videosProcessed = 0
+            totalVideosToProcess = videos.count
+            currentVideoBeingProcessed = ""
+            optimizationErrors.removeAll()
+        }
+        
+        for videoFile in videos {
+            await MainActor.run {
+                currentVideoBeingProcessed = videoFile.name
+            }
+            
+            await convertirVideoConFramesNegros(videoFile: videoFile, directoriosPermitidos: directoriosPermitidos)
+            
+            await MainActor.run {
+                videosProcessed += 1
+            }
+        }
+        
+        await MainActor.run {
+            isOptimizing = false
+            
+            if optimizationErrors.isEmpty {
+                // Mostrar alerta de éxito
+                Task {
+                    await mostrarAlerta(
+                        titulo: NSLocalizedString("optimization_complete_title", comment: "Optimization complete title"),
+                        mensaje: String(format: NSLocalizedString("optimization_complete_message", comment: "Optimization complete message"), videos.count)
+                    )
+                }
+            } else {
+                // Mostrar alerta con errores
+                let errorMessage = optimizationErrors.joined(separator: "\n")
+                Task {
+                    await mostrarAlerta(
+                        titulo: NSLocalizedString("optimization_errors_title", comment: "Optimization errors title"),
+                        mensaje: String(format: NSLocalizedString("optimization_errors_message", comment: "Optimization errors message"), errorMessage)
+                    )
+                }
+            }
+        }
+    }
+    
+    /// Convierte un video específico con detección de frames negros
+    private func convertirVideoConFramesNegros(videoFile: VideoFile, directoriosPermitidos: Set<URL>) async {
+        guard let originalURL = wallpaperManager.resolveBookmark(for: videoFile) else {
+            await MainActor.run {
+                optimizationErrors.append("❌ \(videoFile.name): No se pudo acceder al archivo")
+            }
+            return
+        }
+        
+        defer {
+            originalURL.stopAccessingSecurityScopedResource()
+        }
+        
+        let directorio = originalURL.deletingLastPathComponent()
+        guard directoriosPermitidos.contains(directorio) else {
+            await MainActor.run {
+                optimizationErrors.append("❌ \(videoFile.name): Sin permisos para el directorio")
+            }
+            return
+        }
+        
+        do {
+            let outputURL = videoOptimizer.generateOptimizedURL(for: originalURL)
+            _ = try await videoOptimizer.optimizeVideoWithBlackFrameDetection(videoFile, to: outputURL)
+            
+            // Validar que el archivo se creó correctamente
+            guard FileManager.default.fileExists(atPath: outputURL.path) else {
+                await MainActor.run {
+                    optimizationErrors.append("❌ \(videoFile.name): El archivo optimizado no se creó")
+                }
+                return
+            }
+            
+            // Reemplazar el archivo original con el optimizado
+            do {
+                let tempURL = originalURL.appendingPathExtension("backup")
+                try FileManager.default.moveItem(at: originalURL, to: tempURL)
+                try FileManager.default.moveItem(at: outputURL, to: originalURL)
+                try FileManager.default.removeItem(at: tempURL)
+                
+                print("✅ Video optimizado con detección de frames negros: \(videoFile.name)")
+            } catch {
+                await MainActor.run {
+                    optimizationErrors.append("❌ \(videoFile.name): Error al reemplazar archivo - \(error.localizedDescription)")
+                }
+            }
+            
+        } catch {
+            await MainActor.run {
+                optimizationErrors.append("❌ \(videoFile.name): \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /// Solicita permisos para los directorios donde están los videos y luego elimina frames negros
+    private func solicitarPermisosYEliminarFramesNegros() async {
+        let todosLosVideos = wallpaperManager.videoFiles
+        
+        guard !todosLosVideos.isEmpty else {
+            await mostrarAlerta(
+                titulo: NSLocalizedString("no_videos_available_title", comment: "No videos available title"),
+                mensaje: NSLocalizedString("no_videos_available_message", comment: "No videos available message")
+            )
+            return
+        }
+        
+        // Obtener directorios únicos donde están los videos
+        var directoriosUnicos = Set<URL>()
+        for videoFile in todosLosVideos {
+            if let url = wallpaperManager.resolveBookmark(for: videoFile) {
+                let directorio = url.deletingLastPathComponent()
+                directoriosUnicos.insert(directorio)
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        // Solicitar permisos para cada directorio único
+        var directoriosPermitidos = Set<URL>()
+        
+        await MainActor.run {
+            for directorio in directoriosUnicos {
+                let openPanel = NSOpenPanel()
+                openPanel.canChooseFiles = false
+                openPanel.canChooseDirectories = true
+                openPanel.allowsMultipleSelection = false
+                openPanel.directoryURL = directorio
+                openPanel.message = String(format: NSLocalizedString("select_directory_black_frames_permission", comment: "Select directory for black frames permission"), directorio.lastPathComponent)
+                
+                if openPanel.runModal() == .OK, let selectedURL = openPanel.url {
+                    directoriosPermitidos.insert(selectedURL)
+                }
+            }
+        }
+        
+        // Solo proceder si se otorgaron permisos para todos los directorios
+        if directoriosPermitidos.count == directoriosUnicos.count {
+            await iniciarEliminacionFramesNegros(videos: todosLosVideos, directoriosPermitidos: directoriosPermitidos)
+        } else {
+            await mostrarAlerta(
+                titulo: NSLocalizedString("permissions_required_title", comment: "Permissions required title"),
+                mensaje: NSLocalizedString("permissions_required_message", comment: "Permissions required message")
+            )
+        }
+    }
+    
+    /// Inicia la eliminación de frames negros sin optimización HEVC
+    private func iniciarEliminacionFramesNegros(videos: [VideoFile], directoriosPermitidos: Set<URL>) async {
+        await MainActor.run {
+            isOptimizing = true
+            videosProcessed = 0
+            totalVideosToProcess = videos.count
+            currentVideoBeingProcessed = ""
+            optimizationErrors.removeAll()
+        }
+        
+        var videosConFramesEliminados = 0
+        var videosOmitidos = 0
+        
+        for videoFile in videos {
+            await MainActor.run {
+                currentVideoBeingProcessed = String(format: NSLocalizedString("processing_video_black_frames", comment: "Processing video"), videoFile.name)
+            }
+            
+            let hadBlackFrames = await eliminarFramesNegrosDeVideo(videoFile: videoFile, directoriosPermitidos: directoriosPermitidos)
+            
+            if hadBlackFrames {
+                videosConFramesEliminados += 1
+            } else {
+                videosOmitidos += 1
+                await MainActor.run {
+                    currentVideoBeingProcessed = String(format: NSLocalizedString("video_skipped_no_black_frames", comment: "Video skipped"), videoFile.name)
+                }
+            }
+            
+            await MainActor.run {
+                videosProcessed += 1
+            }
+        }
+        
+        await MainActor.run {
+            isOptimizing = false
+            
+            if optimizationErrors.isEmpty {
+                // Mostrar alerta de éxito
+                Task {
+                    await mostrarAlerta(
+                        titulo: NSLocalizedString("black_frames_complete_title", comment: "Black frames complete title"),
+                        mensaje: String(format: NSLocalizedString("black_frames_complete_message", comment: "Black frames complete message"), videos.count, videosConFramesEliminados, videosOmitidos)
+                    )
+                }
+            } else {
+                // Mostrar alerta con errores
+                let errorMessage = optimizationErrors.joined(separator: "\n")
+                Task {
+                    await mostrarAlerta(
+                        titulo: NSLocalizedString("optimization_errors_title", comment: "Optimization errors title"),
+                        mensaje: String(format: NSLocalizedString("optimization_errors_message", comment: "Optimization errors message"), errorMessage)
+                    )
+                }
+            }
+        }
+    }
+    
+    /// Elimina frames negros de un video específico
+    private func eliminarFramesNegrosDeVideo(videoFile: VideoFile, directoriosPermitidos: Set<URL>) async -> Bool {
+        guard let originalURL = wallpaperManager.resolveBookmark(for: videoFile) else {
+            await MainActor.run {
+                optimizationErrors.append("❌ \(videoFile.name): No se pudo acceder al archivo")
+            }
+            return false
+        }
+        
+        defer {
+            originalURL.stopAccessingSecurityScopedResource()
+        }
+        
+        let directorio = originalURL.deletingLastPathComponent()
+        guard directoriosPermitidos.contains(directorio) else {
+            await MainActor.run {
+                optimizationErrors.append("❌ \(videoFile.name): Permisos denegados para el directorio")
+            }
+            return false
+        }
+        
+        do {
+            let outputURL = originalURL.appendingPathExtension("tmp")
+            let result = try await videoOptimizer.trimVideoBlackFrames(videoFile, to: outputURL)
+            
+            if result.hadBlackFrames {
+                // Reemplazar archivo original con versión sin frames negros
+                _ = try FileManager.default.replaceItem(at: originalURL, withItemAt: outputURL, backupItemName: nil, options: [], resultingItemURL: nil)
+            } else {
+                // Eliminar archivo temporal si no había frames negros
+                try? FileManager.default.removeItem(at: outputURL)
+            }
+            
+            return result.hadBlackFrames
+            
+        } catch {
+            await MainActor.run {
+                optimizationErrors.append("❌ \(videoFile.name): \(error.localizedDescription)")
+            }
+            return false
         }
     }
     

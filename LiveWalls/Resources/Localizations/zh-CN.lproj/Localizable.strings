@@ -120,3 +120,24 @@
 "import_summary_added" = "已添加 %d 个视频";
 "import_summary_skipped" = "已跳过 %d 个视频（重复）";
 "import_summary_replaced" = "已替换 %d 个视频";
+
+/* 黑帧检测优化 */
+"optimize_remove_black_frames" = "优化 + 移除黑帧";
+"optimize_remove_black_frames_title" = "优化并移除黑帧";
+"optimize_remove_black_frames_message" = "这将把所有视频优化为HEVC格式，并自动检测和移除开始和结束的黑帧。根据视频数量和大小，此过程可能需要一些时间。";
+"select_directory_black_frames_permission" = "选择目录 '%@' 以授予黑帧优化的写入权限：";
+"no_videos_available_title" = "没有可用视频";
+"no_videos_available_message" = "您的库中没有可处理的视频。";
+
+/* 仅删除黑帧 */
+"remove_black_frames" = "删除黑帧";
+"remove_black_frames_title" = "删除黑帧";
+"remove_black_frames_message" = "这将检测并删除视频开头和结尾的黑帧，而不改变视频格式。根据视频数量和大小，该过程可能需要一些时间。";
+"processing_video_black_frames" = "正在处理：%@";
+"video_skipped_no_black_frames" = "已跳过：%@（未找到黑帧）";
+"black_frames_complete_title" = "黑帧删除完成";
+"black_frames_complete_message" = "成功处理了 %d 个视频。%d 个视频删除了黑帧，%d 个视频被跳过（未找到黑帧）。";
+
+/* 优化错误 */
+"optimization_errors_title" = "处理错误";
+"optimization_errors_message" = "一些视频无法处理：\n%@";

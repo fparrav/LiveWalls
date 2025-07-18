@@ -120,3 +120,24 @@
 "import_summary_added" = "%d vidéos ajoutées";
 "import_summary_skipped" = "%d vidéos ignorées (doublons)";
 "import_summary_replaced" = "%d vidéos remplacées";
+
+/* Optimisation avec détection de frames noires */
+"optimize_remove_black_frames" = "Optimiser + Supprimer Frames Noires";
+"optimize_remove_black_frames_title" = "Optimiser et Supprimer les Frames Noires";
+"optimize_remove_black_frames_message" = "Ceci optimisera toutes les vidéos au format HEVC et détectera et supprimera automatiquement les frames noires au début et à la fin. Le processus peut prendre du temps selon le nombre et la taille des vidéos.";
+"select_directory_black_frames_permission" = "Sélectionnez le répertoire '%@' pour accorder les permissions d'écriture pour l'optimisation des frames noires:";
+"no_videos_available_title" = "Aucune Vidéo Disponible";
+"no_videos_available_message" = "Il n'y a aucune vidéo dans votre bibliothèque à traiter.";
+
+/* Suppression des frames noires uniquement */
+"remove_black_frames" = "Supprimer les Frames Noires";
+"remove_black_frames_title" = "Supprimer les Frames Noires";
+"remove_black_frames_message" = "Ceci détectera et supprimera les frames noires au début et à la fin des vidéos sans changer le format vidéo. Le processus peut prendre du temps selon le nombre et la taille des vidéos.";
+"processing_video_black_frames" = "Traitement : %@";
+"video_skipped_no_black_frames" = "Ignoré : %@ (aucune frame noire trouvée)";
+"black_frames_complete_title" = "Suppression des Frames Noires Terminée";
+"black_frames_complete_message" = "Traitement réussi de %d vidéos. %d vidéos ont eu leurs frames noires supprimées, %d vidéos ont été ignorées (aucune frame noire trouvée).";
+
+/* Erreurs d'optimisation */
+"optimization_errors_title" = "Erreurs de Traitement";
+"optimization_errors_message" = "Certaines vidéos n'ont pas pu être traitées :\n%@";

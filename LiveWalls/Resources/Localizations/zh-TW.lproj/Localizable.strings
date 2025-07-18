@@ -120,3 +120,24 @@
 "import_summary_added" = "已新增 %d 個影片";
 "import_summary_skipped" = "已跳過 %d 個影片（重複）";
 "import_summary_replaced" = "已取代 %d 個影片";
+
+/* 黑幀檢測最佳化 */
+"optimize_remove_black_frames" = "最佳化 + 移除黑幀";
+"optimize_remove_black_frames_title" = "最佳化並移除黑幀";
+"optimize_remove_black_frames_message" = "這將把所有影片最佳化為HEVC格式，並自動檢測和移除開始和結束的黑幀。根據影片數量和大小，此過程可能需要一些時間。";
+"select_directory_black_frames_permission" = "選擇目錄 '%@' 以授予黑幀最佳化的寫入權限：";
+"no_videos_available_title" = "沒有可用影片";
+"no_videos_available_message" = "您的資料庫中沒有可處理的影片。";
+
+/* 僅刪除黑幀 */
+"remove_black_frames" = "刪除黑幀";
+"remove_black_frames_title" = "刪除黑幀";
+"remove_black_frames_message" = "這將檢測並刪除影片開頭和結尾的黑幀，而不改變影片格式。根據影片數量和大小，該過程可能需要一些時間。";
+"processing_video_black_frames" = "正在處理：%@";
+"video_skipped_no_black_frames" = "已跳過：%@（未找到黑幀）";
+"black_frames_complete_title" = "黑幀刪除完成";
+"black_frames_complete_message" = "成功處理了 %d 個影片。%d 個影片刪除了黑幀，%d 個影片被跳過（未找到黑幀）。";
+
+/* 最佳化錯誤 */
+"optimization_errors_title" = "處理錯誤";
+"optimization_errors_message" = "某些影片無法處理：\n%@";

@@ -7,19 +7,21 @@ struct VideoFile: Identifiable, Codable, Hashable {
     var thumbnailData: Data?
     var isActive: Bool = false
     var bookmarkData: Data? // Para acceso persistente a archivos
+    var isEnabledForRandomPlay: Bool = true // Nueva propiedad para habilitar/deshabilitar en reproducción aleatoria
 
-    init(id: UUID = UUID(), url: URL, name: String? = nil, thumbnailData: Data? = nil, isActive: Bool = false, bookmarkData: Data? = nil) {
+    init(id: UUID = UUID(), url: URL, name: String? = nil, thumbnailData: Data? = nil, isActive: Bool = false, bookmarkData: Data? = nil, isEnabledForRandomPlay: Bool = true) {
         self.id = id
         self.url = url
         self.name = name ?? url.deletingPathExtension().lastPathComponent
         self.thumbnailData = thumbnailData
         self.isActive = isActive
         self.bookmarkData = bookmarkData // Asegurar que esta nueva propiedad se inicializa
+        self.isEnabledForRandomPlay = isEnabledForRandomPlay
     }
 
     // Para conformar con Codable, necesitamos manejar la URL de manera especial
     enum CodingKeys: String, CodingKey {
-        case id, url, name, isActive, thumbnailData, bookmarkData // Añadir id
+        case id, url, name, isActive, thumbnailData, bookmarkData, isEnabledForRandomPlay
     }
 
     init(from decoder: Decoder) throws {
@@ -30,6 +32,7 @@ struct VideoFile: Identifiable, Codable, Hashable {
         self.isActive = try container.decode(Bool.self, forKey: .isActive)
         self.thumbnailData = try container.decodeIfPresent(Data.self, forKey: .thumbnailData)
         self.bookmarkData = try container.decodeIfPresent(Data.self, forKey: .bookmarkData)
+        self.isEnabledForRandomPlay = try container.decodeIfPresent(Bool.self, forKey: .isEnabledForRandomPlay) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -40,6 +43,7 @@ struct VideoFile: Identifiable, Codable, Hashable {
         try container.encode(isActive, forKey: .isActive)
         try container.encodeIfPresent(thumbnailData, forKey: .thumbnailData)
         try container.encodeIfPresent(bookmarkData, forKey: .bookmarkData)
+        try container.encode(isEnabledForRandomPlay, forKey: .isEnabledForRandomPlay)
     }
 
     static func == (lhs: VideoFile, rhs: VideoFile) -> Bool {

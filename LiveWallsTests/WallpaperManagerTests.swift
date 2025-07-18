@@ -16,27 +16,27 @@ final class WallpaperManagerTests: XCTestCase {
     
     // MARK: - Video Management Tests
     
-    func testAddVideoFiles() {
+    func testAddVideoFiles() async {
         // Given
         let videoURL = URL(fileURLWithPath: "/test/video.mp4")
         let videoName = "Test Video"
         
         // When
-        wallpaperManager.addVideoFiles(urls: [videoURL])
+        await wallpaperManager.addVideoFiles(urls: [videoURL])
         
         // Then
         XCTAssertEqual(wallpaperManager.videoFiles.count, 1)
         XCTAssertEqual(wallpaperManager.videoFiles.first?.name, videoName)
     }
     
-    func testSetActiveVideo() {
+    func testSetActiveVideo() async {
         // Given
         let video = VideoFile(url: URL(fileURLWithPath: "/test/video.mp4"),
                             name: "Test Video",
                             bookmarkData: nil)
         
         // When
-        wallpaperManager.setActiveVideo(video)
+        await wallpaperManager.setActiveVideo(video)
         
         // Then
         XCTAssertEqual(wallpaperManager.currentVideo?.name, video.name)
@@ -66,7 +66,7 @@ final class WallpaperManagerTests: XCTestCase {
         wallpaperManager.currentVideo = video
         
         // When
-        wallpaperManager.startWallpaper()
+        wallpaperManager.startWallpaperSafe()
         
         // Then
         XCTAssertTrue(wallpaperManager.isPlayingWallpaper)

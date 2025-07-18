@@ -8,6 +8,11 @@
 "import_button" = "Import";
 "settings_button" = "Settings";
 "accept_button" = "Accept";
+
+/* New wallpaper control features */
+"next_wallpaper" = "Next Wallpaper";
+"disable_for_random" = "Disable for Random Rotation";
+"enable_for_random" = "Enable for Random Rotation";
 "cancel_button" = "Cancel";
 "delete_button" = "Delete";
 
@@ -128,3 +133,24 @@
 "duplicate_preference_skip" = "Skip duplicates";
 "duplicate_preference_replace" = "Replace existing";
 "duplicate_preference_keep_both" = "Keep both";
+
+/* Black frame detection optimization */
+"optimize_remove_black_frames" = "Optimize + Remove Black Frames";
+"optimize_remove_black_frames_title" = "Optimize and Remove Black Frames";
+"optimize_remove_black_frames_message" = "This will optimize all videos to HEVC format and automatically detect and remove black frames at the beginning and end. The process may take some time depending on the number and size of videos.";
+
+/* Black frame removal only */
+"remove_black_frames" = "Remove Black Frames";
+"remove_black_frames_title" = "Remove Black Frames";
+"remove_black_frames_message" = "This will detect and remove black frames at the beginning and end of videos without changing the video format. The process may take some time depending on the number and size of videos.";
+"select_directory_black_frames_permission" = "Select directory '%@' to grant write permissions for black frame optimization:";
+"processing_video_black_frames" = "Processing: %@";
+"video_skipped_no_black_frames" = "Skipped: %@ (no black frames found)";
+"black_frames_complete_title" = "Black Frame Removal Complete";
+"black_frames_complete_message" = "Successfully processed %d videos. %d videos had black frames removed, %d videos were skipped (no black frames found).";
+"no_videos_available_title" = "No Videos Available";
+"no_videos_available_message" = "There are no videos in your library to process.";
+
+/* Optimization errors */
+"optimization_errors_title" = "Processing Errors";
+"optimization_errors_message" = "Some videos could not be processed:\n%@";

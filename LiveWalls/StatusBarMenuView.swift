@@ -49,6 +49,15 @@ struct StatusBarMenuView: View {
                 .keyboardShortcut("p", modifiers: .command)
             }
             
+            // Botón para siguiente wallpaper
+            Button(NSLocalizedString("next_wallpaper", comment: "Next wallpaper")) {
+                Task {
+                    await wallpaperManager.nextWallpaper()
+                }
+            }
+            .keyboardShortcut("n", modifiers: .command)
+            .disabled(!wallpaperManager.canGoToNextWallpaper)
+            
             Divider()
             
             // Configuraciones rápidas

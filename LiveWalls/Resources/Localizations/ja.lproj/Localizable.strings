@@ -120,3 +120,24 @@
 "import_summary_added" = "%d個の動画を追加";
 "import_summary_skipped" = "%d個の動画をスキップ（重複）";
 "import_summary_replaced" = "%d個の動画を置換";
+
+/* 黒フレーム検出による最適化 */
+"optimize_remove_black_frames" = "最適化 + 黒フレーム削除";
+"optimize_remove_black_frames_title" = "最適化と黒フレーム削除";
+"optimize_remove_black_frames_message" = "これは全ての動画をHEVC形式に最適化し、開始と終了の黒フレームを自動的に検出して削除します。動画の数とサイズによって時間がかかる場合があります。";
+"select_directory_black_frames_permission" = "黒フレーム最適化のための書き込み権限を付与するためにディレクトリ '%@' を選択してください：";
+"no_videos_available_title" = "利用可能な動画がありません";
+"no_videos_available_message" = "処理するライブラリ内に動画がありません。";
+
+/* 黒フレーム除去のみ */
+"remove_black_frames" = "黒フレームを除去";
+"remove_black_frames_title" = "黒フレームを除去";
+"remove_black_frames_message" = "これは、ビデオフォーマットを変更することなく、ビデオの開始と終了の黒いフレームを検出して除去します。ビデオの数とサイズによっては時間がかかる場合があります。";
+"processing_video_black_frames" = "処理中: %@";
+"video_skipped_no_black_frames" = "スキップ: %@ (黒フレームが見つかりません)";
+"black_frames_complete_title" = "黒フレーム除去完了";
+"black_frames_complete_message" = "%d個のビデオを正常に処理しました。%d個のビデオから黒フレームを除去し、%d個のビデオをスキップしました（黒フレームが見つかりませんでした）。";
+
+/* 最適化エラー */
+"optimization_errors_title" = "処理エラー";
+"optimization_errors_message" = "一部のビデオを処理できませんでした:\n%@";

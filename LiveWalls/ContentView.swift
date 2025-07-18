@@ -36,7 +36,9 @@ struct ContentView: View {
             switch result {
             case .success(let urls):
                 print("🎬 Importando \(urls.count) videos: \(urls.map { $0.lastPathComponent })")
-                wallpaperManager.addVideoFiles(urls: urls)
+                Task {
+                    await wallpaperManager.addVideoFiles(urls: urls)
+                }
             case .failure(let error):
                 print("❌ Error al importar videos: \(error.localizedDescription)")
             }
@@ -106,11 +108,13 @@ struct ContentView: View {
                         VideoThumbnailCard(
                             video: video,
                             isSelected: selectedVideo?.id == video.id,
-                            isActive: wallpaperManager.currentVideo?.id == video.id
-                        ) {
-                            selectedVideo = video
-                            print("🎯 Video seleccionado: \(video.name) (ID: \(video.id))")
-                        }
+                            isActive: wallpaperManager.currentVideo?.id == video.id,
+                            onTap: {
+                                selectedVideo = video
+                                print("🎯 Video seleccionado: \(video.name) (ID: \(video.id))")
+                            },
+                            wallpaperManager: wallpaperManager
+                        )
                     }
                 }
                 .padding()
@@ -243,6 +247,7 @@ struct VideoThumbnailCard: View {
     let isSelected: Bool
     let isActive: Bool
     let onTap: () -> Void
+    let wallpaperManager: WallpaperManager
     
     var body: some View {
         VStack(spacing: 8) {
@@ -269,6 +274,14 @@ struct VideoThumbnailCard: View {
                 // Indicadores superpuestos
                 VStack {
                     HStack {
+                        // Indicador de deshabilitado para reproducción aleatoria
+                        if !video.isEnabledForRandomPlay {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.white, .red)
+                                .font(.caption)
+                                .shadow(radius: 2)
+                        }
+                        
                         Spacer()
                         if isActive {
                             Image(systemName: "checkmark.circle.fill")
@@ -324,13 +337,20 @@ struct VideoThumbnailCard: View {
         }
         .contextMenu {
             Button("Establecer como Wallpaper", systemImage: "pin.fill") {
-                // Usar EnvironmentObject aquí requeriría más configuración,
-                // mejor manejar estas acciones desde el padre
-                onTap()
+                wallpaperManager.setAsCurrentWallpaper(video: video)
             }
+            
+            Divider()
+            
+            Button(video.isEnabledForRandomPlay ? NSLocalizedString("disable_for_random", comment: "Disable for random rotation") : NSLocalizedString("enable_for_random", comment: "Enable for random rotation"), 
+                   systemImage: video.isEnabledForRandomPlay ? "minus.circle" : "plus.circle") {
+                wallpaperManager.toggleVideoRandomPlayEnabled(video)
+            }
+            
+            Divider()
+            
             Button("Eliminar", systemImage: "trash", role: .destructive) {
-                // Similar al anterior
-                onTap()
+                wallpaperManager.removeVideo(video)
             }
         }
         .onAppear {

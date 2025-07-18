@@ -8,6 +8,11 @@
 "import_button" = "Importar";
 "settings_button" = "Configuración";
 "accept_button" = "Aceptar";
+
+/* Nuevas funcionalidades de control de wallpaper */
+"next_wallpaper" = "Siguiente Wallpaper";
+"disable_for_random" = "Deshabilitar para rotación aleatoria";
+"enable_for_random" = "Habilitar para rotación aleatoria";
 "cancel_button" = "Cancelar";
 "delete_button" = "Eliminar";
 
@@ -128,3 +133,24 @@
 "duplicate_preference_skip" = "Omitir duplicados";
 "duplicate_preference_replace" = "Reemplazar existente";
 "duplicate_preference_keep_both" = "Mantener ambos";
+
+/* Optimización con detección de frames negros */
+"optimize_remove_black_frames" = "Optimizar + Eliminar Frames Negros";
+"optimize_remove_black_frames_title" = "Optimizar y Eliminar Frames Negros";
+"optimize_remove_black_frames_message" = "Esto optimizará todos los videos a formato HEVC y detectará y eliminará automáticamente los frames negros al inicio y final. El proceso puede tomar tiempo dependiendo del número y tamaño de los videos.";
+
+/* Eliminación de frames negros solamente */
+"remove_black_frames" = "Eliminar Frames Negros";
+"remove_black_frames_title" = "Eliminar Frames Negros";
+"remove_black_frames_message" = "Esto detectará y eliminará los frames negros al inicio y final de los videos sin cambiar el formato del video. El proceso puede tomar tiempo dependiendo del número y tamaño de los videos.";
+"select_directory_black_frames_permission" = "Selecciona el directorio '%@' para otorgar permisos de escritura para la optimización con frames negros:";
+"processing_video_black_frames" = "Procesando: %@";
+"video_skipped_no_black_frames" = "Omitido: %@ (no se encontraron frames negros)";
+"black_frames_complete_title" = "Eliminación de Frames Negros Completada";
+"black_frames_complete_message" = "Se procesaron exitosamente %d videos. %d videos tuvieron frames negros eliminados, %d videos fueron omitidos (no se encontraron frames negros).";
+"no_videos_available_title" = "No Hay Videos Disponibles";
+"no_videos_available_message" = "No hay videos en tu biblioteca para procesar.";
+
+/* Errores de optimización */
+"optimization_errors_title" = "Errores en el Procesamiento";
+"optimization_errors_message" = "Algunos videos no pudieron ser procesados:\n%@";

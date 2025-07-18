@@ -120,3 +120,24 @@
 "import_summary_added" = "%d video aggiunti";
 "import_summary_skipped" = "%d video saltati (duplicati)";
 "import_summary_replaced" = "%d video sostituiti";
+
+/* Ottimizzazione con rilevamento frame neri */
+"optimize_remove_black_frames" = "Ottimizza + Rimuovi Frame Neri";
+"optimize_remove_black_frames_title" = "Ottimizza e Rimuovi Frame Neri";
+"optimize_remove_black_frames_message" = "Questo ottimizzerà tutti i video nel formato HEVC e rileverà e rimuoverà automaticamente i frame neri all'inizio e alla fine. Il processo potrebbe richiedere tempo a seconda del numero e della dimensione dei video.";
+"select_directory_black_frames_permission" = "Seleziona la directory '%@' per concedere i permessi di scrittura per l'ottimizzazione dei frame neri:";
+"no_videos_available_title" = "Nessun Video Disponibile";
+"no_videos_available_message" = "Non ci sono video nella tua libreria da elaborare.";
+
+/* Rimozione solo frame neri */
+"remove_black_frames" = "Rimuovi Frame Neri";
+"remove_black_frames_title" = "Rimuovi Frame Neri";
+"remove_black_frames_message" = "Questo rileverà e rimuoverà i frame neri all'inizio e alla fine dei video senza cambiare il formato video. Il processo potrebbe richiedere tempo a seconda del numero e della dimensione dei video.";
+"processing_video_black_frames" = "Elaborazione: %@";
+"video_skipped_no_black_frames" = "Saltato: %@ (nessun frame nero trovato)";
+"black_frames_complete_title" = "Rimozione Frame Neri Completata";
+"black_frames_complete_message" = "Elaborati con successo %d video. %d video hanno avuto i frame neri rimossi, %d video sono stati saltati (nessun frame nero trovato).";
+
+/* Errori di ottimizzazione */
+"optimization_errors_title" = "Errori di Elaborazione";
+"optimization_errors_message" = "Alcuni video non sono stati elaborati:\n%@";
