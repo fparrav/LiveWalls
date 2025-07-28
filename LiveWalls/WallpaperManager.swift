@@ -31,8 +31,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private var desktopVideoInstances: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)] = []
     private let notificationManager: NotificationManager
     private var currentStaticWallpaperURL: URL?
-    private var autoChangeTimer: Timer?
     private var staticFrameUpdateTimer: Timer?
+    
+    // MARK: - New Fullscreen and Timer Management
+    private let fullscreenDetector = FullscreenDetector()
+    private let timerManager = WallpaperTimerManager.shared
+    private var isWallpaperPausedForFullscreen = false
     
     // MARK: - Variables para sincronización de destrucción de ventanas
     var pendingDestroyCompletion: (() -> Void)? = nil
@@ -76,6 +80,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         setupScreenChangeNotifications()
         setupWorkspaceNotifications()
         setupTerminationHandling()
+        setupFullscreenDetection()
         
         // Auto-start solo si está configurado
         if !videoFiles.isEmpty && currentVideo != nil && UserDefaults.standard.bool(forKey: "AutoStartWallpaper") {
@@ -89,7 +94,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     deinit {
         appLogger.info("\(NSLocalizedString("deinitializing_wallpaper_manager", comment: "Deinitializing WallpaperManager"), privacy: .public)")
-        stopAutoChangeTimer()
+        timerManager.stopTimer()
         cleanupAllResources()
     }
     
@@ -826,27 +831,38 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    // MARK: - Auto Change Timer
+    // MARK: - New Robust Auto Change Timer
     
     private func startAutoChangeTimerIfNeeded() {
-        guard isAutoChangeEnabled, autoChangeInterval > 0, videoFiles.count > 1 else { return }
-        
-        stopAutoChangeTimer()
-        
-        autoChangeTimer = Timer.scheduledTimer(withTimeInterval: autoChangeInterval, repeats: true) { _ in
-            Task { @MainActor in
-                await self.changeToNextVideo()
-            }
+        guard isAutoChangeEnabled, autoChangeInterval > 0, videoFiles.count > 1 else { 
+            appLogger.debug("💡 No se inicia timer: enabled=\(isAutoChangeEnabled), interval=\(autoChangeInterval), videos=\(videoFiles.count)")
+            return 
         }
         
-        appLogger.info("⏰ Timer de cambio automático iniciado (\(Int(self.autoChangeInterval))s)")
+        // Validar que hay videos habilitados para reproducción aleatoria
+        let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
+        guard enabledVideos.count > 1 else {
+            appLogger.warning("⚠️ No hay suficientes videos habilitados para rotación automática")
+            return
+        }
+        
+        // Validar estado del timer manager
+        if !timerManager.validateState() {
+            appLogger.warning("⚠️ Estado de timer inconsistente, recuperando...")
+            timerManager.recoverFromInconsistentState()
+        }
+        
+        // Iniciar timer con el nuevo sistema robusto
+        timerManager.startTimer(interval: autoChangeInterval) { [weak self] in
+            await self?.changeToNextVideo()
+        }
+        
+        appLogger.info("⏰ Timer robusto de cambio automático iniciado: \(Int(self.autoChangeInterval))s")
     }
     
-    nonisolated private func stopAutoChangeTimer() {
-        Task { @MainActor in
-            autoChangeTimer?.invalidate()
-            autoChangeTimer = nil
-        }
+    private func stopAutoChangeTimer() {
+        timerManager.stopTimer()
+        appLogger.info("⏹️ Timer de cambio automático detenido")
     }
     
     // MARK: - Static Frame Update Timer
@@ -1066,10 +1082,19 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         userDefaults.set(isAutoChangeEnabled, forKey: "AutoChangeEnabled")
         userDefaults.set(autoChangeInterval, forKey: "AutoChangeInterval")
         
-        if isAutoChangeEnabled {
+        appLogger.info("💾 Guardando configuración: enabled=\(isAutoChangeEnabled), interval=\(Int(autoChangeInterval))s")
+        
+        if isAutoChangeEnabled && isPlayingWallpaper {
+            // Solo iniciar timer si el wallpaper está reproduciéndose
             startAutoChangeTimerIfNeeded()
         } else {
+            // Detener timer si se deshabilitó o no hay wallpaper activo
             stopAutoChangeTimer()
+        }
+        
+        // Realizar health check después de cambios
+        Task {
+            await performTimerHealthCheck()
         }
     }
     
@@ -1198,6 +1223,88 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             object: nil
         )
     }
+    
+    /// Configura la detección de aplicaciones fullscreen
+    private func setupFullscreenDetection() {
+        appLogger.info("🔍 Configurando detección de fullscreen")
+        
+        // Configurar callbacks del detector
+        fullscreenDetector.onFullscreenEntered = { [weak self] appName in
+            Task { @MainActor in
+                await self?.handleFullscreenEntered(appName: appName)
+            }
+        }
+        
+        fullscreenDetector.onFullscreenExited = { [weak self] in
+            Task { @MainActor in
+                await self?.handleFullscreenExited()
+            }
+        }
+        
+        appLogger.info("✅ Detección de fullscreen configurada")
+    }
+    
+    /// Maneja cuando una aplicación entra en fullscreen
+    private func handleFullscreenEntered(appName: String) async {
+        appLogger.info("🎮 Aplicación en fullscreen detectada: \(appName)")
+        
+        guard isAutoChangeEnabled && isPlayingWallpaper else {
+            appLogger.debug("💡 No hay timer activo, no se requiere pausar")
+            return
+        }
+        
+        // Pausar el timer de cambio automático
+        if timerManager.isTimerActive && !timerManager.isPaused {
+            appLogger.info("⏸️ Pausando timer de wallpaper por fullscreen")
+            timerManager.pauseTimer()
+            isWallpaperPausedForFullscreen = true
+            
+            // Opcional: También pausar reproductores de video para ahorrar recursos
+            await pauseVideoPlayersForFullscreen()
+        }
+    }
+    
+    /// Maneja cuando se sale de fullscreen
+    private func handleFullscreenExited() async {
+        appLogger.info("🏠 Salida de fullscreen detectada")
+        
+        guard isWallpaperPausedForFullscreen else {
+            appLogger.debug("💡 Wallpaper no estaba pausado por fullscreen")
+            return
+        }
+        
+        // Resumir el timer de cambio automático
+        if timerManager.isTimerActive && timerManager.isPaused {
+            appLogger.info("▶️ Resumiendo timer de wallpaper después de fullscreen")
+            timerManager.resumeTimer()
+            isWallpaperPausedForFullscreen = false
+            
+            // Resumir reproductores de video
+            await resumeVideoPlayersFromFullscreen()
+        }
+    }
+    
+    /// Pausa los reproductores de video durante fullscreen para ahorrar recursos
+    private func pauseVideoPlayersForFullscreen() async {
+        appLogger.info("⏸️ Pausando reproductores de video por fullscreen")
+        
+        for (window, _) in desktopVideoInstances {
+            if let playerLayer = window.playerLayer {
+                playerLayer.player?.pause()
+            }
+        }
+    }
+    
+    /// Reanuda los reproductores de video después de fullscreen
+    private func resumeVideoPlayersFromFullscreen() async {
+        appLogger.info("▶️ Resumiendo reproductores de video después de fullscreen")
+        
+        for (window, _) in desktopVideoInstances {
+            if let playerLayer = window.playerLayer {
+                playerLayer.player?.play()
+            }
+        }
+    }
 
     @objc private func willSleep(notification: NSNotification) {
         appLogger.info("💤 El sistema va a suspenderse. Deteniendo temporalmente el wallpaper.")
@@ -1284,5 +1391,87 @@ extension WallpaperManager {
 }
 
 // MARK: - Debug Functions
+
+extension WallpaperManager {
+    
+    /// Realiza un health check completo del timer
+    func performTimerHealthCheck() async {
+        appLogger.info("🏥 Realizando health check del timer")
+        
+        let isHealthy = timerManager.performHealthCheck()
+        let fullscreenState = fullscreenDetector.getCurrentState()
+        
+        if !isHealthy {
+            appLogger.error("❌ Timer health check falló")
+            logSystemState()
+        }
+        
+        appLogger.info("📊 Estado actual: Timer saludable=\(isHealthy), Fullscreen=\(fullscreenState.isFullscreen)")
+    }
+    
+    /// Registra el estado completo del sistema para debugging
+    func logSystemState() {
+        let timerDebugInfo = timerManager.getDebugInfo()
+        let fullscreenDebugInfo = fullscreenDetector.getDebugInfo()
+        
+        var systemState = "=== SISTEMA LIVEWALLS DEBUG ===\n"
+        systemState += "WallpaperManager State:\n"
+        systemState += "- isPlayingWallpaper: \(isPlayingWallpaper)\n"
+        systemState += "- isAutoChangeEnabled: \(isAutoChangeEnabled)\n"
+        systemState += "- autoChangeInterval: \(Int(autoChangeInterval))s\n"
+        systemState += "- currentVideo: \(currentVideo?.name ?? "None")\n"
+        systemState += "- videoFiles.count: \(videoFiles.count)\n"
+        systemState += "- enabledVideos.count: \(videoFiles.filter { $0.isEnabledForRandomPlay }.count)\n"
+        systemState += "- desktopVideoInstances.count: \(desktopVideoInstances.count)\n"
+        systemState += "- isWallpaperPausedForFullscreen: \(isWallpaperPausedForFullscreen)\n\n"
+        
+        systemState += timerDebugInfo + "\n"
+        systemState += fullscreenDebugInfo
+        
+        appLogger.info("🐛 \(systemState)")
+    }
+    
+    /// Función de debug para forzar verificación de estados
+    func debugForceStateCheck() {
+        Task {
+            appLogger.info("🔧 Forzando verificación de estados...")
+            
+            // Verificar estado de fullscreen
+            await fullscreenDetector.forceCheck()
+            
+            // Verificar salud del timer
+            await performTimerHealthCheck()
+            
+            // Log estado completo
+            logSystemState()
+            
+            appLogger.info("✅ Verificación de estados completada")
+        }
+    }
+    
+    /// Función de debug para testing de timer
+    func debugTestTimer() {
+        appLogger.info("🧪 Iniciando prueba de timer...")
+        
+        // Guardar configuración actual
+        let originalEnabled = isAutoChangeEnabled
+        let originalInterval = autoChangeInterval
+        
+        // Configurar para prueba rápida
+        isAutoChangeEnabled = true
+        autoChangeInterval = 5.0 // 5 segundos para prueba
+        
+        // Iniciar timer de prueba
+        startAutoChangeTimerIfNeeded()
+        
+        // Programar restauración después de 20 segundos
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20.0) {
+            self.appLogger.info("🧪 Finalizando prueba de timer, restaurando configuración")
+            self.isAutoChangeEnabled = originalEnabled
+            self.autoChangeInterval = originalInterval
+            self.saveAutoChangeSettings()
+        }
+    }
+}
 
 // MARK: - Final del archivo
