@@ -147,3 +147,9 @@
 /* 优化错误 */
 "optimization_errors_title" = "处理错误";
 "optimization_errors_message" = "一些视频无法处理：\n%@";
+
+/* AutoUpdater */
+"update_available_title" = "新版本可用";
+"update_available_message" = "LiveWalls %@ 可用。\n当前：%@\n\n%@";
+"view_on_github" = "在 GitHub 上查看";
+"dont_remind_version" = "不再提醒此版本";

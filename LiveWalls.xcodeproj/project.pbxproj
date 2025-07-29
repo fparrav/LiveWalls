@@ -16,7 +16,9 @@
 		8B0C7D2E2B1F4A3100123456 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8B0C7D2D2B1F4A3100123456 /* Assets.xcassets */; };
 		8B0C7D312B1F4A3100123456 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8B0C7D302B1F4A3100123456 /* Preview Assets.xcassets */; };
 		8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */; };
-		57E25DB73D6646D6A1A4BFB2 /* AutoUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E25DB73D6646D6A1A4BFB1 /* AutoUpdater.swift */; };
+		3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */; };
+		F2227C492E1F40488BAD0026 /* WallpaperTimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */; };
+		ABC123DE2E1F789012345678 /* AutoUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC123DE456F789012345678AUTOUPD01 /* AutoUpdater.swift */; };
 		8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */; };
 		8B0C7D402B1F4A8000123456 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */; };
 		8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D412B1F4A9000123456 /* NotificationManager.swift */; };
@@ -95,7 +97,9 @@
 		8B0C7D302B1F4A3100123456 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		8B0C7D322B1F4A3100123456 /* LiveWalls.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LiveWalls.entitlements; sourceTree = "<group>"; };
 		8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperManager.swift; sourceTree = "<group>"; };
-		57E25DB73D6646D6A1A4BFB1 /* AutoUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoUpdater.swift; sourceTree = "<group>"; };
+		3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenDetector.swift; sourceTree = "<group>"; };
+		F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperTimerManager.swift; sourceTree = "<group>"; };
+		ABC123DE456F789012345678AUTOUPD01 /* AutoUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoUpdater.swift; sourceTree = "<group>"; };
 		8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFile.swift; sourceTree = "<group>"; };
 		8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		8B0C7D412B1F4A9000123456 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
@@ -211,7 +215,9 @@
 				9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */,
 				542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */,
 				8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */,
-				57E25DB73D6646D6A1A4BFB1 /* AutoUpdater.swift */,
+				3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */,
+				F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */,
+				ABC123DE456F789012345678AUTOUPD01 /* AutoUpdater.swift */,
 				8B0C7D412B1F4A9000123456 /* NotificationManager.swift */,
 				1234567890ABCDEF12345677 /* ScreenSaverManager.swift */,
 				8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */,
@@ -373,8 +379,10 @@
 				9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */,
 				8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */,
 				8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */,
-				57E25DB73D6646D6A1A4BFB2 /* AutoUpdater.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF05 /* VideoOptimizer.swift in Sources */,
+				3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */,
+				F2227C492E1F40488BAD0026 /* WallpaperTimerManager.swift in Sources */,
+				ABC123DE2E1F789012345678 /* AutoUpdater.swift in Sources */,
 				8B0C7D2A2B1F4A3000123456 /* LiveWallsApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

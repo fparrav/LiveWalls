@@ -147,3 +147,25 @@
 /* Erreurs d'optimisation */
 "optimization_errors_title" = "Erreurs de Traitement";
 "optimization_errors_message" = "Certaines vidéos n'ont pas pu être traitées :\n%@";
+
+/* Détection Plein Écran */
+"fullscreen_detected" = "Application plein écran détectée : %@";
+"fullscreen_exited" = "Sortie du mode plein écran";
+"fullscreen_detector_initialized" = "FullscreenDetector initialisé";
+
+/* Gestionnaire de Timer */
+"timer_started" = "Timer démarré : %d secondes";
+"timer_paused" = "Timer en pause, temps restant : %d secondes";
+"timer_resumed" = "Timer repris";
+"timer_stopped" = "Timer arrêté";
+"timer_health_check_failed" = "Vérification de santé du timer échouée";
+
+/* Gestion Wallpaper avec Plein Écran */
+"wallpaper_paused_for_fullscreen" = "Wallpaper en pause pour application plein écran";
+"wallpaper_resumed_from_fullscreen" = "Wallpaper repris depuis plein écran";
+
+/* AutoUpdater */
+"update_available_title" = "Nouvelle Version Disponible";
+"update_available_message" = "LiveWalls %@ est disponible.\nActuelle : %@\n\n%@";
+"view_on_github" = "Voir sur GitHub";
+"dont_remind_version" = "Ne plus me rappeler cette version";

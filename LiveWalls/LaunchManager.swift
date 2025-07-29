@@ -1,7 +1,7 @@
 import Foundation
 import ServiceManagement
 
-/// Gestor para configurar el lanzamiento automático de la aplicación al iniciar sesión.
+/// Manager to configure automatic application launch at login.
 final class LaunchManager: ObservableObject {
     @Published var isLaunchAtLoginEnabled: Bool = false
     
@@ -11,21 +11,21 @@ final class LaunchManager: ObservableObject {
         checkLaunchAtLoginStatus()
     }
     
-    /// Verifica el estado actual del lanzamiento automático
+    /// Checks the current status of automatic launch
     private func checkLaunchAtLoginStatus() {
         if #available(macOS 13.0, *) {
-            // Usar SMAppService en macOS 13+
+            // Use SMAppService on macOS 13+
             isLaunchAtLoginEnabled = SMAppService.mainApp.status == .enabled
         } else {
-            // Fallback para versiones anteriores
+            // Fallback for earlier versions
             // En versiones anteriores, podríamos usar LSSharedFileList APIs
             // Por simplicidad, mantenemos false para versiones antiguas
             isLaunchAtLoginEnabled = false
         }
     }
     
-    /// Configura el lanzamiento automático
-    /// - Parameter enabled: true para habilitar, false para deshabilitar
+    /// Configures automatic launch
+    /// - Parameter enabled: true to enable, false to disable
     func setLaunchAtLogin(_ enabled: Bool) {
         guard enabled != isLaunchAtLoginEnabled else { return }
         
@@ -37,13 +37,13 @@ final class LaunchManager: ObservableObject {
                     try SMAppService.mainApp.unregister()
                 }
                 isLaunchAtLoginEnabled = enabled
-                print("✅ Launch at login \(enabled ? "habilitado" : "deshabilitado")")
+                print("✅ Launch at login \(enabled ? "enabled" : "disabled")")
             } catch {
-                print("❌ Error configurando launch at login: \(error.localizedDescription)")
+                print("❌ Error configuring launch at login: \(error.localizedDescription)")
             }
         } else {
-            // Para versiones anteriores de macOS, no hacer nada por ahora
-            print("⚠️ Launch at login no soportado en esta versión de macOS")
+            // For earlier macOS versions, do nothing for now
+            print("⚠️ Launch at login not supported on this macOS version")
         }
     }
 }

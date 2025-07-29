@@ -3,32 +3,32 @@ import os.log
 import UserNotifications
 import SwiftUI
 
-/// AppDelegate simplificado que deja el manejo de ventanas a SwiftUI
+/// Simplified AppDelegate that leaves window management to SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: "com.livewalls.app", category: "AppLifecycle")
     
-    /// Referencia al WallpaperManager
+    /// Reference to WallpaperManager
     var wallpaperManager: WallpaperManager? {
         didSet {
-            logger.info("📱 WallpaperManager configurado")
+            logger.info("📱 WallpaperManager configured")
         }
     }
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        logger.info("🚀 Iniciando aplicación")
+        logger.info("🚀 Starting application")
         
-        // Configurar manejo de cierre de ventanas
+        // Configure window close handling
         setupWindowCloseHandling()
         
-        // Prevenir múltiples instancias
+        // Prevent multiple instances
         if !isFirstInstance() {
-            logger.warning("⚠️ Ya existe una instancia de la aplicación")
+            logger.warning("⚠️ An instance of the application already exists")
             NSApp.terminate(nil)
             return
         }
         
-        // La política de activación y ventanas ahora se manejan completamente en LiveWallsApp.swift
-        logger.info("✅ AppDelegate configurado - ventanas manejadas por SwiftUI")
+        // Activation policy and windows are now handled completely in LiveWallsApp.swift
+        logger.info("✅ AppDelegate configured - windows managed by SwiftUI")
     }
     
     /// Configura el manejo de cierre de ventanas
@@ -42,15 +42,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
     
-    /// Maneja el cierre de ventanas principales
+    /// Handles main window closing
     @objc private func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         
-        // Si es una ventana principal (no de status bar), ajustar comportamiento
+        // If it's a main window (not status bar), adjust behavior
         if !window.className.contains("StatusBar") && !window.className.contains("MenuWindow") {
-            logger.info("🚪 Ventana principal cerrándose - manteniendo app en background")
+            logger.info("🚪 Main window closing - keeping app in background")
             
-            // Verificar si quedan ventanas principales después del cierre
+            // Check if main windows remain after closing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 let mainWindows = NSApp.windows.filter { w in
                     !w.className.contains("StatusBar") && 
@@ -60,8 +60,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 
                 if mainWindows.isEmpty {
-                    self.logger.info("📱 App funcionando en background - status bar disponible")
-                    // Mantenemos política regular para permitir reactivación desde status bar
+                    self.logger.info("📱 App running in background - status bar available")
+                    // Maintain regular policy to allow reactivation from status bar
                 }
             }
         }
@@ -69,17 +69,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        logger.info("🔄 Solicitud de reapertura - ventanas visibles: \(flag)")
+        logger.info("🔄 Reopen request - visible windows: \(flag)")
         
         if !flag {
-            // No hay ventanas visibles, necesitamos mostrar una
-            logger.info("🎯 Mostrando ventana principal desde dock/reopen")
+            // No visible windows, need to show one
+            logger.info("🎯 Showing main window from dock/reopen")
             
             DispatchQueue.main.async {
-                // Activar la aplicación
+                // Activate the application
                 NSApp.activate(ignoringOtherApps: true)
                 
-                // Buscar cualquier ventana principal disponible
+                // Find any available main window
                 let mainWindows = NSApp.windows.filter { window in
                     !window.className.contains("StatusBar") &&
                     !window.className.contains("MenuWindow") &&
@@ -87,18 +87,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 
                 if let window = mainWindows.first {
-                    // Restaurar si está minimizada
+                    // Restore if minimized
                     if window.isMiniaturized {
                         window.deminiaturize(nil)
                     }
                     
-                    // Traer al frente
+                    // Bring to front
                     window.makeKeyAndOrderFront(nil)
                     window.orderFrontRegardless()
                     
-                    self.logger.info("✅ Ventana restaurada desde dock/reopen")
+                    self.logger.info("✅ Window restored from dock/reopen")
                 } else {
-                    self.logger.warning("⚠️ No se encontró ventana para restaurar desde dock/reopen")
+                    self.logger.warning("⚠️ No window found to restore from dock/reopen")
                 }
             }
         }
@@ -106,23 +106,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
     
-    // Permitir terminación normal
+    // Allow normal termination
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        logger.info("🛑 Solicitud de terminación recibida")
+        logger.info("🛑 Termination request received")
         return .terminateNow
     }
     
-    /// Método auxiliar para abrir la ventana principal desde componentes externos
+    /// Helper method to open main window from external components
     @objc func showMainWindow() {
-        logger.info("🚀 Mostrando ventana principal desde método auxiliar")
+        logger.info("🚀 Showing main window from helper method")
         
         DispatchQueue.main.async {
-            // Activar la aplicación
+            // Activate the application
             NSApp.unhide(nil)
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
             
-            // Buscar ventanas principales
+            // Find main windows
             let mainWindows = NSApp.windows.filter { window in
                 !window.className.contains("StatusBar") &&
                 !window.className.contains("MenuWindow") &&
@@ -130,7 +130,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             
             if let window = mainWindows.first {
-                // Restaurar y mostrar
+                // Restore and show
                 if window.isMiniaturized {
                     window.deminiaturize(nil)
                 }
@@ -138,30 +138,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 window.orderFrontRegardless()
                 window.makeKeyAndOrderFront(nil)
                 
-                // Verificar activación
+                // Verify activation
                 DispatchQueue.main.async {
                     window.makeKey()
                     NSApp.activate(ignoringOtherApps: true)
                 }
                 
-                self.logger.info("✅ Ventana principal mostrada exitosamente")
+                self.logger.info("✅ Main window shown successfully")
             } else {
-                self.logger.warning("⚠️ No se encontró ventana principal para mostrar")
+                self.logger.warning("⚠️ No main window found to show")
             }
         }
     }
     
-    /// ✅ Función para limpiar recursos antes de terminar la aplicación
+    /// ✅ Function to clean up resources before terminating the application
     func applicationWillTerminate(_ notification: Notification) {
-        logger.info("🛑 Terminando aplicación")
+        logger.info("🛑 Terminating application")
         
-        // Asegurar que el WallpaperManager limpie sus recursos
+        // Ensure WallpaperManager cleans up its resources
         wallpaperManager?.stopWallpaper()
     }
     
-    /// Elimina observers para evitar fugas de memoria al destruir el AppDelegate
+    /// Remove observers to avoid memory leaks when destroying AppDelegate
     deinit {
-        // Remover observer de cierre de ventana para evitar leaks
+        // Remove window close observer to avoid leaks
         NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
     }
     

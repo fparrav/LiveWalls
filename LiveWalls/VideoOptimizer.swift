@@ -28,9 +28,9 @@ class VideoOptimizer: ObservableObject {
             
             var displayName: String {
                 switch self {
-                case .high: return "Alta Calidad"
-                case .medium: return "Calidad Media" 
-                case .balanced: return "Balanceada"
+                case .high: return "High Quality"
+                case .medium: return "Medium Quality" 
+                case .balanced: return "Balanced"
                 }
             }
         }
@@ -572,25 +572,25 @@ enum VideoOptimizerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noVideoTrack:
-            return "No se encontró pista de video en el archivo"
+            return "No video track found in file"
         case .noFormatDescription:
-            return "No se pudo obtener información del formato de video"
+            return "Could not get video format information"
         case .noBookmarkData:
-            return "No hay datos de marcador de seguridad para el archivo"
+            return "No security bookmark data for file"
         case .securityScopedAccessFailed:
-            return "No se pudo acceder al archivo de video"
+            return "Could not access video file"
         case .exportSessionCreationFailed:
-            return "No se pudo crear sesión de exportación"
+            return "Could not create export session"
         case .exportFailed:
-            return "Error durante la optimización del video"
+            return "Error during video optimization"
         case .exportCancelled:
-            return "Optimización cancelada por el usuario"
+            return "Optimization cancelled by user"
         case .unexpectedStatus:
-            return "Estado inesperado durante la optimización"
+            return "Unexpected status during optimization"
         case .alreadyOptimized:
-            return "El video ya está optimizado con HEVC"
+            return "Video is already optimized with HEVC"
         case .compositionCreationFailed:
-            return "No se pudo crear la composición de video para recortar frames negros"
+            return "Could not create video composition to trim black frames"
         }
     }
 }

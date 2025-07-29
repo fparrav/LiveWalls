@@ -147,3 +147,9 @@
 /* 최적화 오류 */
 "optimization_errors_title" = "처리 오류";
 "optimization_errors_message" = "일부 비디오를 처리할 수 없습니다:\n%@";
+
+/* AutoUpdater */
+"update_available_title" = "새 버전 사용 가능";
+"update_available_message" = "LiveWalls %@을(를) 사용할 수 있습니다.\n현재: %@\n\n%@";
+"view_on_github" = "GitHub에서 보기";
+"dont_remind_version" = "이 버전에 대해 다시 알리지 않음";

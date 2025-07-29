@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Manager para notificaciones de actualizaciones desde GitHub
+/// Manager for update notifications from GitHub
 class UpdateNotifier: ObservableObject {
     @Published var updateAvailable = false
     @Published var updateInfo: GitHubRelease?
@@ -21,7 +21,7 @@ class UpdateNotifier: ObservableObject {
         self.currentVersion = currentVersion
     }
     
-    /// Verifica si hay actualizaciones disponibles
+    /// Checks if updates are available
     func checkForUpdates() async {
         await MainActor.run {
             isChecking = true
@@ -35,9 +35,9 @@ class UpdateNotifier: ObservableObject {
                 if self.shouldNotifyUpdate(for: latestRelease.tagName) {
                     self.updateInfo = latestRelease
                     self.updateAvailable = true
-                    print("✅ Nueva versión disponible: \(latestRelease.tagName)")
+                    print("✅ New version available: \(latestRelease.tagName)")
                 } else {
-                    print("✅ Aplicación actualizada o versión ignorada (v\(self.currentVersion))")
+                    print("✅ Application up to date or version ignored (v\(self.currentVersion))")
                 }
                 self.isChecking = false
             }
@@ -45,11 +45,11 @@ class UpdateNotifier: ObservableObject {
             await MainActor.run {
                 self.isChecking = false
             }
-            print("❌ Error verificando actualizaciones: \(error.localizedDescription)")
+            print("❌ Error checking for updates: \(error.localizedDescription)")
         }
     }
     
-    /// Abre el release en GitHub
+    /// Opens the release on GitHub
     func openRelease() {
         guard let release = updateInfo else { return }
         let releaseURL = "https://github.com/\(repoOwner)/\(repoName)/releases/tag/\(release.tagName)"
@@ -58,23 +58,23 @@ class UpdateNotifier: ObservableObject {
         }
     }
     
-    /// Marca la versión para no recordar más
+    /// Marks the version to not remind again
     func skipVersion() {
         guard let release = updateInfo else { return }
         userDefaults.set(release.tagName, forKey: "SkippedVersion")
         updateAvailable = false
     }
     
-    /// Muestra el diálogo de actualización
+    /// Shows the update dialog
     func showUpdateDialog() {
         guard let release = updateInfo else { return }
         
         let alert = NSAlert()
-        alert.messageText = "Nueva Versión Disponible"
-        alert.informativeText = "LiveWalls \(release.tagName) está disponible.\nActual: \(currentVersion)\n\n\(release.name)"
-        alert.addButton(withTitle: "Ver en GitHub")
-        alert.addButton(withTitle: "Cancelar")
-        alert.addButton(withTitle: "No recordar esta versión")
+        alert.messageText = NSLocalizedString("update_available_title", comment: "Update available dialog title")
+        alert.informativeText = String(format: NSLocalizedString("update_available_message", comment: "Update available dialog message"), release.tagName, currentVersion, release.name)
+        alert.addButton(withTitle: NSLocalizedString("view_on_github", comment: "View on GitHub button"))
+        alert.addButton(withTitle: NSLocalizedString("cancel_button", comment: "Cancel button"))
+        alert.addButton(withTitle: NSLocalizedString("dont_remind_version", comment: "Don't remind for this version button"))
         alert.alertStyle = .informational
         
         let response = alert.runModal()
@@ -85,7 +85,7 @@ class UpdateNotifier: ObservableObject {
         case .alertThirdButtonReturn:
             skipVersion()
         default:
-            break // Cancelar
+            break // Cancel
         }
     }
     
@@ -98,12 +98,12 @@ class UpdateNotifier: ObservableObject {
     }
     
     private func shouldNotifyUpdate(for remoteVersion: String) -> Bool {
-        // Verificar si es una versión más nueva
+        // Check if it's a newer version
         guard isNewerVersion(remote: remoteVersion, current: currentVersion) else {
             return false
         }
         
-        // Verificar si el usuario marcó que no quiere recordar esta versión
+        // Check if the user marked not to be reminded of this version
         let skippedVersion = userDefaults.string(forKey: "SkippedVersion")
         return skippedVersion != remoteVersion
     }
@@ -112,7 +112,7 @@ class UpdateNotifier: ObservableObject {
         let remoteComponents = parseVersion(remote)
         let currentComponents = parseVersion(current)
         
-        // Comparar major.minor.patch
+        // Compare major.minor.patch
         for i in 0..<3 {
             let remoteNum = i < remoteComponents.count ? remoteComponents[i] : 0
             let currentNum = i < currentComponents.count ? currentComponents[i] : 0
@@ -124,7 +124,7 @@ class UpdateNotifier: ObservableObject {
             }
         }
         
-        return false // Versiones iguales
+        return false // Equal versions
     }
     
     private func parseVersion(_ version: String) -> [Int] {

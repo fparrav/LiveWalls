@@ -11,20 +11,20 @@ import UniformTypeIdentifiers
 import os
 #endif
 
-// Logger específico para debugging de memoria
+// Specific logger for memory debugging
 private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "MemoryManagement")
 
-/// Gestor principal de fondos de pantalla en video para LiveWalls
-/// Maneja la reproducción, cambio y configuración de videos como fondo de escritorio
+/// Main video wallpaper manager for LiveWalls
+/// Handles playback, changing and configuration of videos as desktop backgrounds
 @MainActor
 class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
-    // MARK: - Published Properties (DEBEN estar declaradas ANTES del init)
+    // MARK: - Published Properties (MUST be declared BEFORE init)
     @Published var videoFiles: [VideoFile] = []
     @Published var currentVideo: VideoFile? = nil
     @Published var isPlayingWallpaper = false
     @Published var isAutoChangeEnabled = false
-    @Published var autoChangeInterval: TimeInterval = 10 * 60 // 10 minutos por defecto
+    @Published var autoChangeInterval: TimeInterval = 10 * 60 // 10 minutes default
     
     // MARK: - Private Properties
     private let appLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManager")
@@ -38,12 +38,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let timerManager = WallpaperTimerManager.shared
     private var isWallpaperPausedForFullscreen = false
     
-    // MARK: - Variables para sincronización de destrucción de ventanas
+    // MARK: - Variables for window destruction synchronization
     var pendingDestroyCompletion: (() -> Void)? = nil
     var pendingWindowClosures: Set<NSWindow> = []
     var closedWindowsCount: Int = 0
     
-    // MARK: - UserDefaults y configuración
+    // MARK: - UserDefaults and configuration
     private let resourceReleaseDelay: TimeInterval = 0.1
     private let userDefaults = UserDefaults.standard
     private let videosKey = "SavedVideos"
@@ -53,13 +53,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private var activeSecurityScopedURLs: Set<String> = []
     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
-    // MARK: - Sincronización para prevenir crashes
+    // MARK: - Synchronization to prevent crashes
     private let wallpaperOperationQueue = DispatchQueue(label: "com.livewalls.wallpaperQueue", attributes: .concurrent)
     private let wallpaperOperationActor = WallpaperOperationActor()
     private var isChangingVideo = false
     private var isCleaningUp = false
     
-    // Actor para serializar operaciones de wallpaper
+    // Actor to serialize wallpaper operations
     private actor WallpaperOperationActor {
         func withExclusiveAccess<T>(@_implicitSelfCapture operation: () async throws -> T) async rethrows -> T {
             return try await operation()
@@ -73,7 +73,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         appLogger.info("\(NSLocalizedString("initializing_wallpaper_manager", comment: "Initializing WallpaperManager"), privacy: .public)")
         
-        // Cargar configuración y datos guardados
+        // Load configuration and saved data
         loadSavedVideos()
         loadCurrentVideo()
         loadAutoChangeSettings()
@@ -94,7 +94,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     deinit {
         appLogger.info("\(NSLocalizedString("deinitializing_wallpaper_manager", comment: "Deinitializing WallpaperManager"), privacy: .public)")
-        timerManager.stopTimer()
+        Task { @MainActor in
+            timerManager.stopTimer()
+        }
         cleanupAllResources()
     }
     
@@ -102,7 +104,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Duplicate Detection
     
-    /// Enum para las opciones de manejo de duplicados
+    /// Enum for duplicate handling options
     enum DuplicateHandling: CaseIterable {
         case skip
         case replace
@@ -120,9 +122,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Verifica si una URL representa un video duplicado basado en la ruta del archivo
-    /// - Parameter url: URL a verificar
-    /// - Returns: true si ya existe un video con la misma ruta
+    /// Checks if a URL represents a duplicate video based on file path
+    /// - Parameter url: URL to check
+    /// - Returns: true if a video with the same path already exists
     private func isDuplicateByURL(_ url: URL) -> Bool {
         let normalizedPath = url.standardizedFileURL.path
         return videoFiles.contains { videoFile in
@@ -132,7 +134,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     /// Verifica si una URL representa un video duplicado basado en bookmark data
-    /// - Parameter url: URL a verificar
+    /// - Parameter url: URL to check
     /// - Returns: true si ya existe un video con bookmark data equivalente
     private func isDuplicateByBookmark(_ bookmarkData: Data) -> Bool {
         return videoFiles.contains { videoFile in
@@ -311,7 +313,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     self.appLogger.info("\(String(format: NSLocalizedString("video_added", comment: "Video added"), videoFile.name), privacy: .public)")
                     self.appLogger.info("\(String(format: NSLocalizedString("videos_count_updated", comment: "Videos count updated"), countBefore, countAfter), privacy: .public)")
                     
-                    // Debug adicional para verificar que SwiftUI recibe la actualización
+                    // Additional debug to verify SwiftUI receives the update
                     print(String(format: NSLocalizedString("videofiles_updated_debug", comment: "VideoFiles updated debug"), self.videoFiles.count))
                     print(String(format: NSLocalizedString("names_debug", comment: "Names debug"), self.videoFiles.map { $0.name }.joined(separator: ", ")))
                 }
@@ -331,7 +333,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }
         }
         
-        // Mostrar resumen de la importación
+        // Show import summary
         DispatchQueue.main.async {
             var summaryMessage = ""
             if addedCount > 0 {
@@ -348,14 +350,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             
             if !summaryMessage.isEmpty {
                 self.notificationManager.showMessage(title: NSLocalizedString("import_completed_title", comment: "Import completed"), message: summaryMessage)
-                self.appLogger.info("📊 Resumen de importación: \(summaryMessage)")
+                self.appLogger.info("📊 Import summary: \(summaryMessage)")
             }
         }
     }
     
-    /// Genera una miniatura para el video
-    /// - Parameter url: URL del archivo de video
-    /// - Returns: Data de la imagen en formato PNG o nil si falla
+    /// Generates a thumbnail for the video
+    /// - Parameter url: URL of the video file
+    /// - Returns: Image data in PNG format or nil if it fails
     private func generateThumbnail(for url: URL) async -> Data? {
         let asset = AVURLAsset(url: url)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
@@ -372,16 +374,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Genera un frame de alta resolución del video para usar como wallpaper estático
-    /// - Parameter url: URL del archivo de video
-    /// - Parameter timeOffset: Tiempo específico del video (nil para tiempo aleatorio)
-    /// - Returns: URL del archivo temporal de imagen o nil si falla
+    /// Generates a high resolution frame from the video to use as static wallpaper
+    /// - Parameter url: URL of the video file
+    /// - Parameter timeOffset: Specific video time (nil for random time)
+    /// - Returns: URL of temporary image file or nil if it fails
     private func generateStaticWallpaperFrame(for url: URL, timeOffset: CMTime? = nil) async -> URL? {
         let asset = AVURLAsset(url: url)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
         
-        // Usar resolución de pantalla principal para mejor calidad
+        // Use main screen resolution for better quality
         if let mainScreen = NSScreen.main {
             let screenSize = mainScreen.frame.size
             let scale = mainScreen.backingScaleFactor
@@ -391,21 +393,21 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             )
         }
         
-        // Generar imagen en alta calidad
+        // Generate high quality image
         imageGenerator.requestedTimeToleranceAfter = CMTime.zero
         imageGenerator.requestedTimeToleranceBefore = CMTime.zero
         
         do {
-            // Determinar tiempo del frame a extraer
+            // Determine time of frame to extract
             let time: CMTime
             if let specificTime = timeOffset {
                 time = specificTime
             } else {
-                // Obtener duración del video y generar tiempo aleatorio
+                // Get video duration and generate random time
                 let duration = try await asset.load(.duration)
                 let durationSeconds = CMTimeGetSeconds(duration)
                 if durationSeconds > 0 {
-                    let randomSeconds = Double.random(in: 0...(durationSeconds * 0.8)) // Evitar el final
+                    let randomSeconds = Double.random(in: 0...(durationSeconds * 0.8)) // Avoid the end
                     time = CMTime(seconds: randomSeconds, preferredTimescale: 600)
                 } else {
                     time = CMTime(seconds: 1.0, preferredTimescale: 600)
@@ -414,7 +416,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             
             let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
             
-            // Crear NSImage y convertir a datos
+            // Create NSImage and convert to data
             let nsImage = NSImage(cgImage: cgImage, size: NSSize(
                 width: cgImage.width,
                 height: cgImage.height
@@ -423,48 +425,48 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             guard let imageData = nsImage.tiffRepresentation,
                   let bitmapImage = NSBitmapImageRep(data: imageData),
                   let pngData = bitmapImage.representation(using: .png, properties: [:]) else {
-                appLogger.error("❌ Error convirtiendo imagen a PNG")
+                appLogger.error("❌ Error converting image to PNG")
                 return nil
             }
             
-            // Intentar usar directorio Application Support primero
+            // Try using Application Support directory first
             guard let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-                appLogger.error("❌ No se pudo obtener directorio Application Support")
+                appLogger.error("❌ Could not get Application Support directory")
                 return nil
             }
             
             let livewallsDir = appSupportURL.appendingPathComponent("LiveWalls")
             var finalImageURL: URL
             
-            // Crear directorio y archivo con manejo robusto de errores
+            // Create directory and file with robust error handling
             do {
-                // Asegurar que el directorio existe
+                // Ensure the directory exists
                 if !FileManager.default.fileExists(atPath: livewallsDir.path) {
                     try FileManager.default.createDirectory(at: livewallsDir, withIntermediateDirectories: true, attributes: nil)
-                    appLogger.info("📁 Directorio LiveWalls creado: \(livewallsDir.path)")
+                    appLogger.info("📁 LiveWalls directory created: \(livewallsDir.path)")
                 }
                 
-                // Usar timestamp para evitar conflictos de archivos
+                // Use timestamp to avoid file conflicts
                 let timestamp = Int(Date().timeIntervalSince1970)
                 let fileName = "wallpaper_frame_\(timestamp).png"
                 finalImageURL = livewallsDir.appendingPathComponent(fileName)
                 
-                // Escribir archivo
+                // Write file
                 try pngData.write(to: finalImageURL)
-                appLogger.info("✅ Frame estático generado: \(finalImageURL.path)")
+                appLogger.info("✅ Static frame generated: \(finalImageURL.path)")
                 
-                // Verificar que el archivo existe y tiene contenido
+                // Verify that the file exists and has content
                 let attributes = try FileManager.default.attributesOfItem(atPath: finalImageURL.path)
                 if let fileSize = attributes[.size] as? NSNumber, fileSize.intValue > 0 {
-                    appLogger.info("📄 Archivo verificado - Tamaño: \(fileSize) bytes")
+                    appLogger.info("📄 File verified - Size: \(fileSize) bytes")
                 } else {
-                    throw NSError(domain: "WallpaperManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Archivo generado está vacío"])
+                    throw NSError(domain: "WallpaperManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Generated file is empty"])
                 }
                 
             } catch {
-                appLogger.error("❌ Error usando Application Support (\(error.localizedDescription)). Usando directorio temporal...")
+                appLogger.error("❌ Error using Application Support (\(error.localizedDescription)). Using temporary directory...")
                 
-                // Fallback a directorio temporal del sistema
+                // Fallback to system temporary directory
                 let tempDir = FileManager.default.temporaryDirectory
                 let timestamp = Int(Date().timeIntervalSince1970)
                 let fileName = "livewalls_frame_\(timestamp).png"
@@ -472,9 +474,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 
                 do {
                     try pngData.write(to: finalImageURL)
-                    appLogger.info("✅ Frame estático generado (temporal): \(finalImageURL.path)")
+                    appLogger.info("✅ Static frame generated (temporary): \(finalImageURL.path)")
                 } catch {
-                    appLogger.error("❌ Error final generando frame: \(error.localizedDescription)")
+                    appLogger.error("❌ Final error generating frame: \(error.localizedDescription)")
                     return nil
                 }
             }
@@ -482,37 +484,37 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             return finalImageURL
             
         } catch {
-            appLogger.error("❌ Error generando frame estático: \(error.localizedDescription)")
+            appLogger.error("❌ Error generating static frame: \(error.localizedDescription)")
             return nil
         }
     }
     
-    /// Establece una imagen estática como wallpaper del sistema para todas las pantallas
-    /// - Parameter imageURL: URL de la imagen a establecer como wallpaper
-    /// - Returns: true si se estableció correctamente en al menos una pantalla
+    /// Sets a static image as system wallpaper for all screens
+    /// - Parameter imageURL: URL of the image to set as wallpaper
+    /// - Returns: true if set correctly on at least one screen
     @discardableResult
     private func setSystemStaticWallpaper(imageURL: URL) -> Bool {
         var success = false
         
-        // Verificar que el archivo existe antes de intentar establecerlo
+        // Verify that the file exists before trying to set it
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
-            appLogger.error("❌ Archivo de wallpaper no existe: \(imageURL.path)")
+            appLogger.error("❌ Wallpaper file does not exist: \(imageURL.path)")
             return false
         }
         
-        appLogger.info("🖼️ Estableciendo wallpaper estático para todos los Spaces: \(imageURL.lastPathComponent)")
+        appLogger.info("🖼️ Setting static wallpaper for all Spaces: \(imageURL.lastPathComponent)")
         
-        // Estrategia múltiple para asegurar que se aplique en todos los Spaces
+        // Multiple strategy to ensure it applies to all Spaces
         let applyWallpaper = { [weak self] in
             guard let self = self else { return }
             
-            // Verificar nuevamente que el archivo existe
+            // Verify again that the file exists
             guard FileManager.default.fileExists(atPath: imageURL.path) else {
-                self.appLogger.error("❌ Archivo desapareció durante aplicación: \(imageURL.path)")
+                self.appLogger.error("❌ File disappeared during application: \(imageURL.path)")
                 return
             }
             
-            // Aplicar en todas las pantallas
+            // Apply to all screens
             for screen in NSScreen.screens {
                 do {
                     try NSWorkspace.shared.setDesktopImageURL(
@@ -524,39 +526,39 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                         ]
                     )
                     success = true
-                    self.appLogger.info("✅ Wallpaper estático establecido en pantalla: \(screen.localizedName)")
+                    self.appLogger.info("✅ Static wallpaper set on screen: \(screen.localizedName)")
                 } catch {
-                    self.appLogger.error("❌ Error estableciendo wallpaper estático en \(screen.localizedName): \(error.localizedDescription)")
+                    self.appLogger.error("❌ Error setting static wallpaper on \(screen.localizedName): \(error.localizedDescription)")
                 }
             }
         }
         
-        // Aplicar inmediatamente
+        // Apply immediately
         applyWallpaper()
         
-        // Aplicar nuevamente después de un breve delay para asegurar persistencia
+        // Apply again after a brief delay to ensure persistence
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             applyWallpaper()
         }
         
-        // Una aplicación más después de 1 segundo para capturar cualquier Space que se haya cambiado
+        // One more application after 1 second to capture any Space that has changed
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             applyWallpaper()
         }
         
         if success {
-            // Limpiar wallpaper anterior antes de establecer el nuevo
+            // Clean up previous wallpaper before setting the new one
             cleanupPreviousStaticWallpaper()
             
-            // Actualizar la referencia al nuevo wallpaper
+            // Update reference to new wallpaper
             currentStaticWallpaperURL = imageURL
-            appLogger.info("📋 Wallpaper estático actual actualizado: \(imageURL.lastPathComponent)")
+            appLogger.info("📋 Current static wallpaper updated: \(imageURL.lastPathComponent)")
         }
         
         return success
     }
     
-    /// Limpia el archivo de wallpaper estático anterior solo cuando es necesario
+    /// Cleans up previous static wallpaper file only when necessary
     private func cleanupPreviousStaticWallpaper() {
         guard let previousURL = currentStaticWallpaperURL else { return }
         
@@ -574,13 +576,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 do {
                     if FileManager.default.fileExists(atPath: previousURL.path) {
                         try FileManager.default.removeItem(at: previousURL)
-                        self.appLogger.info("🧹 Archivo anterior eliminado: \(previousURL.lastPathComponent)")
+                        self.appLogger.info("🧹 Previous file deleted: \(previousURL.lastPathComponent)")
                     }
                 } catch {
-                    self.appLogger.warning("⚠️ No se pudo eliminar archivo anterior: \(error.localizedDescription)")
+                    self.appLogger.warning("⚠️ Could not delete previous file: \(error.localizedDescription)")
                 }
             } else {
-                self.appLogger.info("💾 Manteniendo archivo en Application Support: \(previousURL.lastPathComponent)")
+                self.appLogger.info("💾 Keeping file in Application Support: \(previousURL.lastPathComponent)")
             }
         }
     }
@@ -588,28 +590,28 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Establece un video como activo (wallpaper actual)
     /// - Parameter video: VideoFile a establecer como activo
     func setActiveVideo(_ video: VideoFile) async {
-        appLogger.info("🎯 Estableciendo video activo: \(video.name)")
+        appLogger.info("🎯 Setting active video: \(video.name)")
         
-        // Actualizar el estado isActive de todos los videos y forzar actualización de UI
+        // Update isActive state of all videos and force UI update
         var updatedVideos = videoFiles
         for i in 0..<updatedVideos.count {
             updatedVideos[i].isActive = (updatedVideos[i].id == video.id)
         }
-        videoFiles = updatedVideos // Esto fuerza la actualización de @Published
+        videoFiles = updatedVideos // This forces @Published update
         
         currentVideo = video
         saveCurrentVideo()
         
-        appLogger.info("✅ Video activo establecido: \(video.name)")
+        appLogger.info("✅ Active video set: \(video.name)")
     }
     
-    /// Elimina un video de la lista de wallpapers
-    /// - Parameter video: VideoFile a eliminar
+    /// Removes a video from the wallpaper list
+    /// - Parameter video: VideoFile to remove
     func removeVideo(_ video: VideoFile) {
         DispatchQueue.main.async {
-            self.appLogger.info("🗑️ Eliminando video: \(video.name)")
+            self.appLogger.info("🗑️ Removing video: \(video.name)")
             
-            // Si es el video actual, detener el wallpaper
+            // If it's the current video, stop the wallpaper
             if self.currentVideo?.id == video.id {
                 self.stopWallpaper()
                 self.currentVideo = nil
@@ -622,10 +624,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Wallpaper Control
     
-    /// Inicia la reproducción del wallpaper de forma segura
+    /// Starts wallpaper playback safely
     func startWallpaperSafe() {
         guard let currentVideo = currentVideo else {
-            appLogger.warning("⚠️ No hay video seleccionado para iniciar wallpaper")
+            appLogger.warning("⚠️ No video selected to start wallpaper")
             return
         }
         
@@ -645,7 +647,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     return
                 }
                 
-                // Generar y establecer wallpaper estático primero
+                // Generate and set static wallpaper first
                 if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
                     await MainActor.run {
                         self.setSystemStaticWallpaper(imageURL: staticImageURL)
@@ -674,7 +676,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Detiene la reproducción del wallpaper
+    /// Stops wallpaper playback
     func stopWallpaper() {
         Task {
             await wallpaperOperationActor.withExclusiveAccess {
@@ -834,12 +836,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - New Robust Auto Change Timer
     
     private func startAutoChangeTimerIfNeeded() {
-        guard isAutoChangeEnabled, autoChangeInterval > 0, videoFiles.count > 1 else { 
-            appLogger.debug("💡 No se inicia timer: enabled=\(isAutoChangeEnabled), interval=\(autoChangeInterval), videos=\(videoFiles.count)")
+        guard self.isAutoChangeEnabled, self.autoChangeInterval > 0, self.videoFiles.count > 1 else { 
+            appLogger.debug("💡 No se inicia timer: enabled=\(self.isAutoChangeEnabled), interval=\(self.autoChangeInterval), videos=\(self.videoFiles.count)")
             return 
         }
         
-        // Validar que hay videos habilitados para reproducción aleatoria
+        // Validate that there are videos enabled for random playback
         let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
         guard enabledVideos.count > 1 else {
             appLogger.warning("⚠️ No hay suficientes videos habilitados para rotación automática")
@@ -946,7 +948,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Manual Next Wallpaper & Random Play Control
     
-    /// Cambia manualmente al siguiente wallpaper disponible para reproducción aleatoria
+    /// Manually changes to the next wallpaper available for random playback
     func nextWallpaper() async {
         let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
         
@@ -986,14 +988,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         return isAutoChangeEnabled && enabledVideos.count > 1
     }
     
-    /// Alterna el estado de habilitación para reproducción aleatoria de un video específico
+    /// Toggles the enabled state for random playback of a specific video
     func toggleVideoRandomPlayEnabled(_ video: VideoFile) {
         guard let index = videoFiles.firstIndex(where: { $0.id == video.id }) else { return }
         
         videoFiles[index].isEnabledForRandomPlay.toggle()
         let newState = videoFiles[index].isEnabledForRandomPlay
         
-        appLogger.info("🎯 Video '\(video.name)' \(newState ? "habilitado" : "deshabilitado") para reproducción aleatoria")
+        appLogger.info("🎯 Video '\(video.name)' \(newState ? "enabled" : "disabled") for random playback")
         
         // Guardar cambios
         saveVideos()
@@ -1077,12 +1079,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Guarda la configuración de cambio automático
+    /// Saves automatic change configuration
     func saveAutoChangeSettings() {
         userDefaults.set(isAutoChangeEnabled, forKey: "AutoChangeEnabled")
         userDefaults.set(autoChangeInterval, forKey: "AutoChangeInterval")
         
-        appLogger.info("💾 Guardando configuración: enabled=\(isAutoChangeEnabled), interval=\(Int(autoChangeInterval))s")
+        appLogger.info("💾 Saving configuration: enabled=\(self.isAutoChangeEnabled), interval=\(Int(self.autoChangeInterval))s")
         
         if isAutoChangeEnabled && isPlayingWallpaper {
             // Solo iniciar timer si el wallpaper está reproduciéndose
@@ -1195,7 +1197,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             Task { @MainActor in
                 self.appLogger.info("🖥️ Configuración de pantalla cambió")
                 if self.isPlayingWallpaper {
-                    self.startWallpaperSafe() // Recrear ventanas para nueva configuración
+                    self.startWallpaperSafe() // Recreate windows for new configuration
                 }
             }
         }
@@ -1249,7 +1251,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         appLogger.info("🎮 Aplicación en fullscreen detectada: \(appName)")
         
         guard isAutoChangeEnabled && isPlayingWallpaper else {
-            appLogger.debug("💡 No hay timer activo, no se requiere pausar")
+            appLogger.debug("💡 No active timer, no need to pause")
             return
         }
         
@@ -1259,7 +1261,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             timerManager.pauseTimer()
             isWallpaperPausedForFullscreen = true
             
-            // Opcional: También pausar reproductores de video para ahorrar recursos
+            // Optional: Also pause video players to save resources
             await pauseVideoPlayersForFullscreen()
         }
     }
@@ -1284,23 +1286,23 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Pausa los reproductores de video durante fullscreen para ahorrar recursos
+    /// Pauses video players during fullscreen to save resources
     private func pauseVideoPlayersForFullscreen() async {
-        appLogger.info("⏸️ Pausando reproductores de video por fullscreen")
+        appLogger.info("⏸️ Pausing video players for fullscreen")
         
         for (window, _) in desktopVideoInstances {
-            if let playerLayer = window.playerLayer {
+            if let playerLayer = window.currentPlayerLayer {
                 playerLayer.player?.pause()
             }
         }
     }
     
-    /// Reanuda los reproductores de video después de fullscreen
+    /// Resumes video players after fullscreen
     private func resumeVideoPlayersFromFullscreen() async {
-        appLogger.info("▶️ Resumiendo reproductores de video después de fullscreen")
+        appLogger.info("▶️ Resuming video players after fullscreen")
         
         for (window, _) in desktopVideoInstances {
-            if let playerLayer = window.playerLayer {
+            if let playerLayer = window.currentPlayerLayer {
                 playerLayer.player?.play()
             }
         }
@@ -1317,7 +1319,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // Si el wallpaper estaba activo antes de suspender, lo reiniciamos.
         if isPlayingWallpaper {
             appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
-            // Reinicio optimizado: primero verificar pantallas y luego iniciar
+            // Optimized restart: first check screens then start
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 // Verificar que aún tenemos un video actual
                 guard let currentVideo = self.currentVideo else { return }
@@ -1357,14 +1359,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     nonisolated private func cleanupAllResources() {
-        appLogger.info("🧹 Limpiando todos los recursos")
-        stopAutoChangeTimer()
+        appLogger.info("🧹 Cleaning up all resources")
+        Task { @MainActor in
+            stopAutoChangeTimer()
+        }
         
         // Limpiar wallpaper estático temporal
         Task { @MainActor in
             cleanupPreviousStaticWallpaper()
             
-            // Cerrar todas las ventanas y liberar recursos
+            // Close all windows and release resources
             for (window, accessibleURL) in desktopVideoInstances {
                 window.close()
                 safeStopSecurityScopedAccess(for: accessibleURL)
@@ -1453,7 +1457,7 @@ extension WallpaperManager {
     func debugTestTimer() {
         appLogger.info("🧪 Iniciando prueba de timer...")
         
-        // Guardar configuración actual
+        // Save current configuration
         let originalEnabled = isAutoChangeEnabled
         let originalInterval = autoChangeInterval
         
@@ -1466,7 +1470,7 @@ extension WallpaperManager {
         
         // Programar restauración después de 20 segundos
         DispatchQueue.main.asyncAfter(deadline: .now() + 20.0) {
-            self.appLogger.info("🧪 Finalizando prueba de timer, restaurando configuración")
+            self.appLogger.info("🧪 Ending timer test, restoring configuration")
             self.isAutoChangeEnabled = originalEnabled
             self.autoChangeInterval = originalInterval
             self.saveAutoChangeSettings()

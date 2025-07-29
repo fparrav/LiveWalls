@@ -2,18 +2,18 @@ import SwiftUI
 import AppKit
 import os.log
 
-/// Logger para la aplicación principal
+/// Logger for the main application
 fileprivate let appLogger = Logger(subsystem: "com.livewalls.app", category: "MainApp")
 
 @main
 struct LiveWallsApp: App {
-    // Inicialización del AppDelegate
+    // AppDelegate initialization
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
-    // Inicialización segura del WallpaperManager con StateObject
+    // Safe WallpaperManager initialization with StateObject
     @StateObject private var wallpaperManager = WallpaperManager()
     
-    // Gestor de inicio automático
+    // Auto-launch manager
     @StateObject private var launchManager = LaunchManager()
     
     var body: some Scene {
@@ -22,9 +22,9 @@ struct LiveWallsApp: App {
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
                 .onAppear {
-                    // Configurar el AppDelegate después de que la vista aparezca
+                    // Configure AppDelegate after the view appears
                     appDelegate.wallpaperManager = wallpaperManager
-                    appLogger.info("📱 Ventana principal apareció - manteniendo política accessory")
+                    appLogger.info("📱 Main window appeared - maintaining accessory policy")
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -42,17 +42,17 @@ struct LiveWallsApp: App {
     }
     
     init() {
-        appLogger.info("🚀 Iniciando LiveWalls App")
+        appLogger.info("🚀 Starting LiveWalls App")
         
-        // Configuración inicial de la aplicación
+        // Initial application configuration
         DispatchQueue.main.async {
-            // Iniciar como aplicación accessory para mantener comportamiento de background
+            // Start as accessory application to maintain background behavior
             NSApp.setActivationPolicy(.accessory)
             
-            // Configurar comportamiento inicial
-            appLogger.info("🔧 Configurando comportamiento inicial de ventanas")
+            // Configure initial behavior
+            appLogger.info("🔧 Configuring initial window behavior")
             
-            appLogger.info("✅ Política de activación accessory configurada - app sin icono en dock")
+            appLogger.info("✅ Accessory activation policy configured - app without dock icon")
         }
     }
 }

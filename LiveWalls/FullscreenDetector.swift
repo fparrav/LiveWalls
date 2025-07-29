@@ -2,17 +2,17 @@ import Foundation
 import AppKit
 import os.log
 
-/// Detector de aplicaciones en pantalla completa
-/// Monitorea el estado de las aplicaciones y detecta cuando una aplicación entra o sale de modo fullscreen
+/// Fullscreen application detector
+/// Monitors application state and detects when an application enters or exits fullscreen mode
 @MainActor
 class FullscreenDetector: ObservableObject {
     
     // MARK: - Published Properties
     
-    /// Indica si actualmente hay una aplicación en pantalla completa
+    /// Indicates if there is currently an application in fullscreen
     @Published var isAnyAppFullscreen: Bool = false
     
-    /// Nombre de la aplicación actualmente en fullscreen (si hay alguna)
+    /// Name of the application currently in fullscreen (if any)
     @Published var currentFullscreenApp: String? = nil
     
     // MARK: - Private Properties
@@ -23,26 +23,26 @@ class FullscreenDetector: ObservableObject {
     
     // MARK: - Callbacks
     
-    /// Callback que se ejecuta cuando una aplicación entra en fullscreen
+    /// Callback that executes when an application enters fullscreen
     var onFullscreenEntered: ((String) -> Void)?
     
-    /// Callback que se ejecuta cuando se sale de fullscreen
+    /// Callback that executes when exiting fullscreen
     var onFullscreenExited: (() -> Void)?
     
     // MARK: - Initialization
     
     init() {
-        logger.info("🔍 Inicializando FullscreenDetector")
+        logger.info("🔍 Initializing FullscreenDetector")
         setupObservers()
         
-        // Verificar estado inicial
+        // Check initial state
         Task {
             await checkInitialFullscreenState()
         }
     }
     
     deinit {
-        logger.info("🔍 Deinicializando FullscreenDetector")
+        logger.info("🔍 Deinitializing FullscreenDetector")
         Task { @MainActor in
             removeObservers()
         }
@@ -56,7 +56,7 @@ class FullscreenDetector: ObservableObject {
     }
     
     private func setupApplicationObservers() {
-        // Observar cuando aplicaciones se activan
+        // Observe when applications become active
         applicationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
@@ -67,11 +67,11 @@ class FullscreenDetector: ObservableObject {
             }
         }
         
-        logger.info("📡 Configurados observers de NSWorkspace")
+        logger.info("📡 NSWorkspace observers configured")
     }
     
     private func setupPresentationOptionsObserver() {
-        // Observar cambios en las opciones de presentación del sistema
+        // Observe changes in system presentation options
         presentationOptionsObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -82,7 +82,7 @@ class FullscreenDetector: ObservableObject {
             }
         }
         
-        logger.info("📡 Configurado observer de presentación")
+        logger.info("📡 Presentation observer configured")
     }
     
     private func removeObservers() {
@@ -96,7 +96,7 @@ class FullscreenDetector: ObservableObject {
             presentationOptionsObserver = nil
         }
         
-        logger.info("📡 Observers removidos")
+        logger.info("📡 Observers removed")
     }
     
     // MARK: - State Detection
@@ -112,15 +112,15 @@ class FullscreenDetector: ObservableObject {
     
     private func checkActiveApplication() async {
         guard let activeApp = NSWorkspace.shared.frontmostApplication else {
-            logger.debug("🔍 No hay aplicación activa")
+            logger.debug("🔍 No active application")
             await updateFullscreenState(false, appName: nil)
             return
         }
         
         let appName = activeApp.localizedName ?? "Unknown"
-        logger.debug("🔍 Aplicación activa: \(appName)")
+        logger.debug("🔍 Active application: \(appName)")
         
-        // Verificar si la aplicación está en fullscreen
+        // Check if the application is in fullscreen
         let isFullscreen = await isApplicationFullscreen(activeApp)
         await updateFullscreenState(isFullscreen, appName: isFullscreen ? appName : nil)
     }
@@ -133,22 +133,22 @@ class FullscreenDetector: ObservableObject {
         if isFullscreen {
             if let activeApp = NSWorkspace.shared.frontmostApplication {
                 let appName = activeApp.localizedName ?? "Unknown"
-                logger.info("🎮 Detectado fullscreen via presentation options: \(appName)")
+                logger.info("🎮 Fullscreen detected via presentation options: \(appName)")
                 await updateFullscreenState(true, appName: appName)
             }
         } else {
-            // Verificar si realmente salimos de fullscreen o solo cambió algo más
+            // Check if we really exited fullscreen or something else changed
             await checkActiveApplication()
         }
     }
     
     private func isApplicationFullscreen(_ application: NSRunningApplication) async -> Bool {
-        // Método 1: Verificar ventanas de la aplicación
+        // Method 1: Check application windows
         let pid = application.processIdentifier
         
-        // Obtener lista de ventanas de la aplicación
+        // Get list of application windows
         guard let windowList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
-            logger.warning("⚠️ No se pudo obtener lista de ventanas")
+            logger.warning("⚠️ Could not get window list")
             return false
         }
         
@@ -156,7 +156,7 @@ class FullscreenDetector: ObservableObject {
             guard let windowPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
                   windowPID == pid else { continue }
             
-            // Verificar si la ventana ocupa toda la pantalla
+            // Check if window occupies the entire screen
             if let bounds = windowInfo[kCGWindowBounds as String] as? [String: Any],
                let x = bounds["X"] as? CGFloat,
                let y = bounds["Y"] as? CGFloat,
@@ -165,11 +165,11 @@ class FullscreenDetector: ObservableObject {
                 
                 let windowRect = CGRect(x: x, y: y, width: width, height: height)
                 
-                // Verificar contra cada pantalla
+                // Check against each screen
                 for screen in NSScreen.screens {
                     let screenFrame = screen.frame
                     
-                    // Tolerancia para diferencias menores
+                    // Tolerance for minor differences
                     let tolerance: CGFloat = 10
                     
                     if abs(windowRect.origin.x - screenFrame.origin.x) < tolerance &&
@@ -177,7 +177,7 @@ class FullscreenDetector: ObservableObject {
                        abs(windowRect.width - screenFrame.width) < tolerance &&
                        abs(windowRect.height - screenFrame.height) < tolerance {
                         
-                        logger.info("🎮 Ventana fullscreen detectada: \(String(describing: windowRect)) en pantalla \(String(describing: screenFrame))")
+                        logger.info("🎮 Fullscreen window detected: \(String(describing: windowRect)) on screen \(String(describing: screenFrame))")
                         return true
                     }
                 }
@@ -193,32 +193,32 @@ class FullscreenDetector: ObservableObject {
         isAnyAppFullscreen = isFullscreen
         currentFullscreenApp = appName
         
-        // Logging detallado
+        // Detailed logging
         if isFullscreen && !previousState {
-            logger.info("🎮 ENTRADA A FULLSCREEN: \(appName ?? "Unknown")")
+            logger.info("🎮 FULLSCREEN ENTERED: \(appName ?? "Unknown")")
             onFullscreenEntered?(appName ?? "Unknown")
         } else if !isFullscreen && previousState {
-            logger.info("🏠 SALIDA DE FULLSCREEN")
+            logger.info("🏠 FULLSCREEN EXITED")
             onFullscreenExited?()
         }
         
-        // Log de estado actual
+        // Current state log
         if isFullscreen {
-            logger.debug("📱 Estado actual: Fullscreen (\(appName ?? "Unknown"))")
+            logger.debug("📱 Current state: Fullscreen (\(appName ?? "Unknown"))")
         } else {
-            logger.debug("🪟 Estado actual: Windowed mode")
+            logger.debug("🪟 Current state: Windowed mode")
         }
     }
     
     // MARK: - Public Interface
     
-    /// Fuerza una verificación manual del estado fullscreen
+    /// Forces a manual check of fullscreen state
     func forceCheck() async {
-        logger.info("🔄 Forzando verificación de estado fullscreen")
+        logger.info("🔄 Forcing fullscreen state check")
         await checkInitialFullscreenState()
     }
     
-    /// Obtiene información detallada del estado actual
+    /// Gets detailed information about current state
     func getCurrentState() -> (isFullscreen: Bool, appName: String?) {
         return (isAnyAppFullscreen, currentFullscreenApp)
     }
@@ -228,7 +228,7 @@ class FullscreenDetector: ObservableObject {
 
 extension FullscreenDetector {
     
-    /// Información de debugging sobre el estado actual
+    /// Debugging information about current state
     func getDebugInfo() -> String {
         var info = "=== FullscreenDetector Debug Info ===\n"
         info += "Is Any App Fullscreen: \(isAnyAppFullscreen)\n"

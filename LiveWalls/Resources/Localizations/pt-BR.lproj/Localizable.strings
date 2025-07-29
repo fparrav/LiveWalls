@@ -147,3 +147,9 @@
 /* Erros de otimização */
 "optimization_errors_title" = "Erros de Processamento";
 "optimization_errors_message" = "Alguns vídeos não puderam ser processados:\n%@";
+
+/* AutoUpdater */
+"update_available_title" = "Nova Versão Disponível";
+"update_available_message" = "LiveWalls %@ está disponível.\nAtual: %@\n\n%@";
+"view_on_github" = "Ver no GitHub";
+"dont_remind_version" = "Não lembrar desta versão";

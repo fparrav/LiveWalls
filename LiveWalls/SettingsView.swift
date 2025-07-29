@@ -13,14 +13,14 @@ struct SettingsView: View {
         currentVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
     )
     
-    // Estados locales para las configuraciones
+    // Local states for configurations
     @State private var autoStartWallpaper: Bool
     @State private var muteVideo: Bool
     @State private var isAutoChangeEnabled: Bool
     @State private var autoChangeIntervalMinutes: Int
     @State private var duplicateHandlingPreference: WallpaperManager.DuplicateHandling
     
-    // Estados originales para poder cancelar cambios
+    // Original states to be able to cancel changes
     @State private var originalAutoStartWallpaper: Bool
     @State private var originalMuteVideo: Bool
     @State private var originalIsAutoChangeEnabled: Bool
@@ -28,14 +28,14 @@ struct SettingsView: View {
     @State private var originalLaunchAtLogin: Bool
     @State private var originalDuplicateHandlingPreference: WallpaperManager.DuplicateHandling
     
-    // Estados para el progreso de optimización HEVC
+    // States for HEVC optimization progress
     @State private var isOptimizing = false
     @State private var currentVideoIndex = 0
     @State private var totalVideos = 0
     @State private var currentVideoName = ""
     @State private var optimizationProgress: Double = 0.0
     
-    // Estados adicionales para optimización con frames negros
+    // Additional states for optimization with black frames
     @State private var videosProcessed = 0
     @State private var totalVideosToProcess = 0
     @State private var currentVideoBeingProcessed = ""
@@ -73,7 +73,7 @@ struct SettingsView: View {
         _autoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
         _duplicateHandlingPreference = State(initialValue: duplicateHandling)
         
-        // Estados originales para poder cancelar
+        // Original states to be able to cancel
         _originalAutoStartWallpaper = State(initialValue: autoStart)
         _originalMuteVideo = State(initialValue: mute)
         _originalIsAutoChangeEnabled = State(initialValue: autoChangeEnabled)
@@ -89,7 +89,7 @@ struct SettingsView: View {
         }
         .frame(width: 480, height: 600)
         .onAppear {
-            cargarConfiguracionesActuales()
+            loadCurrentSettings()
             
             // Verificar actualizaciones al abrir configuración
             Task {
@@ -262,21 +262,21 @@ struct SettingsView: View {
                 duplicateHandlingSection
                 
                 Button(NSLocalizedString("optimize_videos_hevc", comment: "Optimize videos to HEVC")) {
-                    optimizarVideosAHEVC()
+                    optimizeVideosToHEVC()
                 }
                 .buttonStyle(.bordered)
                 .disabled(wallpaperManager.videoFiles.isEmpty || isOptimizing)
                 .accessibilityIdentifier("optimize_hevc_button")
                 
                 Button(NSLocalizedString("remove_black_frames", comment: "Remove black frames")) {
-                    eliminarFramesNegros()
+                    removeBlackFrames()
                 }
                 .buttonStyle(.bordered)
                 .disabled(wallpaperManager.videoFiles.isEmpty || isOptimizing)
                 .accessibilityIdentifier("remove_black_frames_button")
                 
                 Button(NSLocalizedString("clear_all_videos", comment: "Clear all videos")) {
-                    limpiarTodosLosVideos()
+                    clearAllVideos()
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("clear_videos_button")
@@ -339,34 +339,34 @@ struct SettingsView: View {
     private var actionButtonsView: some View {
         HStack(spacing: 12) {
             Button(NSLocalizedString("cancel_button", comment: "Cancel button")) {
-                cancelarCambios()
-                cerrarVentana()
+                cancelChanges()
+                closeWindow()
             }
             .buttonStyle(.bordered)
             .keyboardShortcut(.cancelAction)
             
             Button(NSLocalizedString("accept_button", comment: "Accept button")) {
-                guardarTodasLasConfiguraciones()
-                cerrarVentana()
+                saveAllSettings()
+                closeWindow()
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
         }
     }
     
-    // MARK: - Funciones de gestión de configuraciones
+    // MARK: - Settings management functions
     
-    /// Carga las configuraciones actuales desde UserDefaults y managers
-    private func cargarConfiguracionesActuales() {
-        // Sincronizar con estados actuales
+    /// Loads current settings from UserDefaults and managers
+    private func loadCurrentSettings() {
+        // Synchronize with current states
         self.isAutoChangeEnabled = wallpaperManager.isAutoChangeEnabled
         self.autoChangeIntervalMinutes = Int(wallpaperManager.autoChangeInterval / 60)
         
-        // Cargar desde UserDefaults
+        // Load from UserDefaults
         self.autoStartWallpaper = UserDefaults.standard.bool(forKey: "AutoStartWallpaper")
         self.muteVideo = UserDefaults.standard.bool(forKey: "MuteVideo")
         
-        // Cargar preferencia de manejo de duplicados
+        // Load duplicate handling preference
         let duplicateHandlingRawValue = UserDefaults.standard.string(forKey: "DuplicateHandlingPreference") ?? "askAlways"
         switch duplicateHandlingRawValue {
         case "skip":
@@ -379,7 +379,7 @@ struct SettingsView: View {
             self.duplicateHandlingPreference = .skip // Default to skip for "askAlways" or unknown values
         }
         
-        // Guardar estados originales para poder cancelar
+        // Save original states to be able to cancel
         self.originalAutoStartWallpaper = autoStartWallpaper
         self.originalMuteVideo = muteVideo
         self.originalIsAutoChangeEnabled = isAutoChangeEnabled
@@ -388,15 +388,15 @@ struct SettingsView: View {
         self.originalDuplicateHandlingPreference = duplicateHandlingPreference
     }
     
-    /// Guarda todas las configuraciones en UserDefaults y sincroniza con los managers
-    private func guardarTodasLasConfiguraciones() {
-        // Guardar configuraciones en UserDefaults
+    /// Saves all settings to UserDefaults and synchronizes with managers
+    private func saveAllSettings() {
+        // Save settings to UserDefaults
         UserDefaults.standard.set(autoStartWallpaper, forKey: "AutoStartWallpaper")
         UserDefaults.standard.set(muteVideo, forKey: "MuteVideo")
         UserDefaults.standard.set(isAutoChangeEnabled, forKey: "AutoChangeEnabled")
         UserDefaults.standard.set(TimeInterval(autoChangeIntervalMinutes * 60), forKey: "AutoChangeInterval")
         
-        // Guardar preferencia de manejo de duplicados
+        // Save duplicate handling preference
         let duplicateHandlingRawValue: String
         switch duplicateHandlingPreference {
         case .skip:
@@ -408,36 +408,36 @@ struct SettingsView: View {
         }
         UserDefaults.standard.set(duplicateHandlingRawValue, forKey: "DuplicateHandlingPreference")
         
-        // Sincronizar con WallpaperManager
+        // Synchronize with WallpaperManager
         wallpaperManager.isAutoChangeEnabled = isAutoChangeEnabled
         wallpaperManager.autoChangeInterval = TimeInterval(autoChangeIntervalMinutes * 60)
         wallpaperManager.saveAutoChangeSettings()
         
-        // Forzar sincronización inmediata
+        // Force immediate synchronization
         UserDefaults.standard.synchronize()
         
-        print("✅ Configuraciones guardadas exitosamente")
+        print("✅ Settings saved successfully")
     }
     
-    /// Cancela los cambios y restaura los valores originales
-    private func cancelarCambios() {
-        // Restaurar valores originales
+    /// Cancels changes and restores original values
+    private func cancelChanges() {
+        // Restore original values
         self.autoStartWallpaper = originalAutoStartWallpaper
         self.muteVideo = originalMuteVideo
         self.isAutoChangeEnabled = originalIsAutoChangeEnabled
         self.autoChangeIntervalMinutes = originalAutoChangeIntervalMinutes
         self.duplicateHandlingPreference = originalDuplicateHandlingPreference
         
-        // Restaurar launch at login si cambió
+        // Restore launch at login if it changed
         if launchManager.isLaunchAtLoginEnabled != originalLaunchAtLogin {
             launchManager.setLaunchAtLogin(originalLaunchAtLogin)
         }
         
-        print("↩️ Cambios cancelados - configuraciones restauradas")
+        print("↩️ Changes cancelled - settings restored")
     }
     
-    /// Limpia todos los videos con confirmación
-    private func limpiarTodosLosVideos() {
+    /// Clears all videos with confirmation
+    private func clearAllVideos() {
         let alert = NSAlert()
         alert.messageText = NSLocalizedString("delete_all_videos_title", comment: "Delete all videos title")
         alert.informativeText = NSLocalizedString("delete_all_videos_message", comment: "Delete all videos message")
@@ -449,12 +449,12 @@ struct SettingsView: View {
             wallpaperManager.videoFiles.removeAll()
             wallpaperManager.stopWallpaper()
             wallpaperManager.saveVideos()
-            print("🗑️ Todos los videos han sido eliminados")
+            print("🗑️ All videos have been deleted")
         }
     }
     
-    /// Optimiza todos los videos no-HEVC a formato HEVC
-    private func optimizarVideosAHEVC() {
+    /// Optimizes all non-HEVC videos to HEVC format
+    private func optimizeVideosToHEVC() {
         let alert = NSAlert()
         alert.messageText = NSLocalizedString("optimize_videos_title", comment: "Optimize videos title")
         alert.informativeText = NSLocalizedString("optimize_videos_message", comment: "Optimize videos message")
@@ -464,13 +464,13 @@ struct SettingsView: View {
         
         if alert.runModal() == .alertFirstButtonReturn {
             Task {
-                await solicitarPermisosYConvertir()
+                await requestPermissionsAndConvert()
             }
         }
     }
     
-    /// Elimina frames negros de los videos sin optimización HEVC
-    private func eliminarFramesNegros() {
+    /// Removes black frames from videos without HEVC optimization
+    private func removeBlackFrames() {
         let alert = NSAlert()
         alert.messageText = NSLocalizedString("remove_black_frames_title", comment: "Remove black frames title")
         alert.informativeText = NSLocalizedString("remove_black_frames_message", comment: "Remove black frames message")
@@ -480,13 +480,13 @@ struct SettingsView: View {
         
         if alert.runModal() == .alertFirstButtonReturn {
             Task {
-                await solicitarPermisosYEliminarFramesNegros()
+                await requestPermissionsAndRemoveBlackFrames()
             }
         }
     }
     
-    /// Optimiza videos con detección y eliminación de frames negros
-    private func optimizarVideosConDeteccionFramesNegros() {
+    /// Optimizes videos with black frame detection and removal
+    private func optimizeVideosWithBlackFrameDetection() {
         let alert = NSAlert()
         alert.messageText = NSLocalizedString("optimize_remove_black_frames_title", comment: "Optimize and remove black frames title")
         alert.informativeText = NSLocalizedString("optimize_remove_black_frames_message", comment: "Optimize and remove black frames message")
@@ -496,67 +496,67 @@ struct SettingsView: View {
         
         if alert.runModal() == .alertFirstButtonReturn {
             Task {
-                await solicitarPermisosYConvertirConFramesNegros()
+                await requestPermissionsAndConvert()
             }
         }
     }
     
-    /// Solicita permisos para los directorios donde están los videos y luego convierte con detección de frames negros
+    /// Requests permissions for directories where videos are located and then converts with black frame detection
     private func solicitarPermisosYConvertirConFramesNegros() async {
         // Para esta función, procesamos todos los videos (no solo los no-HEVC)
-        let todosLosVideos = wallpaperManager.videoFiles
+        let allVideos = wallpaperManager.videoFiles
         
-        guard !todosLosVideos.isEmpty else {
-            await mostrarAlerta(
-                titulo: NSLocalizedString("no_videos_available_title", comment: "No videos available title"),
-                mensaje: NSLocalizedString("no_videos_available_message", comment: "No videos available message")
+        guard !allVideos.isEmpty else {
+            await showAlert(
+                title: NSLocalizedString("no_videos_available_title", comment: "No videos available title"),
+                message: NSLocalizedString("no_videos_available_message", comment: "No videos available message")
             )
             return
         }
         
         // Obtener directorios únicos donde están los videos
-        var directoriosUnicos = Set<URL>()
-        for videoFile in todosLosVideos {
+        var uniqueDirectories = Set<URL>()
+        for videoFile in allVideos {
             if let url = wallpaperManager.resolveBookmark(for: videoFile) {
-                let directorio = url.deletingLastPathComponent()
-                directoriosUnicos.insert(directorio)
+                let directory = url.deletingLastPathComponent()
+                uniqueDirectories.insert(directory)
                 url.stopAccessingSecurityScopedResource()
             }
         }
         
-        // Solicitar permisos para cada directorio único
-        var directoriosPermitidos = Set<URL>()
+        // Request permissions for each unique directory
+        var allowedDirectories = Set<URL>()
         
         await MainActor.run {
-            for directorio in directoriosUnicos {
+            for directory in uniqueDirectories {
                 let openPanel = NSOpenPanel()
                 openPanel.canChooseFiles = false
                 openPanel.canChooseDirectories = true
                 openPanel.allowsMultipleSelection = false
-                openPanel.directoryURL = directorio
-                openPanel.message = String(format: NSLocalizedString("select_directory_black_frames_permission", comment: "Select directory for black frames permission"), directorio.lastPathComponent)
+                openPanel.directoryURL = directory
+                openPanel.message = String(format: NSLocalizedString("select_directory_black_frames_permission", comment: "Select directory for black frames permission"), directory.lastPathComponent)
                 
                 if openPanel.runModal() == .OK, let selectedURL = openPanel.url {
-                    directoriosPermitidos.insert(selectedURL)
+                    allowedDirectories.insert(selectedURL)
                 }
             }
         }
         
-        // Si no se otorgaron permisos para todos los directorios, mostrar alerta y cancelar
-        guard directoriosPermitidos.count == directoriosUnicos.count else {
-            await mostrarAlerta(
-                titulo: NSLocalizedString("insufficient_permissions_title", comment: "Insufficient permissions title"),
-                mensaje: NSLocalizedString("insufficient_permissions_message", comment: "Insufficient permissions message")
+        // If permissions were not granted for all directories, show alert and cancel
+        guard allowedDirectories.count == uniqueDirectories.count else {
+            await showAlert(
+                title: NSLocalizedString("insufficient_permissions_title", comment: "Insufficient permissions title"),
+                message: NSLocalizedString("insufficient_permissions_message", comment: "Insufficient permissions message")
             )
             return
         }
         
         // Iniciar la conversión con detección de frames negros
-        await iniciarConversionConFramesNegros(videos: todosLosVideos, directoriosPermitidos: directoriosPermitidos)
+        await startBlackFrameConversion(videos: allVideos, allowedDirectories: allowedDirectories)
     }
     
     /// Inicia la conversión de videos con detección de frames negros
-    private func iniciarConversionConFramesNegros(videos: [VideoFile], directoriosPermitidos: Set<URL>) async {
+    private func startBlackFrameConversion(videos: [VideoFile], allowedDirectories: Set<URL>) async {
         await MainActor.run {
             isOptimizing = true
             videosProcessed = 0
@@ -570,7 +570,7 @@ struct SettingsView: View {
                 currentVideoBeingProcessed = videoFile.name
             }
             
-            await convertirVideoConFramesNegros(videoFile: videoFile, directoriosPermitidos: directoriosPermitidos)
+            await convertVideoWithBlackFrames(videoFile: videoFile, allowedDirectories: allowedDirectories)
             
             await MainActor.run {
                 videosProcessed += 1
@@ -583,18 +583,18 @@ struct SettingsView: View {
             if optimizationErrors.isEmpty {
                 // Mostrar alerta de éxito
                 Task {
-                    await mostrarAlerta(
-                        titulo: NSLocalizedString("optimization_complete_title", comment: "Optimization complete title"),
-                        mensaje: String(format: NSLocalizedString("optimization_complete_message", comment: "Optimization complete message"), videos.count)
+                    await showAlert(
+                        title: NSLocalizedString("optimization_complete_title", comment: "Optimization complete title"),
+                        message: String(format: NSLocalizedString("optimization_complete_message", comment: "Optimization complete message"), videos.count)
                     )
                 }
             } else {
                 // Mostrar alerta con errores
                 let errorMessage = optimizationErrors.joined(separator: "\n")
                 Task {
-                    await mostrarAlerta(
-                        titulo: NSLocalizedString("optimization_errors_title", comment: "Optimization errors title"),
-                        mensaje: String(format: NSLocalizedString("optimization_errors_message", comment: "Optimization errors message"), errorMessage)
+                    await showAlert(
+                        title: NSLocalizedString("optimization_errors_title", comment: "Optimization errors title"),
+                        message: String(format: NSLocalizedString("optimization_errors_message", comment: "Optimization errors message"), errorMessage)
                     )
                 }
             }
@@ -602,10 +602,10 @@ struct SettingsView: View {
     }
     
     /// Convierte un video específico con detección de frames negros
-    private func convertirVideoConFramesNegros(videoFile: VideoFile, directoriosPermitidos: Set<URL>) async {
+    private func convertVideoWithBlackFrames(videoFile: VideoFile, allowedDirectories: Set<URL>) async {
         guard let originalURL = wallpaperManager.resolveBookmark(for: videoFile) else {
             await MainActor.run {
-                optimizationErrors.append("❌ \(videoFile.name): No se pudo acceder al archivo")
+                optimizationErrors.append("❌ \(videoFile.name): Could not access file")
             }
             return
         }
@@ -614,10 +614,10 @@ struct SettingsView: View {
             originalURL.stopAccessingSecurityScopedResource()
         }
         
-        let directorio = originalURL.deletingLastPathComponent()
-        guard directoriosPermitidos.contains(directorio) else {
+        let directory = originalURL.deletingLastPathComponent()
+        guard allowedDirectories.contains(directory) else {
             await MainActor.run {
-                optimizationErrors.append("❌ \(videoFile.name): Sin permisos para el directorio")
+                optimizationErrors.append("❌ \(videoFile.name): No permissions for directory")
             }
             return
         }
@@ -629,7 +629,7 @@ struct SettingsView: View {
             // Validar que el archivo se creó correctamente
             guard FileManager.default.fileExists(atPath: outputURL.path) else {
                 await MainActor.run {
-                    optimizationErrors.append("❌ \(videoFile.name): El archivo optimizado no se creó")
+                    optimizationErrors.append("❌ \(videoFile.name): Optimized file was not created")
                 }
                 return
             }
@@ -641,10 +641,10 @@ struct SettingsView: View {
                 try FileManager.default.moveItem(at: outputURL, to: originalURL)
                 try FileManager.default.removeItem(at: tempURL)
                 
-                print("✅ Video optimizado con detección de frames negros: \(videoFile.name)")
+                print("✅ Video optimized with black frame detection: \(videoFile.name)")
             } catch {
                 await MainActor.run {
-                    optimizationErrors.append("❌ \(videoFile.name): Error al reemplazar archivo - \(error.localizedDescription)")
+                    optimizationErrors.append("❌ \(videoFile.name): Error replacing file - \(error.localizedDescription)")
                 }
             }
             
@@ -655,59 +655,59 @@ struct SettingsView: View {
         }
     }
     
-    /// Solicita permisos para los directorios donde están los videos y luego elimina frames negros
-    private func solicitarPermisosYEliminarFramesNegros() async {
-        let todosLosVideos = wallpaperManager.videoFiles
+    /// Requests permissions for directories where videos are located and then removes black frames
+    private func requestPermissionsAndRemoveBlackFrames() async {
+        let allVideos = wallpaperManager.videoFiles
         
-        guard !todosLosVideos.isEmpty else {
-            await mostrarAlerta(
-                titulo: NSLocalizedString("no_videos_available_title", comment: "No videos available title"),
-                mensaje: NSLocalizedString("no_videos_available_message", comment: "No videos available message")
+        guard !allVideos.isEmpty else {
+            await showAlert(
+                title: NSLocalizedString("no_videos_available_title", comment: "No videos available title"),
+                message: NSLocalizedString("no_videos_available_message", comment: "No videos available message")
             )
             return
         }
         
         // Obtener directorios únicos donde están los videos
-        var directoriosUnicos = Set<URL>()
-        for videoFile in todosLosVideos {
+        var uniqueDirectories = Set<URL>()
+        for videoFile in allVideos {
             if let url = wallpaperManager.resolveBookmark(for: videoFile) {
-                let directorio = url.deletingLastPathComponent()
-                directoriosUnicos.insert(directorio)
+                let directory = url.deletingLastPathComponent()
+                uniqueDirectories.insert(directory)
                 url.stopAccessingSecurityScopedResource()
             }
         }
         
-        // Solicitar permisos para cada directorio único
-        var directoriosPermitidos = Set<URL>()
+        // Request permissions for each unique directory
+        var allowedDirectories = Set<URL>()
         
         await MainActor.run {
-            for directorio in directoriosUnicos {
+            for directory in uniqueDirectories {
                 let openPanel = NSOpenPanel()
                 openPanel.canChooseFiles = false
                 openPanel.canChooseDirectories = true
                 openPanel.allowsMultipleSelection = false
-                openPanel.directoryURL = directorio
-                openPanel.message = String(format: NSLocalizedString("select_directory_black_frames_permission", comment: "Select directory for black frames permission"), directorio.lastPathComponent)
+                openPanel.directoryURL = directory
+                openPanel.message = String(format: NSLocalizedString("select_directory_black_frames_permission", comment: "Select directory for black frames permission"), directory.lastPathComponent)
                 
                 if openPanel.runModal() == .OK, let selectedURL = openPanel.url {
-                    directoriosPermitidos.insert(selectedURL)
+                    allowedDirectories.insert(selectedURL)
                 }
             }
         }
         
         // Solo proceder si se otorgaron permisos para todos los directorios
-        if directoriosPermitidos.count == directoriosUnicos.count {
-            await iniciarEliminacionFramesNegros(videos: todosLosVideos, directoriosPermitidos: directoriosPermitidos)
+        if allowedDirectories.count == uniqueDirectories.count {
+            await startBlackFrameRemoval(videos: allVideos, allowedDirectories: allowedDirectories)
         } else {
-            await mostrarAlerta(
-                titulo: NSLocalizedString("permissions_required_title", comment: "Permissions required title"),
-                mensaje: NSLocalizedString("permissions_required_message", comment: "Permissions required message")
+            await showAlert(
+                title: NSLocalizedString("permissions_required_title", comment: "Permissions required title"),
+                message: NSLocalizedString("permissions_required_message", comment: "Permissions required message")
             )
         }
     }
     
     /// Inicia la eliminación de frames negros sin optimización HEVC
-    private func iniciarEliminacionFramesNegros(videos: [VideoFile], directoriosPermitidos: Set<URL>) async {
+    private func startBlackFrameRemoval(videos: [VideoFile], allowedDirectories: Set<URL>) async {
         await MainActor.run {
             isOptimizing = true
             videosProcessed = 0
@@ -724,7 +724,7 @@ struct SettingsView: View {
                 currentVideoBeingProcessed = String(format: NSLocalizedString("processing_video_black_frames", comment: "Processing video"), videoFile.name)
             }
             
-            let hadBlackFrames = await eliminarFramesNegrosDeVideo(videoFile: videoFile, directoriosPermitidos: directoriosPermitidos)
+            let hadBlackFrames = await removeBlackFramesFromVideo(videoFile: videoFile, allowedDirectories: allowedDirectories)
             
             if hadBlackFrames {
                 videosConFramesEliminados += 1
@@ -746,18 +746,18 @@ struct SettingsView: View {
             if optimizationErrors.isEmpty {
                 // Mostrar alerta de éxito
                 Task {
-                    await mostrarAlerta(
-                        titulo: NSLocalizedString("black_frames_complete_title", comment: "Black frames complete title"),
-                        mensaje: String(format: NSLocalizedString("black_frames_complete_message", comment: "Black frames complete message"), videos.count, videosConFramesEliminados, videosOmitidos)
+                    await showAlert(
+                        title: NSLocalizedString("black_frames_complete_title", comment: "Black frames complete title"),
+                        message: String(format: NSLocalizedString("black_frames_complete_message", comment: "Black frames complete message"), videos.count, videosConFramesEliminados, videosOmitidos)
                     )
                 }
             } else {
                 // Mostrar alerta con errores
                 let errorMessage = optimizationErrors.joined(separator: "\n")
                 Task {
-                    await mostrarAlerta(
-                        titulo: NSLocalizedString("optimization_errors_title", comment: "Optimization errors title"),
-                        mensaje: String(format: NSLocalizedString("optimization_errors_message", comment: "Optimization errors message"), errorMessage)
+                    await showAlert(
+                        title: NSLocalizedString("optimization_errors_title", comment: "Optimization errors title"),
+                        message: String(format: NSLocalizedString("optimization_errors_message", comment: "Optimization errors message"), errorMessage)
                     )
                 }
             }
@@ -765,10 +765,10 @@ struct SettingsView: View {
     }
     
     /// Elimina frames negros de un video específico
-    private func eliminarFramesNegrosDeVideo(videoFile: VideoFile, directoriosPermitidos: Set<URL>) async -> Bool {
+    private func removeBlackFramesFromVideo(videoFile: VideoFile, allowedDirectories: Set<URL>) async -> Bool {
         guard let originalURL = wallpaperManager.resolveBookmark(for: videoFile) else {
             await MainActor.run {
-                optimizationErrors.append("❌ \(videoFile.name): No se pudo acceder al archivo")
+                optimizationErrors.append("❌ \(videoFile.name): Could not access file")
             }
             return false
         }
@@ -777,10 +777,10 @@ struct SettingsView: View {
             originalURL.stopAccessingSecurityScopedResource()
         }
         
-        let directorio = originalURL.deletingLastPathComponent()
-        guard directoriosPermitidos.contains(directorio) else {
+        let directory = originalURL.deletingLastPathComponent()
+        guard allowedDirectories.contains(directory) else {
             await MainActor.run {
-                optimizationErrors.append("❌ \(videoFile.name): Permisos denegados para el directorio")
+                optimizationErrors.append("❌ \(videoFile.name): Permissions denied for directory")
             }
             return false
         }
@@ -790,10 +790,10 @@ struct SettingsView: View {
             let result = try await videoOptimizer.trimVideoBlackFrames(videoFile, to: outputURL)
             
             if result.hadBlackFrames {
-                // Reemplazar archivo original con versión sin frames negros
+                // Replace original file with version without black frames
                 _ = try FileManager.default.replaceItem(at: originalURL, withItemAt: outputURL, backupItemName: nil, options: [], resultingItemURL: nil)
             } else {
-                // Eliminar archivo temporal si no había frames negros
+                // Delete temporary file if there were no black frames
                 try? FileManager.default.removeItem(at: outputURL)
             }
             
@@ -808,64 +808,64 @@ struct SettingsView: View {
     }
     
     /// Solicita permisos para los directorios donde están los videos y luego convierte
-    private func solicitarPermisosYConvertir() async {
-        let videosNoHEVC = await detectarVideosNoHEVC()
+    private func requestPermissionsAndConvert() async {
+        let videosNoHEVC = await detectNonHEVCVideos()
         
         guard !videosNoHEVC.isEmpty else {
-            await mostrarAlerta(
-                titulo: NSLocalizedString("no_videos_to_optimize_title", comment: "No videos to optimize title"),
-                mensaje: NSLocalizedString("no_videos_to_optimize_message", comment: "No videos to optimize message")
+            await showAlert(
+                title: NSLocalizedString("no_videos_to_optimize_title", comment: "No videos to optimize title"),
+                message: NSLocalizedString("no_videos_to_optimize_message", comment: "No videos to optimize message")
             )
             return
         }
         
         // Obtener directorios únicos donde están los videos
-        var directoriosUnicos = Set<URL>()
+        var uniqueDirectories = Set<URL>()
         for videoFile in videosNoHEVC {
             if let url = wallpaperManager.resolveBookmark(for: videoFile) {
-                let directorio = url.deletingLastPathComponent()
-                directoriosUnicos.insert(directorio)
+                let directory = url.deletingLastPathComponent()
+                uniqueDirectories.insert(directory)
                 url.stopAccessingSecurityScopedResource()
             }
         }
         
-        // Solicitar permisos para cada directorio único
-        var directoriosPermitidos = Set<URL>()
+        // Request permissions for each unique directory
+        var allowedDirectories = Set<URL>()
         
         await MainActor.run {
-            for directorio in directoriosUnicos {
+            for directory in uniqueDirectories {
                 let openPanel = NSOpenPanel()
                 openPanel.canChooseFiles = false
                 openPanel.canChooseDirectories = true
                 openPanel.allowsMultipleSelection = false
-                openPanel.directoryURL = directorio
-                openPanel.message = "Selecciona el directorio '\(directorio.lastPathComponent)' para otorgar permisos de escritura para la optimización HEVC:"
+                openPanel.directoryURL = directory
+                openPanel.message = "Select directory '\(directory.lastPathComponent)' to grant write permissions for HEVC optimization:"
                 
                 if openPanel.runModal() == .OK, let selectedURL = openPanel.url {
-                    directoriosPermitidos.insert(selectedURL)
+                    allowedDirectories.insert(selectedURL)
                 }
             }
         }
         
         // Solo proceder si se otorgaron permisos para todos los directorios
-        if directoriosPermitidos.count == directoriosUnicos.count {
-            await convertirVideosAHEVC(directoriosPermitidos: directoriosPermitidos)
+        if allowedDirectories.count == uniqueDirectories.count {
+            await convertVideosToHEVC(allowedDirectories: allowedDirectories)
         } else {
-            await mostrarAlerta(
-                titulo: NSLocalizedString("permissions_required_title", comment: "Permissions required title"),
-                mensaje: NSLocalizedString("permissions_required_message", comment: "Permissions required message")
+            await showAlert(
+                title: NSLocalizedString("permissions_required_title", comment: "Permissions required title"),
+                message: NSLocalizedString("permissions_required_message", comment: "Permissions required message")
             )
         }
     }
     
     /// Convierte videos no-HEVC a HEVC de forma asíncrona
-    private func convertirVideosAHEVC(directoriosPermitidos: Set<URL> = []) async {
-        let videosNoHEVC = await detectarVideosNoHEVC()
+    private func convertVideosToHEVC(allowedDirectories: Set<URL> = []) async {
+        let videosNoHEVC = await detectNonHEVCVideos()
         
         guard !videosNoHEVC.isEmpty else {
-            await mostrarAlerta(
-                titulo: NSLocalizedString("no_videos_to_optimize_title", comment: "No videos to optimize title"),
-                mensaje: NSLocalizedString("no_videos_to_optimize_message", comment: "No videos to optimize message")
+            await showAlert(
+                title: NSLocalizedString("no_videos_to_optimize_title", comment: "No videos to optimize title"),
+                message: NSLocalizedString("no_videos_to_optimize_message", comment: "No videos to optimize message")
             )
             return
         }
@@ -889,8 +889,8 @@ struct SettingsView: View {
             }
             
             do {
-                let optimizedURL = try await convertirVideoAHEVC(videoFile)
-                await actualizarVideoEnLista(originalVideoFile: videoFile, optimizado: optimizedURL, directoriosPermitidos: directoriosPermitidos)
+                let optimizedURL = try await convertVideoToHEVC(videoFile)
+                await updateVideoInList(originalVideoFile: videoFile, optimized: optimizedURL, allowedDirectories: allowedDirectories)
                 print("✅ Video \(index + 1)/\(videosNoHEVC.count) optimizado: \(videoFile.name)")
             } catch {
                 print("❌ Error optimizando \(videoFile.name): \(error)")
@@ -910,14 +910,14 @@ struct SettingsView: View {
             isOptimizing = false
         }
         
-        await mostrarAlerta(
-            titulo: NSLocalizedString("optimization_completed_title", comment: "Optimization completed title"),
-            mensaje: String(format: NSLocalizedString("optimization_completed_message", comment: "Optimization completed message"), videosNoHEVC.count)
+        await showAlert(
+            title: NSLocalizedString("optimization_completed_title", comment: "Optimization completed title"),
+            message: String(format: NSLocalizedString("optimization_completed_message", comment: "Optimization completed message"), videosNoHEVC.count)
         )
     }
     
     /// Detecta videos que no están en formato HEVC
-    private func detectarVideosNoHEVC() async -> [VideoFile] {
+    private func detectNonHEVCVideos() async -> [VideoFile] {
         var videosNoHEVC: [VideoFile] = []
         
         for videoFile in wallpaperManager.videoFiles {
@@ -947,7 +947,7 @@ struct SettingsView: View {
     }
     
     /// Convierte un video específico a HEVC
-    private func convertirVideoAHEVC(_ videoFile: VideoFile) async throws -> URL {
+    private func convertVideoToHEVC(_ videoFile: VideoFile) async throws -> URL {
         // Validar disponibilidad del preset HEVC
         guard AVAssetExportSession.allExportPresets().contains(AVAssetExportPresetHEVCHighestQuality) else {
             throw NSError(domain: "OptimizationError", code: 4, userInfo: [NSLocalizedDescriptionKey: "HEVC no está disponible en este sistema"])
@@ -1012,14 +1012,14 @@ struct SettingsView: View {
         }
         
         // Validar que el archivo resultante es realmente HEVC
-        try await validarCodecHEVC(url: tempURL)
+        try await validateHEVCCodec(url: tempURL)
         
         print("✅ Conversión HEVC exitosa para: \(videoFile.name)")
         return tempURL
     }
     
     /// Valida que un archivo de video use codec HEVC
-    private func validarCodecHEVC(url: URL) async throws {
+    private func validateHEVCCodec(url: URL) async throws {
         let asset = AVAsset(url: url)
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
         
@@ -1044,16 +1044,16 @@ struct SettingsView: View {
     }
     
     /// Actualiza la lista de videos reemplazando el original por el optimizado
-    private func actualizarVideoEnLista(originalVideoFile: VideoFile, optimizado: URL, directoriosPermitidos: Set<URL> = []) async {
+    private func updateVideoInList(originalVideoFile: VideoFile, optimized: URL, allowedDirectories: Set<URL> = []) async {
         await MainActor.run {
             if let index = wallpaperManager.videoFiles.firstIndex(where: { $0.id == originalVideoFile.id }) {
-                var directorioParaLimpiar: URL?
+                var directoryToCleanup: URL?
                 do {
-                    // Resolver bookmark del archivo original
+                    // Resolve original file bookmark
                     guard let originalURL = wallpaperManager.resolveBookmark(for: originalVideoFile) else {
                         print("⚠️ No se pudo resolver bookmark del archivo original: \(originalVideoFile.name)")
-                        // Limpiar archivo temporal
-                        try? FileManager.default.removeItem(at: optimizado)
+                        // Clean up temporary file
+                        try? FileManager.default.removeItem(at: optimized)
                         return
                     }
                     
@@ -1065,19 +1065,19 @@ struct SettingsView: View {
                     
                     let originalDirectory = originalURL.deletingLastPathComponent()
                     
-                    // Si se proporcionaron directorios permitidos, usarlos para acceso sandbox
-                    if !directoriosPermitidos.isEmpty {
-                        // Buscar el directorio permitido que corresponde
-                        guard let encontrado = directoriosPermitidos.first(where: { $0.path == originalDirectory.path }) else {
-                            throw NSError(domain: "OptimizationError", code: 9, userInfo: [NSLocalizedDescriptionKey: "No se encontraron permisos para el directorio: \(originalDirectory.path)"])
+                    // If allowed directories were provided, use them for sandbox access
+                    if !allowedDirectories.isEmpty {
+                        // Find the corresponding allowed directory
+                        guard let found = allowedDirectories.first(where: { $0.path == originalDirectory.path }) else {
+                            throw NSError(domain: "OptimizationError", code: 9, userInfo: [NSLocalizedDescriptionKey: "No permissions found for directory: \(originalDirectory.path)"])
                         }
                         
-                        // Acceder al directorio con permisos sandbox
-                        guard encontrado.startAccessingSecurityScopedResource() else {
-                            throw NSError(domain: "OptimizationError", code: 10, userInfo: [NSLocalizedDescriptionKey: "No se pudo acceder al directorio con permisos sandbox"])
+                        // Access directory with sandbox permissions
+                        guard found.startAccessingSecurityScopedResource() else {
+                            throw NSError(domain: "OptimizationError", code: 10, userInfo: [NSLocalizedDescriptionKey: "Could not access directory with sandbox permissions"])
                         }
                         
-                        directorioParaLimpiar = encontrado
+                        directoryToCleanup = found
                     }
                     
                     // Crear directorio destino si no existe
@@ -1091,7 +1091,7 @@ struct SettingsView: View {
                     if FileManager.default.fileExists(atPath: finalURL.path) {
                         try FileManager.default.removeItem(at: finalURL)
                     }
-                    try FileManager.default.moveItem(at: optimizado, to: finalURL)
+                    try FileManager.default.moveItem(at: optimized, to: finalURL)
                     
                     print("✅ Archivo convertido movido exitosamente: \(finalURL.lastPathComponent)")
                     
@@ -1100,7 +1100,7 @@ struct SettingsView: View {
                     
                     // Intentar crear bookmark para el archivo específico
                     do {
-                        // Primero verificar que el archivo existe y es accesible
+                        // First verify that the file exists and is accessible
                         guard FileManager.default.fileExists(atPath: finalURL.path) else {
                             throw NSError(domain: "BookmarkError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Archivo convertido no existe"])
                         }
@@ -1146,14 +1146,14 @@ struct SettingsView: View {
                         updatedVideoFile.bookmarkData = newBookmarkData
                         print("📱 VideoFile actualizado con nuevo bookmark")
                         
-                        // Verificar que el bookmark funciona antes de eliminar el original
+                        // Verify that the bookmark works before deleting the original
                         do {
                             if let testURL = wallpaperManager.resolveBookmark(for: updatedVideoFile) {
                                 testURL.stopAccessingSecurityScopedResource()
                                 
-                                // Si llegamos aquí, el bookmark funciona, eliminar archivo original
+                                // If we get here, the bookmark works, delete original file
                                 try FileManager.default.removeItem(at: originalURL)
-                                print("🗑️ Archivo original eliminado después de verificar bookmark")
+                                print("🗑️ Original file deleted after verifying bookmark")
                             } else {
                                 throw NSError(domain: "BookmarkError", code: 2, userInfo: [NSLocalizedDescriptionKey: "No se pudo resolver el bookmark recién creado"])
                             }
@@ -1171,46 +1171,46 @@ struct SettingsView: View {
                     
                 } catch {
                     print("❌ Error reemplazando archivo: \(error.localizedDescription)")
-                    // Limpiar archivo temporal en caso de error
-                    try? FileManager.default.removeItem(at: optimizado)
+                    // Clean up temporary file in case of error
+                    try? FileManager.default.removeItem(at: optimized)
                 }
                 
                 // Limpiar acceso security-scoped si se usó
-                directorioParaLimpiar?.stopAccessingSecurityScopedResource()
+                directoryToCleanup?.stopAccessingSecurityScopedResource()
             } else {
                 print("⚠️ VideoFile no encontrado en la lista")
-                // Limpiar archivo temporal
-                try? FileManager.default.removeItem(at: optimizado)
+                // Clean up temporary file
+                try? FileManager.default.removeItem(at: optimized)
             }
         }
     }
     
     /// Muestra una alerta de forma asíncrona
-    private func mostrarAlerta(titulo: String, mensaje: String) async {
+    private func showAlert(title: String, message: String) async {
         await MainActor.run {
             let alert = NSAlert()
-            alert.messageText = titulo
-            alert.informativeText = mensaje
+            alert.messageText = title
+            alert.informativeText = message
             alert.addButton(withTitle: "OK")
             alert.runModal()
         }
     }
     
     /// Cierra la ventana de configuración
-    private func cerrarVentana() {
+    private func closeWindow() {
         DispatchQueue.main.async {
-            // Buscar la ventana de configuraciones
+            // Look for the settings window
             if let window = NSApp.windows.first(where: { window in
                 window.contentView?.subviews.contains { view in
                     String(describing: type(of: view)).contains("SettingsView")
                 } ?? false
             }) {
                 window.close()
-                print("✅ Ventana de configuración cerrada")
+                print("✅ Settings window closed")
             } else {
-                // Fallback: usar dismiss de SwiftUI
+                // Fallback: use SwiftUI dismiss
                 dismiss()
-                print("✅ Vista de configuración cerrada con dismiss")
+                print("✅ Settings view closed with dismiss")
             }
         }
     }

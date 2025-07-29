@@ -155,3 +155,25 @@
 /* Optimization errors */
 "optimization_errors_title" = "Processing Errors";
 "optimization_errors_message" = "Some videos could not be processed:\n%@";
+
+/* Fullscreen Detection */
+"fullscreen_detected" = "Fullscreen application detected: %@";
+"fullscreen_exited" = "Exited fullscreen mode";
+"fullscreen_detector_initialized" = "FullscreenDetector initialized";
+
+/* Timer Manager */
+"timer_started" = "Timer started: %d seconds";
+"timer_paused" = "Timer paused, remaining time: %d seconds";
+"timer_resumed" = "Timer resumed";
+"timer_stopped" = "Timer stopped";
+"timer_health_check_failed" = "Timer health check failed";
+
+/* Wallpaper Management with Fullscreen */
+"wallpaper_paused_for_fullscreen" = "Wallpaper paused for fullscreen application";
+"wallpaper_resumed_from_fullscreen" = "Wallpaper resumed from fullscreen";
+
+/* AutoUpdater */
+"update_available_title" = "New Version Available";
+"update_available_message" = "LiveWalls %@ is available.\nCurrent: %@\n\n%@";
+"view_on_github" = "View on GitHub";
+"dont_remind_version" = "Don't remind for this version";

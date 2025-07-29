@@ -1,5 +1,5 @@
-// Implementación unificada de DesktopVideoWindowMejorada
-// Esta clase reemplaza a DesktopVideoWindow y debe ser usada en todo el proyecto.
+// Unified implementation of DesktopVideoWindowMejorada
+// This class replaces DesktopVideoWindow and should be used throughout the project.
 
 import Cocoa
 import CoreGraphics
@@ -8,10 +8,10 @@ import os.log
 import Foundation
 import AppKit
 
-// Logger específico para debugging de memoria
+// Specific logger for memory debugging
 private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "MemoryManagement")
 
-// Extensiones para compatibilidad con versiones anteriores de macOS
+// Extensions for compatibility with earlier macOS versions
 extension AVAsset {
     var isPlayableDeprecated: Bool {
         if #available(macOS 13.0, *) {
@@ -68,10 +68,15 @@ extension AVAssetTrack {
     }
 }
 
-/// Ventana de video de escritorio mejorada y unificada
+/// Enhanced and unified desktop video window
 public class DesktopVideoWindowMejorada: NSWindow {
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
+    
+    /// Access to player layer for external control
+    var currentPlayerLayer: AVPlayerLayer? {
+        return playerLayer
+    }
     private var videoURL: URL
     private var urlSecurityScoped: URL?
     private var playerItemStatusObserver: NSKeyValueObservation?
@@ -85,15 +90,15 @@ public class DesktopVideoWindowMejorada: NSWindow {
     private let setupQueue = DispatchQueue(label: "com.livewalls.window.setup", qos: .userInitiated)
     private let cleanupQueue = DispatchQueue(label: "com.livewalls.window.cleanup", qos: .userInitiated)
 
-    // Definición de la propiedad playerItem
+    // Definition of playerItem property
     private var playerItem: AVPlayerItem?
 
-    /// Inicializa la ventana con la pantalla y la URL de video accesible (security-scoped activa).
-    /// IMPORTANTE: La ventana NO toma ownership del acceso security-scoped. 
-    /// El WallpaperManager es responsable de gestionar el ciclo de vida del acceso.
+    /// Initializes the window with the screen and accessible video URL (active security-scoped).
+    /// IMPORTANT: The window does NOT take ownership of security-scoped access.
+    /// WallpaperManager is responsible for managing the access lifecycle.
     /// - Parameters:
-    ///   - screen: Pantalla destino.
-    ///   - videoURL: URL del video con acceso security-scoped activo.
+    ///   - screen: Target screen.
+    ///   - videoURL: Video URL with active security-scoped access.
     public init(screen: NSScreen, videoURL: URL) {
         self.videoURL = videoURL
         self.urlSecurityScoped = nil
@@ -111,7 +116,7 @@ public class DesktopVideoWindowMejorada: NSWindow {
     }
 
     private func setupWindow(for screen: NSScreen) {
-        memoryLogger.info("🖥️ Configurando ventana para pantalla: \(screen.localizedName)")
+        memoryLogger.info("🖥️ Configuring window for screen: \(screen.localizedName)")
         self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         self.isOpaque = false
@@ -121,11 +126,11 @@ public class DesktopVideoWindowMejorada: NSWindow {
         self.setFrame(screen.frame, display: true)
         self.styleMask = [.borderless, .fullSizeContentView]
         
-        // Optimizaciones adicionales
+        // Additional optimizations
         self.acceptsMouseMovedEvents = false
         self.isMovable = false
         self.isMovableByWindowBackground = false
-        self.isReleasedWhenClosed = false // Cambiado a false para controlar el ciclo de vida
+        self.isReleasedWhenClosed = false // Changed to false to control lifecycle
         self.hidesOnDeactivate = false
         self.isExcludedFromWindowsMenu = true
         self.showsResizeIndicator = false
@@ -140,7 +145,7 @@ public class DesktopVideoWindowMejorada: NSWindow {
             setupLock.lock()
             guard !isPlayerSetupInProgress, !isBeingTornDown else {
                 setupLock.unlock()
-                memoryLogger.warning("⚠️ Setup de player cancelado - ya en progreso o siendo destruido")
+                memoryLogger.warning("⚠️ Player setup cancelled - already in progress or being destroyed")
                 continuation.resume()
                 return
             }
@@ -153,7 +158,7 @@ public class DesktopVideoWindowMejorada: NSWindow {
                     let (isPlayable, _) = try await asset.load(.isPlayable, .tracks)
                     
                     guard isPlayable else {
-                        throw NSError(domain: "com.livewalls.error", code: -1, userInfo: [NSLocalizedDescriptionKey: "El video no es reproducible"])
+                        throw NSError(domain: "com.livewalls.error", code: -1, userInfo: [NSLocalizedDescriptionKey: "Video is not playable"])
                     }
 
                     await MainActor.run {
@@ -164,34 +169,34 @@ public class DesktopVideoWindowMejorada: NSWindow {
                         }
                         
                         guard !isBeingTornDown else {
-                            memoryLogger.warning("⚠️ Setup cancelado: ventana siendo destruida")
+                            memoryLogger.warning("⚠️ Setup cancelled: window being destroyed")
                             continuation.resume()
                             return
                         }
 
-                        // Crear componentes en orden específico
+                        // Create components in specific order
                         let newPlayerItem = AVPlayerItem(asset: asset)
                         let newPlayer = AVPlayer(playerItem: newPlayerItem)
                         
-                        // Configuración optimizada para reproducción en segundo plano
+                        // Optimized configuration for background playback
                         newPlayer.actionAtItemEnd = .none
                         newPlayer.volume = 0.0
                         newPlayer.automaticallyWaitsToMinimizeStalling = false
                         newPlayer.isMuted = true
-                        newPlayer.rate = 1.0 // Asegurar que la velocidad sea 1.0
+                        newPlayer.rate = 1.0 // Ensure rate is 1.0
                         
-                        // Configurar playerLayer con optimizaciones
+                        // Configure playerLayer with optimizations
                         let newPlayerLayer = AVPlayerLayer(player: newPlayer)
                         newPlayerLayer.videoGravity = .resizeAspectFill
                         newPlayerLayer.frame = self.contentView?.bounds ?? .zero
                         newPlayerLayer.isOpaque = true
                         newPlayerLayer.backgroundColor = CGColor.black
                         newPlayerLayer.masksToBounds = true
-                        newPlayerLayer.shouldRasterize = true // Optimizar renderizado
+                        newPlayerLayer.shouldRasterize = true // Optimize rendering
                         newPlayerLayer.rasterizationScale = NSScreen.main?.backingScaleFactor ?? 1.0
-                        newPlayerLayer.drawsAsynchronously = true // Renderizado asíncrono
+                        newPlayerLayer.drawsAsynchronously = true // Asynchronous rendering
 
-                        // Añadir layer a la vista
+                        // Add layer to view
                         if let contentView = self.contentView {
                             if contentView.layer == nil {
                                 contentView.wantsLayer = true
@@ -199,29 +204,29 @@ public class DesktopVideoWindowMejorada: NSWindow {
                             contentView.layer?.addSublayer(newPlayerLayer)
                         }
 
-                        // Configurar observadores
+                        // Configure observers
                         setupObservers(player: newPlayer, playerItem: newPlayerItem)
 
-                        // Guardar referencias
+                        // Save references
                         self.player = newPlayer
                         self.playerItem = newPlayerItem
                         self.playerLayer = newPlayerLayer
 
-                        // Iniciar reproducción
+                        // Start playback
                         newPlayer.play()
                         
-                        memoryLogger.info("✅ Player configurado exitosamente para: \(url.lastPathComponent)")
+                        memoryLogger.info("✅ Player configured successfully for: \(url.lastPathComponent)")
                         continuation.resume()
                     }
                 } catch {
-                    memoryLogger.error("❌ Error configurando player: \(error.localizedDescription)")
+                    memoryLogger.error("❌ Error configuring player: \(error.localizedDescription)")
                     await MainActor.run {
                         self.setupLock.lock()
                         self.isPlayerSetupInProgress = false
                         self.setupLock.unlock()
                         
                         self.cleanupPlayer { [weak self] in
-                            self?.showErrorInWindow("Error cargando video: \(error.localizedDescription)")
+                            self?.showErrorInWindow("Error loading video: \(error.localizedDescription)")
                         }
                         continuation.resume()
                     }
@@ -231,33 +236,33 @@ public class DesktopVideoWindowMejorada: NSWindow {
     }
 
     private func setupObservers(player: AVPlayer, playerItem: AVPlayerItem) {
-        // Observar estado del playerItem
+        // Observe playerItem status
         playerItemStatusObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
             guard let self = self else { return }
             switch item.status {
             case .readyToPlay:
-                memoryLogger.info("✅ PlayerItem listo para reproducir")
+                memoryLogger.info("✅ PlayerItem ready to play")
                 player.play()
             case .failed:
-                memoryLogger.error("❌ PlayerItem falló: \(item.error?.localizedDescription ?? "Error desconocido")")
+                memoryLogger.error("❌ PlayerItem failed: \(item.error?.localizedDescription ?? "Unknown error")")
                 self.cleanupPlayer()
             case .unknown:
-                memoryLogger.warning("⚠️ PlayerItem en estado desconocido")
+                memoryLogger.warning("⚠️ PlayerItem in unknown state")
             @unknown default:
-                memoryLogger.warning("⚠️ PlayerItem en estado no manejado")
+                memoryLogger.warning("⚠️ PlayerItem in unhandled state")
             }
         }
 
-        // Observar tasa de reproducción
+        // Observe playback rate
         playerRateObserver = player.observe(\.rate, options: [.new]) { [weak self] player, _ in
             guard let self = self else { return }
             if player.rate == 0 && !self.isClosing {
-                memoryLogger.warning("⚠️ Player se detuvo inesperadamente")
+                memoryLogger.warning("⚠️ Player stopped unexpectedly")
                 player.play()
             }
         }
 
-        // Observar fin de reproducción
+        // Observe end of playback
         playerItemDidPlayToEndObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
@@ -265,17 +270,17 @@ public class DesktopVideoWindowMejorada: NSWindow {
         ) { [weak self] _ in
             guard let self = self else { return }
             if !self.isClosing {
-                memoryLogger.info("🔄 Video llegó al final, reiniciando...")
+                memoryLogger.info("🔄 Video reached end, restarting...")
                 player.seek(to: .zero)
                 player.play()
             }
         }
     }
 
-    /// Limpia de manera segura todos los recursos del player
-    /// Basado en las mejores prácticas de Swift Foundation para concurrencia
+    /// Safely cleans up all player resources
+    /// Based on Swift Foundation best practices for concurrency
     private func cleanupPlayer(completion: @escaping () -> Void = {}) {
-        // Usar defer para garantizar unlock del lock
+        // Use defer to guarantee lock unlock
         cleanupLock.lock()
         defer { cleanupLock.unlock() }
         
@@ -285,7 +290,7 @@ public class DesktopVideoWindowMejorada: NSWindow {
         }
         isBeingTornDown = true
         
-        // Capturar referencias ANTES de limpiar para thread safety
+        // Capture references BEFORE cleanup for thread safety
         let components = (
             player: self.player,
             playerLayer: self.playerLayer,
@@ -295,7 +300,7 @@ public class DesktopVideoWindowMejorada: NSWindow {
             endObserver: self.playerItemDidPlayToEndObserver
         )
         
-        // Limpiar referencias atómicamente
+        // Clean references atomically
         self.player = nil
         self.playerItem = nil
         self.playerLayer = nil
@@ -303,9 +308,9 @@ public class DesktopVideoWindowMejorada: NSWindow {
         self.playerRateObserver = nil
         self.playerItemDidPlayToEndObserver = nil
         
-        // Realizar limpieza asíncrona para evitar deadlocks
+        // Perform asynchronous cleanup to avoid deadlocks
         let performCleanupAsync = {
-            // Limpiar observadores PRIMERO
+            // Clean observers FIRST
             components.statusObserver?.invalidate()
             components.rateObserver?.invalidate()
             
@@ -313,50 +318,50 @@ public class DesktopVideoWindowMejorada: NSWindow {
                 NotificationCenter.default.removeObserver(observer)
             }
             
-            // Detener player ANTES de remover layer
+            // Stop player BEFORE removing layer
             components.player?.pause()
             components.player?.replaceCurrentItem(with: nil)
             
-            // Remover layer del superlayer
+            // Remove layer from superlayer
             components.playerLayer?.removeFromSuperlayer()
             
-            memoryLogger.info("🧹 Player limpiado exitosamente")
+            memoryLogger.info("🧹 Player cleaned successfully")
             
-            // Ejecutar completion en el hilo principal
+            // Execute completion on main thread
             DispatchQueue.main.async {
                 completion()
             }
         }
         
-        // Ejecutar limpieza de manera thread-safe
+        // Execute cleanup in thread-safe manner
         if Thread.isMainThread {
-            // Si estamos en el hilo principal, ejecutar asíncronamente para evitar bloqueos
+            // If on main thread, execute asynchronously to avoid blocking
             DispatchQueue.main.async(execute: performCleanupAsync)
         } else {
-            // Si estamos en otro hilo, ejecutar directamente
+            // If on another thread, execute directly
             performCleanupAsync()
         }
     }
 
-    /// Cierra la ventana y libera los recursos asociados.
+    /// Closes the window and releases associated resources.
     public func close(completion: @escaping () -> Void = {}) {
-        // Evitar cierre múltiple
+        // Avoid multiple closures
         if isClosing { 
             completion()
             return 
         }
         isClosing = true
         
-        memoryLogger.info("🚪 Cerrando ventana de video...")
+        memoryLogger.info("🚪 Closing video window...")
         
-        // Limpiar recursos antes de cerrar la ventana
+        // Clean resources before closing window
         cleanupPlayer { [weak self] in
             guard let self = self else {
                 completion()
                 return
             }
             
-            // Cerrar la ventana en el hilo principal
+            // Close window on main thread
             DispatchQueue.main.async { [weak self] in
                 self?.performClose()
                 completion()
@@ -364,19 +369,19 @@ public class DesktopVideoWindowMejorada: NSWindow {
         }
     }
     
-    /// Método privado para cerrar la ventana
+    /// Private method to close the window
     private func performClose() {
         super.close()
     }
     
-    /// Override del método close() original para mantener compatibilidad
+    /// Override of original close() method to maintain compatibility
     public override func close() {
         close(completion: {})
     }
 
     deinit {
-        memoryLogger.info("🧹 Deinicializando ventana de video")
-        // Asegurar limpieza final si no se hizo antes
+        memoryLogger.info("🧹 Deinitializing video window")
+        // Ensure final cleanup if not done before
         if !isBeingTornDown {
             cleanupPlayer()
         }
@@ -384,20 +389,20 @@ public class DesktopVideoWindowMejorada: NSWindow {
 
     // MARK: - Public API para acceso al reproductor
     
-    /// Obtiene el tiempo actual de reproducción del video
-    /// - Returns: CMTime actual del reproductor o nil si no hay reproductor activo
+    /// Gets the current video playback time
+    /// - Returns: Current CMTime of the player or nil if no active player
     public func getCurrentTime() -> CMTime? {
         return player?.currentTime()
     }
     
-    /// Obtiene el estado actual del reproductor
-    /// - Returns: Velocidad de reproducción actual (0.0 = pausado, 1.0 = reproduciendo normal)
+    /// Gets the current player state
+    /// - Returns: Current playback rate (0.0 = paused, 1.0 = normal playback)
     public func getPlaybackRate() -> Float? {
         return player?.rate
     }
     
-    /// Obtiene la duración total del video actual
-    /// - Returns: CMTime con la duración total o nil si no está disponible
+    /// Gets the total duration of the current video
+    /// - Returns: CMTime with total duration or nil if not available
     public func getTotalDuration() -> CMTime? {
         return player?.currentItem?.duration
     }
@@ -423,6 +428,6 @@ public class DesktopVideoWindowMejorada: NSWindow {
             errorLabel.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 20),
             errorLabel.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -20)
         ])
-        memoryLogger.warning("⚠️ Mostrando error en ventana: \(message)")
+        memoryLogger.warning("⚠️ Showing error in window: \(message)")
     }
 }

@@ -2,8 +2,8 @@ import Foundation
 import AppKit
 import os.log
 
-/// Gestor robusto de timer para rotación automática de wallpapers
-/// Implementa singleton pattern para prevenir múltiples instancias y asegurar comportamiento consistente
+/// Robust timer manager for automatic wallpaper rotation
+/// Implements singleton pattern to prevent multiple instances and ensure consistent behavior
 @MainActor
 class WallpaperTimerManager: ObservableObject {
     
@@ -26,13 +26,13 @@ class WallpaperTimerManager: ObservableObject {
     private var pausedAt: Date? = nil
     private var timerID: UUID? = nil
     
-    // Callback para cuando el timer se dispara
+    // Callback for when the timer fires
     private var timerCallback: (() async -> Void)? = nil
     
-    // Mutex para thread safety
+    // Mutex for thread safety
     private let timerLock = NSLock()
     
-    // MARK: - Timer Statistics (Para debugging)
+    // MARK: - Timer Statistics (For debugging)
     
     private var timerStartTime: Date? = nil
     private var timerFireCount: Int = 0
@@ -41,11 +41,11 @@ class WallpaperTimerManager: ObservableObject {
     // MARK: - Initialization
     
     private init() {
-        logger.info("⏰ Inicializando WallpaperTimerManager (Singleton)")
+        logger.info("⏰ Initializing WallpaperTimerManager (Singleton)")
     }
     
     deinit {
-        logger.info("⏰ Deinicializando WallpaperTimerManager")
+        logger.info("⏰ Deinitializing WallpaperTimerManager")
         Task { @MainActor in
             stopTimer()
         }
@@ -53,28 +53,28 @@ class WallpaperTimerManager: ObservableObject {
     
     // MARK: - Public Interface
     
-    /// Inicia el timer con el intervalo especificado
+    /// Starts the timer with the specified interval
     /// - Parameters:
-    ///   - interval: Intervalo en segundos entre cambios
-    ///   - callback: Función que se ejecuta cada vez que el timer se dispara
+    ///   - interval: Interval in seconds between changes
+    ///   - callback: Function that executes each time the timer fires
     func startTimer(interval: TimeInterval, callback: @escaping () async -> Void) {
         timerLock.lock()
         defer { timerLock.unlock() }
         
         guard interval > 0 else {
-            logger.error("❌ Intervalo inválido: \(interval). Debe ser mayor que 0")
+            logger.error("❌ Invalid interval: \(interval). Must be greater than 0")
             return
         }
         
-        // Detener timer existente si lo hay
+        // Stop existing timer if any
         stopTimerInternal()
         
-        // Configurar nuevo timer
+        // Configure new timer
         currentInterval = interval
         timerCallback = callback
         timerID = UUID()
         
-        // Crear y configurar timer
+        // Create and configure timer
         let currentTimerID = timerID!
         activeTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] timer in
             Task { @MainActor [weak self] in
@@ -82,93 +82,93 @@ class WallpaperTimerManager: ObservableObject {
             }
         }
         
-        // Actualizar estado
+        // Update state
         isTimerActive = true
         isPaused = false
         timerStartTime = Date()
         timerFireCount = 0
         nextChangeTime = Date().addingTimeInterval(interval)
         
-        logger.info("⏰ Timer iniciado: \(Int(interval))s, ID: \(currentTimerID)")
+        logger.info("⏰ Timer started: \(Int(interval))s, ID: \(currentTimerID)")
     }
     
-    /// Pausa el timer manteniendo el tiempo restante
+    /// Pauses the timer maintaining remaining time
     func pauseTimer() {
         timerLock.lock()
         defer { timerLock.unlock() }
         
         guard isTimerActive && !isPaused else {
-            logger.warning("⚠️ No se puede pausar: timer no activo o ya pausado")
+            logger.warning("⚠️ Cannot pause: timer not active or already paused")
             return
         }
         
         guard let nextChange = nextChangeTime else {
-            logger.error("❌ No se puede pausar: no hay próximo cambio programado")
+            logger.error("❌ Cannot pause: no next change scheduled")
             return
         }
         
-        // Calcular tiempo restante
+        // Calculate remaining time
         let now = Date()
         pausedRemainingTime = max(0, nextChange.timeIntervalSince(now))
         pausedAt = now
         
-        // Detener timer actual
+        // Stop current timer
         activeTimer?.invalidate()
         activeTimer = nil
         
-        // Actualizar estado
+        // Update state
         isPaused = true
         nextChangeTime = nil
         
-        logger.info("⏸️ Timer pausado. Tiempo restante: \(Int(self.pausedRemainingTime))s")
+        logger.info("⏸️ Timer paused. Remaining time: \(Int(self.pausedRemainingTime))s")
     }
     
-    /// Reanuda el timer desde donde se pausó
+    /// Resumes the timer from where it was paused
     func resumeTimer() {
         timerLock.lock()
         defer { timerLock.unlock() }
         
         guard isTimerActive && isPaused else {
-            logger.warning("⚠️ No se puede resumir: timer no pausado")
+            logger.warning("⚠️ Cannot resume: timer not paused")
             return
         }
         
         guard let callback = timerCallback, let currentTimerID = timerID else {
-            logger.error("❌ No se puede resumir: falta callback o ID de timer")
+            logger.error("❌ Cannot resume: missing callback or timer ID")
             return
         }
         
-        // Si el tiempo restante es muy pequeño, disparar inmediatamente
+        // If remaining time is very small, fire immediately
         if pausedRemainingTime <= 1.0 {
-            logger.info("⏰ Tiempo restante muy pequeño, disparando inmediatamente")
+            logger.info("⏰ Remaining time very small, firing immediately")
             Task {
                 await callback()
-                // Reiniciar con intervalo completo
+                // Restart with full interval
                 startTimer(interval: currentInterval, callback: callback)
             }
             return
         }
         
-        // Crear timer con tiempo restante
+        // Create timer with remaining time
         activeTimer = Timer.scheduledTimer(withTimeInterval: pausedRemainingTime, repeats: false) { [weak self] timer in
             Task { @MainActor [weak self] in
                 await self?.handleTimerFire(timerID: currentTimerID, timer: timer)
                 
-                // Después del primer disparo, crear timer normal con intervalo completo
+                // After first fire, create normal timer with full interval
                 if let self = self, let callback = self.timerCallback {
                     self.startTimer(interval: self.currentInterval, callback: callback)
                 }
             }
         }
         
-        // Actualizar estado
+        // Update state
         isPaused = false
         nextChangeTime = Date().addingTimeInterval(pausedRemainingTime)
         
-        logger.info("▶️ Timer resumido. Próximo cambio en: \(Int(self.pausedRemainingTime))s")
+        logger.info("▶️ Timer resumed. Next change in: \(Int(self.pausedRemainingTime))s")
     }
     
-    /// Detiene completamente el timer
+    /// Completely stops the timer
     func stopTimer() {
         timerLock.lock()
         defer { timerLock.unlock() }
@@ -176,9 +176,9 @@ class WallpaperTimerManager: ObservableObject {
         stopTimerInternal()
     }
     
-    /// Reinicia el timer con nuevo intervalo (equivale a stop + start)
+    /// Restarts the timer with new interval (equivalent to stop + start)
     func restartTimer(interval: TimeInterval, callback: @escaping () async -> Void) {
-        logger.info("🔄 Reiniciando timer con intervalo: \(Int(interval))s")
+        logger.info("🔄 Restarting timer with interval: \(Int(interval))s")
         stopTimer()
         startTimer(interval: interval, callback: callback)
     }
@@ -191,54 +191,54 @@ class WallpaperTimerManager: ObservableObject {
         timerCallback = nil
         timerID = nil
         
-        // Resetear estado
+        // Reset state
         isTimerActive = false
         isPaused = false
         pausedRemainingTime = 0
         pausedAt = nil
         nextChangeTime = nil
         
-        // Resetear estadísticas
+        // Reset statistics
         timerStartTime = nil
         timerFireCount = 0
         lastFireTime = nil
         
-        logger.info("⏹️ Timer detenido completamente")
+        logger.info("⏹️ Timer stopped completely")
     }
     
     private func handleTimerFire(timerID: UUID, timer: Timer) async {
-        // Verificar que este es el timer correcto (prevenir race conditions)
+        // Verify this is the correct timer (prevent race conditions)
         guard self.timerID == timerID else {
-            logger.warning("⚠️ Timer obsoleto disparado, ignorando")
+            logger.warning("⚠️ Obsolete timer fired, ignoring")
             return
         }
         
-        // Actualizar estadísticas
+        // Update statistics
         timerFireCount += 1
         lastFireTime = Date()
         
-        logger.info("🔥 Timer disparado (disparo #\(self.timerFireCount))")
+        logger.info("🔥 Timer fired (fire #\(self.timerFireCount))")
         
-        // Ejecutar callback
+        // Execute callback
         if let callback = timerCallback {
             await callback()
         }
         
-        // Si no es repetitivo, planificar próximo disparo
+        // If not repetitive, schedule next fire
         if !timer.isValid || !(activeTimer?.isValid ?? false) {
             // Timer was invalidated, don't update next change time
             return
         }
         
-        // Actualizar próximo cambio
+        // Update next change
         nextChangeTime = Date().addingTimeInterval(currentInterval)
         
-        logger.debug("⏭️ Próximo cambio programado: \(self.nextChangeTime?.formatted() ?? "None")")
+        logger.debug("⏭️ Next change scheduled: \(self.nextChangeTime?.formatted() ?? "None")")
     }
     
     // MARK: - State Validation
     
-    /// Valida que el estado del timer sea consistente
+    /// Validates that the timer state is consistent
     func validateState() -> Bool {
         timerLock.lock()
         defer { timerLock.unlock() }
@@ -246,7 +246,7 @@ class WallpaperTimerManager: ObservableObject {
         let isValid = validateStateInternal()
         
         if !isValid {
-            logger.error("❌ Estado de timer inconsistente detectado")
+            logger.error("❌ Inconsistent timer state detected")
             logDebugInfo()
         }
         
@@ -254,24 +254,24 @@ class WallpaperTimerManager: ObservableObject {
     }
     
     private func validateStateInternal() -> Bool {
-        // Validar que el estado Published coincida con el estado interno
+        // Validate that Published state matches internal state
         if isTimerActive {
-            // Si está activo, debe tener timer o estar pausado
+            // If active, must have timer or be paused
             if activeTimer == nil && !isPaused {
                 return false
             }
             
-            // Si está pausado, no debe tener timer activo
+            // If paused, should not have active timer
             if isPaused && activeTimer != nil {
                 return false
             }
             
-            // Debe tener callback y timer ID
+            // Must have callback and timer ID
             if timerCallback == nil || timerID == nil {
                 return false
             }
         } else {
-            // Si no está activo, no debe tener timer ni estar pausado
+            // If not active, should not have timer or be paused
             if activeTimer != nil || isPaused || timerCallback != nil {
                 return false
             }
@@ -280,17 +280,17 @@ class WallpaperTimerManager: ObservableObject {
         return true
     }
     
-    /// Recupera automáticamente de estados inconsistentes
+    /// Automatically recovers from inconsistent states
     func recoverFromInconsistentState() {
         timerLock.lock()
         defer { timerLock.unlock() }
         
-        logger.warning("🔧 Iniciando recuperación de estado inconsistente")
+        logger.warning("🔧 Starting recovery from inconsistent state")
         
-        // Detener todo y limpiar estado
+        // Stop everything and clean state
         stopTimerInternal()
         
-        logger.info("✅ Recuperación completada, timer reseteado")
+        logger.info("✅ Recovery completed, timer reset")
     }
     
     // MARK: - Debug Information
@@ -332,28 +332,28 @@ class WallpaperTimerManager: ObservableObject {
 
 extension WallpaperTimerManager {
     
-    /// Verifica la salud del timer y corrige problemas automáticamente
+    /// Checks timer health and automatically corrects problems
     func performHealthCheck() -> Bool {
-        logger.info("🏥 Realizando health check del timer")
+        logger.info("🏥 Performing timer health check")
         
         let isHealthy = validateState()
         
         if !isHealthy {
-            logger.warning("⚠️ Timer no saludable, iniciando auto-corrección")
+            logger.warning("⚠️ Timer unhealthy, starting auto-correction")
             recoverFromInconsistentState()
             return false
         }
         
-        // Verificar si el timer debería haber disparado ya
+        // Check if timer should have fired already
         if let nextChange = nextChangeTime, !isPaused {
             let now = Date()
-            if now > nextChange.addingTimeInterval(5) { // 5 segundos de tolerancia
-                logger.warning("⚠️ Timer parece estar atrasado, puede haber problema")
+            if now > nextChange.addingTimeInterval(5) { // 5 seconds tolerance
+                logger.warning("⚠️ Timer seems to be delayed, there may be a problem")
                 return false
             }
         }
         
-        logger.info("✅ Timer saludable")
+        logger.info("✅ Timer healthy")
         return true
     }
 }
