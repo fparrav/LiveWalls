@@ -71,13 +71,28 @@ extension AVAssetTrack {
 /// Enhanced and unified desktop video window
 public class DesktopVideoWindowMejorada: NSWindow {
     private var player: AVPlayer?
-    private var playerLayer: AVPlayerLayer?
+    public var playerLayer: AVPlayerLayer?
     
     /// Access to player layer for external control
     var currentPlayerLayer: AVPlayerLayer? {
         return playerLayer
     }
-    private var videoURL: URL
+    
+/// Sets the opacity of the window and its video layer
+func setOpacity(_ opacity: Double) {
+    // Update the layer's opacity
+    playerLayer?.opacity = Float(opacity)
+    
+    // If we need to also update the window's opacity
+    self.alphaValue = opacity
+    
+    // Ensure the layer is updated properly
+    if let layer = self.contentView?.layer {
+        layer.opacity = Float(opacity)
+    }
+}
+
+private var videoURL: URL
     private var urlSecurityScoped: URL?
     private var playerItemStatusObserver: NSKeyValueObservation?
     private var playerRateObserver: NSKeyValueObservation?

@@ -28,6 +28,11 @@ struct SettingsView: View {
     @State private var originalLaunchAtLogin: Bool
     @State private var originalDuplicateHandlingPreference: WallpaperManager.DuplicateHandling
     
+    // Original states for transitions
+    @State private var originalIsTransitionEnabled: Bool
+    @State private var originalTransitionDuration: Double
+    @State private var originalTransitionType: TransitionManager.TransitionType
+    
     // States for HEVC optimization progress
     @State private var isOptimizing = false
     @State private var currentVideoIndex = 0
@@ -41,6 +46,11 @@ struct SettingsView: View {
     @State private var currentVideoBeingProcessed = ""
     @State private var optimizationErrors: [String] = []
     @StateObject private var videoOptimizer = VideoOptimizer()
+    
+    // States for transition settings
+    @State private var isTransitionEnabled: Bool
+    @State private var transitionDuration: Double
+    @State private var transitionType: TransitionManager.TransitionType
 
     private let minIntervalMinutes = 1
     private let maxIntervalMinutes = 120
@@ -66,12 +76,29 @@ struct SettingsView: View {
             duplicateHandling = .skip // Default to skip for "askAlways" or unknown values
         }
         
+        // Cargar configuración de transiciones
+        let isTransitionEnabled = UserDefaults.standard.bool(forKey: "IsTransitionEnabled")
+        let transitionDuration = UserDefaults.standard.double(forKey: "TransitionDuration")
+        let transitionTypeRawValue = UserDefaults.standard.string(forKey: "TransitionType") ?? "crossfade"
+        let transitionType: TransitionManager.TransitionType
+        switch transitionTypeRawValue {
+        case "fadeOutFadeIn":
+            transitionType = .fadeOutFadeIn
+        default:
+            transitionType = .crossfade
+        }
+        
         // Estados actuales
         _autoStartWallpaper = State(initialValue: autoStart)
         _muteVideo = State(initialValue: mute)
         _isAutoChangeEnabled = State(initialValue: autoChangeEnabled)
         _autoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
         _duplicateHandlingPreference = State(initialValue: duplicateHandling)
+        
+        // Estados para transiciones
+        _isTransitionEnabled = State(initialValue: isTransitionEnabled)
+        _transitionDuration = State(initialValue: transitionDuration > 0 ? transitionDuration : 2.0)
+        _transitionType = State(initialValue: transitionType)
         
         // Original states to be able to cancel
         _originalAutoStartWallpaper = State(initialValue: autoStart)
@@ -80,6 +107,11 @@ struct SettingsView: View {
         _originalAutoChangeIntervalMinutes = State(initialValue: savedInterval > 0 ? Int(savedInterval / 60) : 10)
         _originalLaunchAtLogin = State(initialValue: false) // Se actualizará en onAppear
         _originalDuplicateHandlingPreference = State(initialValue: duplicateHandling)
+        
+        // Original states for transitions
+        _originalIsTransitionEnabled = State(initialValue: isTransitionEnabled)
+        _originalTransitionDuration = State(initialValue: transitionDuration > 0 ? transitionDuration : 2.0)
+        _originalTransitionType = State(initialValue: transitionType)
     }
 
     var body: some View {
@@ -113,6 +145,7 @@ struct SettingsView: View {
                 generalPlaybackSection
                 systemSection
                 autoChangeSection
+                transitionSection
                 videoManagementSection
                 Spacer(minLength: 20)
             }
@@ -252,6 +285,48 @@ struct SettingsView: View {
         }
     }
     
+    private var transitionSection: some View {
+        GroupBox(NSLocalizedString("transition_section", comment: "Transition section")) {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(NSLocalizedString("enable_transitions", comment: "Enable transitions"), isOn: $isTransitionEnabled)
+                    .toggleStyle(SwitchToggleStyle())
+                
+                if isTransitionEnabled {
+                    transitionDurationPickerView
+                    transitionTypePickerView
+                }
+            }
+            .padding(12)
+        }
+    }
+    
+    private var transitionDurationPickerView: some View {
+        HStack {
+            Text(NSLocalizedString("transition_duration_label", comment: "Transition duration label"))
+            Spacer()
+            Picker("", selection: $transitionDuration) {
+                ForEach([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0], id: \.self) { duration in
+                    Text(String(format: NSLocalizedString("seconds_format", comment: "Seconds format"), duration)).tag(duration)
+                }
+            }
+            .pickerStyle(MenuPickerStyle())
+            .frame(width: 100)
+        }
+    }
+    
+    private var transitionTypePickerView: some View {
+        HStack {
+            Text(NSLocalizedString("transition_type_label", comment: "Transition type label"))
+            Spacer()
+            Picker("", selection: $transitionType) {
+                Text(NSLocalizedString("crossfade_transition", comment: "Crossfade transition")).tag(TransitionManager.TransitionType.crossfade)
+                Text(NSLocalizedString("fade_out_fade_in_transition", comment: "Fade out fade in transition")).tag(TransitionManager.TransitionType.fadeOutFadeIn)
+            }
+            .pickerStyle(MenuPickerStyle())
+            .frame(width: 150)
+        }
+    }
+    
     private var videoManagementSection: some View {
         GroupBox(NSLocalizedString("video_management_section", comment: "Video management section")) {
             VStack(alignment: .leading, spacing: 12) {
@@ -379,6 +454,17 @@ struct SettingsView: View {
             self.duplicateHandlingPreference = .skip // Default to skip for "askAlways" or unknown values
         }
         
+        // Load transition settings
+        self.isTransitionEnabled = UserDefaults.standard.bool(forKey: "IsTransitionEnabled")
+        self.transitionDuration = UserDefaults.standard.double(forKey: "TransitionDuration")
+        let transitionTypeRawValue = UserDefaults.standard.string(forKey: "TransitionType") ?? "crossfade"
+        switch transitionTypeRawValue {
+        case "fadeOutFadeIn":
+            self.transitionType = .fadeOutFadeIn
+        default:
+            self.transitionType = .crossfade
+        }
+        
         // Save original states to be able to cancel
         self.originalAutoStartWallpaper = autoStartWallpaper
         self.originalMuteVideo = muteVideo
@@ -386,6 +472,11 @@ struct SettingsView: View {
         self.originalAutoChangeIntervalMinutes = autoChangeIntervalMinutes
         self.originalLaunchAtLogin = launchManager.isLaunchAtLoginEnabled
         self.originalDuplicateHandlingPreference = duplicateHandlingPreference
+        
+        // Save original states for transitions
+        self.originalIsTransitionEnabled = isTransitionEnabled
+        self.originalTransitionDuration = transitionDuration
+        self.originalTransitionType = transitionType
     }
     
     /// Saves all settings to UserDefaults and synchronizes with managers
@@ -408,10 +499,27 @@ struct SettingsView: View {
         }
         UserDefaults.standard.set(duplicateHandlingRawValue, forKey: "DuplicateHandlingPreference")
         
+        // Save transition settings
+        UserDefaults.standard.set(isTransitionEnabled, forKey: "IsTransitionEnabled")
+        UserDefaults.standard.set(transitionDuration, forKey: "TransitionDuration")
+        let transitionTypeRawValue: String
+        switch transitionType {
+        case .fadeOutFadeIn:
+            transitionTypeRawValue = "fadeOutFadeIn"
+        default:
+            transitionTypeRawValue = "crossfade"
+        }
+        UserDefaults.standard.set(transitionTypeRawValue, forKey: "TransitionType")
+        
         // Synchronize with WallpaperManager
         wallpaperManager.isAutoChangeEnabled = isAutoChangeEnabled
         wallpaperManager.autoChangeInterval = TimeInterval(autoChangeIntervalMinutes * 60)
         wallpaperManager.saveAutoChangeSettings()
+        
+        // Save transition settings to WallpaperManager
+        wallpaperManager.setTransitionEnabled(isTransitionEnabled)
+        wallpaperManager.setTransitionDuration(transitionDuration)
+        wallpaperManager.setTransitionType(transitionType)
         
         // Force immediate synchronization
         UserDefaults.standard.synchronize()
@@ -427,6 +535,11 @@ struct SettingsView: View {
         self.isAutoChangeEnabled = originalIsAutoChangeEnabled
         self.autoChangeIntervalMinutes = originalAutoChangeIntervalMinutes
         self.duplicateHandlingPreference = originalDuplicateHandlingPreference
+        
+        // Restore transition settings
+        self.isTransitionEnabled = originalIsTransitionEnabled
+        self.transitionDuration = originalTransitionDuration
+        self.transitionType = originalTransitionType
         
         // Restore launch at login if it changed
         if launchManager.isLaunchAtLoginEnabled != originalLaunchAtLogin {

@@ -36,7 +36,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - New Fullscreen and Timer Management
     private let fullscreenDetector = FullscreenDetector()
     private let timerManager = WallpaperTimerManager.shared
+    private let transitionManager = TransitionManager()
     private var isWallpaperPausedForFullscreen = false
+    
+    // MARK: - Transition Settings
+    private let isTransitionEnabledKey = "IsTransitionEnabled"
+    private let transitionDurationKey = "TransitionDuration"
+    private let transitionTypeKey = "TransitionType"
+    private var isTransitionEnabled = true
+    private var transitionDuration: TimeInterval = 2.0
+    private var transitionType: TransitionManager.TransitionType = .crossfade
     
     // MARK: - Variables for window destruction synchronization
     var pendingDestroyCompletion: (() -> Void)? = nil
@@ -59,6 +68,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private var isChangingVideo = false
     private var isCleaningUp = false
     
+    
     // Actor to serialize wallpaper operations
     private actor WallpaperOperationActor {
         func withExclusiveAccess<T>(@_implicitSelfCapture operation: () async throws -> T) async rethrows -> T {
@@ -77,6 +87,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         loadSavedVideos()
         loadCurrentVideo()
         loadAutoChangeSettings()
+        loadTransitionSettings()
         setupScreenChangeNotifications()
         setupWorkspaceNotifications()
         setupTerminationHandling()
@@ -939,11 +950,90 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let nextVideo = enabledVideos[nextIndex]
         
         appLogger.info("🔄 Cambiando automáticamente a: \(nextVideo.name)")
+        
+        // Check if we should use transition
+        if isPlayingWallpaper {
+            await changeToNextVideoWithTransition(to: nextVideo)
+        } else {
+            await setActiveVideo(nextVideo)
+        }
+    }
+    
+    /// Changes to the next video with a smooth transition
+    private func changeToNextVideoWithTransition(to nextVideo: VideoFile) async {
+        appLogger.info("🔄 Cambiando con transición a: \(nextVideo.name)")
+        
+        // Get the current video URL
+        guard let currentVideo = currentVideo,
+              let currentURL = resolveBookmark(for: currentVideo) else {
+            appLogger.error("❌ No se pudo obtener el URL del video actual")
+            await setActiveVideo(nextVideo)
+            return
+        }
+        
+        // Get the next video URL
+        guard let nextURL = resolveBookmark(for: nextVideo) else {
+            appLogger.error("❌ No se pudo obtener el URL del siguiente video")
+            await setActiveVideo(nextVideo)
+            return
+        }
+        
+        // Create a temporary window for the next video to start playing
+        let nextWindow = DesktopVideoWindowMejorada(screen: NSScreen.main ?? NSScreen.screens.first!, videoURL: nextURL)
+        nextWindow.delegate = self
+        nextWindow.orderFront(nil)
+        nextWindow.orderBack(nil)
+        
+        // Set initial opacity for smooth transition
+        DispatchQueue.main.async {
+            nextWindow.setOpacity(0.0) // Start with invisible
+        }
+        
+        // Get the current window
+        let currentWindow = desktopVideoInstances.first?.window
+        
+        // Perform transition using TransitionManager
+        if isTransitionEnabled {
+            switch transitionType {
+            case .crossfade:
+                transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: nextWindow)
+            case .fadeOutFadeIn:
+                // For fadeOutFadeIn, we would need to implement this in TransitionManager
+                // For now, we'll use crossfade as default
+                transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: nextWindow)
+            }
+            
+            // Wait for transition to complete
+            try? await Task.sleep(for: .seconds(transitionDuration))
+        } else {
+            // If transitions are disabled, just wait a short time for the new window to be ready
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        
+        // After transition, clean up old windows and set new video as active
+        let oldWindows = desktopVideoInstances
+        desktopVideoInstances.removeAll()
+        
+        // Create new windows for the next video
+        createDesktopWindows(for: nextVideo, accessibleURL: nextURL)
+        
+        // Clean up old window after transition
+        for (window, url) in oldWindows {
+            window.close { [weak self] in
+                self?.safeStopSecurityScopedAccess(for: url)
+            }
+        }
+        
+        // Update active video
         await setActiveVideo(nextVideo)
         
-        if isPlayingWallpaper {
-            startWallpaperSafe()
-        }
+        appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
+    }
+        
+        // Update active video
+        await setActiveVideo(nextVideo)
+        
+        appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
     }
     
     // MARK: - Manual Next Wallpaper & Random Play Control
@@ -1079,6 +1169,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
+    /// Loads transition settings from UserDefaults
+    private func loadTransitionSettings() {
+        isTransitionEnabled = userDefaults.bool(forKey: isTransitionEnabledKey)
+        transitionDuration = userDefaults.double(forKey: transitionDurationKey)
+        if transitionDuration <= 0 {
+            transitionDuration = 2.0 // Default 2 segundos
+        }
+        
+        // Load transition type
+        let transitionTypeRawValue = userDefaults.string(forKey: transitionTypeKey) ?? "crossfade"
+        switch transitionTypeRawValue {
+        case "fadeOutFadeIn":
+            transitionType = .fadeOutFadeIn
+        default:
+            transitionType = .crossfade
+        }
+    }
+    
     /// Saves automatic change configuration
     func saveAutoChangeSettings() {
         userDefaults.set(isAutoChangeEnabled, forKey: "AutoChangeEnabled")
@@ -1098,6 +1206,47 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         Task {
             await performTimerHealthCheck()
         }
+    }
+    
+    /// Saves transition configuration
+    func saveTransitionSettings() {
+        userDefaults.set(isTransitionEnabled, forKey: isTransitionEnabledKey)
+        userDefaults.set(transitionDuration, forKey: transitionDurationKey)
+        
+        // Save transition type
+        let transitionTypeRawValue: String
+        switch transitionType {
+        case .fadeOutFadeIn:
+            transitionTypeRawValue = "fadeOutFadeIn"
+        default:
+            transitionTypeRawValue = "crossfade"
+        }
+        userDefaults.set(transitionTypeRawValue, forKey: transitionTypeKey)
+        
+        appLogger.info("💾 Saving transition configuration: enabled=\(self.isTransitionEnabled), duration=\(self.transitionDuration)s, type=\(transitionTypeRawValue)")
+    }
+    
+    /// Sets whether transitions are enabled
+    func setTransitionEnabled(_ enabled: Bool) {
+        isTransitionEnabled = enabled
+        saveTransitionSettings()
+    }
+    
+    /// Sets the transition duration
+    func setTransitionDuration(_ duration: TimeInterval) {
+        transitionDuration = duration
+        saveTransitionSettings()
+    }
+    
+    /// Sets the transition type
+    func setTransitionType(_ type: TransitionManager.TransitionType) {
+        transitionType = type
+        saveTransitionSettings()
+    }
+    
+    /// Gets the current transition settings
+    func getTransitionSettings() -> (isEnabled: Bool, duration: TimeInterval, type: TransitionManager.TransitionType) {
+        return (isTransitionEnabled, transitionDuration, transitionType)
     }
     
     /// Función para compatibilidad con ContentView - llama a stopWallpaper()
@@ -1232,13 +1381,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         // Configurar callbacks del detector
         fullscreenDetector.onFullscreenEntered = { [weak self] appName in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 await self?.handleFullscreenEntered(appName: appName)
             }
         }
         
         fullscreenDetector.onFullscreenExited = { [weak self] in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 await self?.handleFullscreenExited()
             }
         }

@@ -1,0 +1,10 @@
+/* Transition Section */
+"transition_section" = "Transitions";
+"enable_transitions" = "Enable smooth transitions";
+"transition_duration_label" = "Transition duration";
+"transition_type_label" = "Transition type";
+"crossfade_transition" = "Crossfade";
+"fade_out_fade_in_transition" = "Fade out and fade in";
+
+/* Time formats */
+"seconds_format" = "%.1fs";
