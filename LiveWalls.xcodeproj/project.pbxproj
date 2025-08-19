@@ -21,6 +21,7 @@
 		ABC123DE2E1F789012345678 /* AutoUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC123DE456F789012345678AUTOUPD01 /* AutoUpdater.swift */; };
 		8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */; };
 		8B0C7D402B1F4A8000123456 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */; };
+		9A1B2C3D4E5F6789ABCDEF20 /* TransitionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF19 /* TransitionManager.swift */; };
 		8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D412B1F4A9000123456 /* NotificationManager.swift */; };
 		9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */; };
 		9A1B2C3D4E5F6789ABCDEF03 /* StatusBarMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */; };
@@ -102,6 +103,7 @@
 		ABC123DE456F789012345678AUTOUPD01 /* AutoUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoUpdater.swift; sourceTree = "<group>"; };
 		8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFile.swift; sourceTree = "<group>"; };
 		8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		9A1B2C3D4E5F6789ABCDEF19 /* TransitionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionManager.swift; sourceTree = "<group>"; };
 		8B0C7D412B1F4A9000123456 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchManager.swift; sourceTree = "<group>"; };
 		9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarMenuView.swift; sourceTree = "<group>"; };
@@ -215,6 +217,7 @@
 				9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */,
 				542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */,
 				8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */,
+				9A1B2C3D4E5F6789ABCDEF19 /* TransitionManager.swift */,
 				3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */,
 				F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */,
 				ABC123DE456F789012345678AUTOUPD01 /* AutoUpdater.swift */,
@@ -379,6 +382,7 @@
 				9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */,
 				8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */,
 				8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */,
+				9A1B2C3D4E5F6789ABCDEF20 /* TransitionManager.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF05 /* VideoOptimizer.swift in Sources */,
 				3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */,
 				F2227C492E1F40488BAD0026 /* WallpaperTimerManager.swift in Sources */,

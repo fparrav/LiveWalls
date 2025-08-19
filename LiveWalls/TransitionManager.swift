@@ -148,20 +148,4 @@ class TransitionManager {
     }
 }
 
-// MARK: - Extension for DesktopVideoWindowMejorada
-
-extension DesktopVideoWindowMejorada {
-    /// Sets the opacity of the window and its video layer
-    func setOpacity(_ opacity: Double) {
-        // Update the layer's opacity
-        playerLayer?.opacity = Float(opacity)
-        
-        // If we need to also update the window's opacity
-        self.alphaValue = opacity
-        
-        // Ensure the layer is updated properly
-        if let layer = self.contentView?.layer {
-            layer.opacity = Float(opacity)
-        }
-    }
-}
+// MARK: - Note: setOpacity extension is defined in DesktopVideoWindowMejorada.swift

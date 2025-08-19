@@ -1029,12 +1029,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
     }
-        
-        // Update active video
-        await setActiveVideo(nextVideo)
-        
-        appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
-    }
     
     // MARK: - Manual Next Wallpaper & Random Play Control
     
@@ -1510,19 +1504,19 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     nonisolated private func cleanupAllResources() {
         appLogger.info("🧹 Cleaning up all resources")
         Task { @MainActor in
-            stopAutoChangeTimer()
+            self.stopAutoChangeTimer()
         }
         
         // Limpiar wallpaper estático temporal
         Task { @MainActor in
-            cleanupPreviousStaticWallpaper()
+            self.cleanupPreviousStaticWallpaper()
             
             // Close all windows and release resources
-            for (window, accessibleURL) in desktopVideoInstances {
+            for (window, accessibleURL) in self.desktopVideoInstances {
                 window.close()
-                safeStopSecurityScopedAccess(for: accessibleURL)
+                self.safeStopSecurityScopedAccess(for: accessibleURL)
             }
-            desktopVideoInstances.removeAll()
+            self.desktopVideoInstances.removeAll()
         }
         
         // Liberar cualquier URL security-scoped restante
