@@ -488,6 +488,20 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         
+        # Check current git status
+        echo "📋 Current git status:"
+        git status
+        echo "📋 Current branch:"
+        git branch -a
+        echo "📋 Current HEAD:"
+        git log --oneline -1
+        
+        # Ensure we're on the main branch
+        git checkout main || {
+          echo "⚠️ Cannot checkout main branch, trying to create from HEAD"
+          git checkout -b main
+        }
+        
         # Add and commit changes
         git add homebrew/livewalls.rb
         
@@ -496,7 +510,12 @@ jobs:
           echo "⚠️ No changes to commit in Homebrew formula"
         else
           git commit -m "🍺 update homebrew formula to ${{ github.ref_name }}"
-          git push origin main
+          
+          # Push with explicit branch reference
+          git push origin HEAD:main || {
+            echo "⚠️ Direct push failed, trying force push"
+            git push origin HEAD:main --force-with-lease
+          }
           echo "✅ Homebrew formula changes pushed successfully"
         fi
 
