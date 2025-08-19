@@ -59,9 +59,30 @@ Une application macOS native pour utiliser des vidéos comme fonds d'écran dyna
 
 ### 📥 Télécharger la Release (Recommandé)
 
-Téléchargez la dernière version compilée depuis [GitHub Releases](https://github.com/fparrav/LiveWalls/releases/latest).
+1. Allez sur [GitHub Releases](https://github.com/fparrav/LiveWalls/releases)
+2. Téléchargez le fichier `.dmg` le plus récent
+3. Ouvrez le DMG et glissez LiveWalls vers Applications
 
-**⚠️ Important :** Comme l'application n'est pas signée avec un certificat Apple Developer, vous devrez autoriser manuellement son exécution.
+### 🍺 Installation Homebrew (Recommandé pour utilisateurs avancés)
+
+**Vous n'avez pas Homebrew ?** [Installez-le ici](https://brew.sh)
+
+```bash
+brew tap fparrav/livewalls
+brew install livewalls
+```
+
+**Avantages de la méthode Homebrew :**
+- ✅ Installation automatique sans configuration manuelle
+- ✅ Aucun problème de quarantaine macOS  
+- ✅ Mises à jour faciles avec `brew upgrade`
+
+**📋 Note :** LiveWalls n'est pas dans le dépôt officiel Homebrew car il nécessite un certificat Apple Developer (99$/an) pour les apps signées. En tant que projet open source gratuit, nous utilisons un "tap" personnel qui permet la distribution sécurisée d'apps non signées.
+
+### ⚠️ Important : Application Non Signée
+
+**LiveWalls est un projet open source** et ne possède pas de certificat Apple Developer (99$/an).
+Pour ouvrir l'application pour la première fois :
 
 #### Méthode 1 : Commande Terminal (Recommandée)
 

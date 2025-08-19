@@ -59,9 +59,30 @@ Eine native macOS-Anwendung zur Verwendung von Videos als dynamische Hintergrund
 
 ### 📥 Release herunterladen (Empfohlen)
 
-Lade die neueste kompilierte Version von [GitHub Releases](https://github.com/fparrav/LiveWalls/releases/latest) herunter.
+1. Gehe zu [GitHub Releases](https://github.com/fparrav/LiveWalls/releases)
+2. Lade die neueste `.dmg`-Datei herunter
+3. Öffne das DMG und ziehe LiveWalls in den Programme-Ordner
 
-**⚠️ Wichtig:** Da die App nicht mit einem Apple Developer-Zertifikat signiert ist, musst du sie manuell zum Ausführen freigeben.
+### 🍺 Homebrew Installation (Empfohlen für fortgeschrittene Benutzer)
+
+**Kein Homebrew installiert?** [Hier installieren](https://brew.sh)
+
+```bash
+brew tap fparrav/livewalls
+brew install livewalls
+```
+
+**Vorteile der Homebrew-Methode:**
+- ✅ Automatische Installation ohne manuelle Konfiguration
+- ✅ Keine macOS-Quarantäne-Probleme  
+- ✅ Einfache Updates mit `brew upgrade`
+
+**📋 Hinweis:** LiveWalls ist nicht im offiziellen Homebrew-Repository, da es ein Apple Developer-Zertifikat (99$/Jahr) für signierte Apps benötigt. Als kostenloses Open-Source-Projekt verwenden wir einen persönlichen "Tap", der eine sichere Verteilung unsignierter Apps ermöglicht.
+
+### ⚠️ Wichtig: Nicht signierte Anwendung
+
+**LiveWalls ist ein Open-Source-Projekt** und besitzt kein Apple Developer-Zertifikat (99$/Jahr).
+Um die Anwendung zum ersten Mal zu öffnen:
 
 #### Methode 1: Terminal-Befehl (Empfohlen)
 

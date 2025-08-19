@@ -28,6 +28,7 @@ show_help() {
     echo "  2. 📝 Actualiza el version en Info.plist"
     echo "  3. 🏷️ Crea el tag de Git"
     echo "  4. 📤 Hace push del tag (que trigerea el GitHub Action)"
+    echo "  5. 🍺 GitHub Actions actualizará automáticamente Homebrew"
     echo ""
 }
 
@@ -101,6 +102,7 @@ update_xcode_project() {
 
     echo -e "${GREEN}✅ Proyecto de Xcode actualizado a $version (build: $build_number)${NC}"
 }
+
 
 # Verificar argumentos
 if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
@@ -214,14 +216,17 @@ fi)"
 echo -e "${BLUE}📤 Haciendo push del tag...${NC}"
 git push origin "$TAG"
 
+
 echo ""
 echo -e "${GREEN}🎉 ¡Release $TAG creado exitosamente!${NC}"
 echo ""
 echo -e "${BLUE}📋 Próximos pasos:${NC}"
 echo "  1. 🔄 GitHub Actions compilará automáticamente la app"
 echo "  2. 💿 Se creará el DMG y se subirá a GitHub Releases"
-echo "  3. 📬 Los usuarios podrán descargar desde:"
+echo "  3. 🍺 Se actualizará automáticamente la fórmula de Homebrew"
+echo "  4. 📬 Los usuarios podrán descargar desde:"
 echo "     https://github.com/$(git config --get remote.origin.url | sed 's/.*github.com[:/]\([^.]*\).*/\1/')/releases/tag/$TAG"
 echo ""
 echo -e "${YELLOW}⏳ El proceso puede tomar 5-10 minutos...${NC}"
 echo -e "${BLUE}🔗 Revisa el progreso en: https://github.com/$(git config --get remote.origin.url | sed 's/.*github.com[:/]\([^.]*\).*/\1/')/actions${NC}"
+

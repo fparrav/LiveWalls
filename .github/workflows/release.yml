@@ -183,8 +183,58 @@ jobs:
         draft: false
         prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
         
+    - name: 🍺 Update Homebrew Formula
+      run: |
+        echo "🍺 Updating Homebrew formula..."
+        
+        # Calculate SHA256 of the generated DMG
+        DMG_PATH="./build/$APP_NAME-${{ github.ref_name }}.dmg"
+        SHA256_SUM=$(shasum -a 256 "$DMG_PATH" | cut -d' ' -f1)
+        echo "📊 Calculated SHA256: $SHA256_SUM"
+        
+        # Update the Homebrew formula
+        FORMULA_PATH="homebrew/livewalls.rb"
+        VERSION="${{ github.ref_name }}"  # e.g., v1.0.0
+        VERSION_NUMBER="${VERSION#v}"     # Remove 'v' prefix -> 1.0.0
+        
+        # Update version
+        sed -i '' "s/version \"[^\"]*\"/version \"$VERSION_NUMBER\"/" "$FORMULA_PATH"
+        
+        # Update URL
+        sed -i '' "s|url \"[^\"]*\"|url \"https://github.com/${{ github.repository }}/releases/download/$VERSION/$APP_NAME-$VERSION.dmg\"|" "$FORMULA_PATH"
+        
+        # Update SHA256
+        sed -i '' "s/sha256 \"[^\"]*\"/sha256 \"$SHA256_SUM\"/" "$FORMULA_PATH"
+        
+        echo "✅ Homebrew formula updated successfully"
+        
+        # Show changes
+        echo "📋 Changes made to Homebrew formula:"
+        git diff "$FORMULA_PATH" || true
+
+    - name: 📤 Commit and Push Homebrew Changes
+      run: |
+        echo "📤 Committing Homebrew formula changes..."
+        
+        # Configure Git
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        # Add and commit changes
+        git add homebrew/livewalls.rb
+        
+        # Check if there are changes to commit
+        if git diff --staged --quiet; then
+          echo "⚠️ No changes to commit in Homebrew formula"
+        else
+          git commit -m "🍺 update homebrew formula to ${{ github.ref_name }}"
+          git push origin main
+          echo "✅ Homebrew formula changes pushed successfully"
+        fi
+
     - name: ✅ Success Notification
       run: |
         echo "🎉 Release ${{ github.ref_name }} created successfully!"
         echo "📦 DMG: $APP_NAME-${{ github.ref_name }}.dmg"
+        echo "🍺 Homebrew formula updated automatically"
         echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"

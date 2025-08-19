@@ -59,9 +59,30 @@
 
 ### 📥 リリースをダウンロード（推奨）
 
-[GitHub Releases](https://github.com/fparrav/LiveWalls/releases/latest)から最新のコンパイル済みバージョンをダウンロードします。
+1. [GitHub Releases](https://github.com/fparrav/LiveWalls/releases)にアクセス
+2. 最新の`.dmg`ファイルをダウンロード
+3. DMGを開いてLiveWallsをアプリケーションフォルダにドラッグ
 
-**⚠️ 重要:** アプリはApple Developer証明書で署名されていないため、手動で実行を許可する必要があります。
+### 🍺 Homebrewインストール（上級者向け）
+
+**Homebrewがインストールされていない場合は、** [ここからインストール](https://brew.sh)
+
+```bash
+brew tap fparrav/livewalls
+brew install livewalls
+```
+
+**Homebrew方式の利点:**
+- ✅ 手動設定不要の自動インストール
+- ✅ macOSのクアランティン問題なし  
+- ✅ `brew upgrade`で簡単更新
+
+**📋 注意:** LiveWallsは公式Homebrewリポジトリにありません。署名済みアプリにはApple Developer証明書（$99/年）が必要です。無料のオープンソースプロジェクトとして、未署名アプリの安全な配布を可能にする個人「tap」を使用しています。
+
+### ⚠️ 重要: 未署名アプリケーション
+
+**LiveWallsはオープンソースプロジェクト**であり、Apple Developer証明書（$99/年）を持っていません。
+初回起動時にアプリケーションを開くために:
 
 #### 方法1: ターミナルコマンド（推奨）
 

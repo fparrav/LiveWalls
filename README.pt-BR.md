@@ -59,9 +59,30 @@ Uma aplicação nativa do macOS para usar vídeos como papéis de parede dinâmi
 
 ### 📥 Baixar Release (Recomendado)
 
-Baixe a versão compilada mais recente das [GitHub Releases](https://github.com/fparrav/LiveWalls/releases/latest).
+1. Vá para [GitHub Releases](https://github.com/fparrav/LiveWalls/releases)
+2. Baixe o arquivo `.dmg` mais recente
+3. Abra o DMG e arraste LiveWalls para a pasta Aplicações
 
-**⚠️ Importante:** Como o app não está assinado com um certificado Apple Developer, você precisará permitir manualmente sua execução.
+### 🍺 Instalação Homebrew (Recomendado para usuários avançados)
+
+**Não tem Homebrew?** [Instale aqui](https://brew.sh)
+
+```bash
+brew tap fparrav/livewalls
+brew install livewalls
+```
+
+**Vantagens do método Homebrew:**
+- ✅ Instalação automática sem configuração manual
+- ✅ Sem problemas de quarentena do macOS  
+- ✅ Atualizações fáceis com `brew upgrade`
+
+**📋 Nota:** LiveWalls não está no repositório oficial do Homebrew porque requer certificado Apple Developer ($99/ano) para apps assinados. Como projeto open source gratuito, usamos um "tap" pessoal que permite distribuição segura de apps não assinados.
+
+### ⚠️ Importante: Aplicação Não Assinada
+
+**LiveWalls é um projeto open source** e não possui certificado Apple Developer ($99/ano).
+Para abrir a aplicação pela primeira vez:
 
 #### Método 1: Comando do Terminal (Recomendado)
 
