@@ -2,6 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Bundle Identification -->
+	<key>CFBundleIdentifier</key>
+	<string>com.livewalls.app</string>
+	<key>CFBundleName</key>
+	<string>LiveWalls</string>
+	<key>CFBundleDisplayName</key>
+	<string>LiveWalls</string>
+	<key>CFBundleExecutable</key>
+	<string>LiveWalls</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	
+	<!-- Version Information -->
+	<key>CFBundleShortVersionString</key>
+	<string>1.5.1</string>
+	<key>CFBundleVersion</key>
+	<string>202508191443</string>
+	
+	<!-- Localization -->
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleLocalizations</key>
@@ -17,13 +38,74 @@
 		<string>zh-CN</string>
 		<string>zh-TW</string>
 	</array>
-	<key>CFBundleShortVersionString</key>
-	<string>1.5.1</string>
-	<key>CFBundleVersion</key>
-	<string>202508191443</string>
+	
+	<!-- macOS Specific -->
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.graphics-design</string>
+	<key>LSRequiresIPhoneOS</key>
+	<false/>
+	
+	<!-- UI Configuration -->
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSMainStoryboardFile</key>
+	<string></string>
+	<key>LSUIElement</key>
+	<false/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	
+	<!-- Permissions and Usage -->
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>notification_usage_description</string>
+	
+	<!-- File Type Support -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>mp4</string>
+				<string>mov</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Video Files</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSTypeIsPackage</key>
+			<false/>
+		</dict>
+	</array>
+	
+	<!-- App Transport Security -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+	</dict>
+	
+	<!-- Copyright and Info -->
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2024 LiveWalls. All rights reserved.</string>
+	
+	<!-- Launch Configuration -->
+	<key>LSBackgroundOnly</key>
+	<false/>
+	<key>LSUIElement</key>
+	<false/>
+	
+	<!-- High Resolution Display Support -->
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	
+	<!-- Accessibility -->
+	<key>NSAccessibilityUsageDescription</key>
+	<string>LiveWalls needs accessibility permission to set desktop wallpapers and manage video playback on your desktop.</string>
 </dict>
 </plist>

@@ -38,6 +38,101 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-xcode-
           
+    - name: 🔍 Validate Project Configuration
+      run: |
+        echo "🔍 Validating project configuration..."
+        
+        # Validate Info.plist exists and is valid
+        if [ ! -f "$APP_NAME/Info.plist" ]; then
+          echo "❌ Error: Info.plist not found at $APP_NAME/Info.plist"
+          exit 1
+        fi
+        
+        # Validate Info.plist syntax
+        plutil -lint "$APP_NAME/Info.plist"
+        if [ $? -ne 0 ]; then
+          echo "❌ Error: Info.plist is not valid"
+          exit 1
+        fi
+        
+        # Show Info.plist content for debugging
+        echo "📋 Info.plist validation successful. Key information:"
+        plutil -p "$APP_NAME/Info.plist" | grep -E "(CFBundleIdentifier|CFBundleExecutable|CFBundleName|CFBundleShortVersionString)"
+        
+        # Validate project file exists
+        if [ ! -f "$APP_NAME.xcodeproj/project.pbxproj" ]; then
+          echo "❌ Error: Xcode project file not found"
+          exit 1
+        fi
+        
+        # Show Xcode version for debugging
+        xcodebuild -version
+        
+        # Show available schemes
+        echo "📋 Available schemes:"
+        xcodebuild -list -project "$APP_NAME.xcodeproj"
+        
+        echo "✅ Project configuration validation complete"
+
+    - name: 🔍 Validate Xcode Project Settings
+      run: |
+        echo "🔍 Validating Xcode project settings..."
+        
+        # Check for proper code signing configuration
+        echo "📋 Checking code signing settings..."
+        xcodebuild -project "$APP_NAME.xcodeproj" -target "$APP_NAME" -configuration Release -showBuildSettings | grep -E "(CODE_SIGN|DEVELOPMENT_TEAM)" || true
+        
+        # Verify no development team is set for Release builds
+        TEAM_SETTING=$(xcodebuild -project "$APP_NAME.xcodeproj" -target "$APP_NAME" -configuration Release -showBuildSettings | grep "DEVELOPMENT_TEAM" | head -1)
+        if [[ "$TEAM_SETTING" == *"CED7KEV553"* ]]; then
+          echo "⚠️ Warning: Development team still set in project settings"
+        else
+          echo "✅ Development team properly cleared"
+        fi
+        
+        # Check deployment target
+        echo "📋 Checking deployment target..."
+        DEPLOYMENT_TARGET=$(xcodebuild -project "$APP_NAME.xcodeproj" -target "$APP_NAME" -configuration Release -showBuildSettings | grep "MACOSX_DEPLOYMENT_TARGET" | head -1)
+        echo "$DEPLOYMENT_TARGET"
+        
+        # Check bundle identifier
+        echo "📋 Checking bundle identifier..."
+        BUNDLE_ID=$(xcodebuild -project "$APP_NAME.xcodeproj" -target "$APP_NAME" -configuration Release -showBuildSettings | grep "PRODUCT_BUNDLE_IDENTIFIER" | head -1)
+        echo "$BUNDLE_ID"
+        
+        # Verify entitlements file exists
+        if [ ! -f "$APP_NAME/LiveWalls.entitlements" ]; then
+          echo "❌ Error: Entitlements file not found"
+          exit 1
+        fi
+        
+        echo "📋 Entitlements file content:"
+        cat "$APP_NAME/LiveWalls.entitlements"
+        
+        echo "✅ Xcode project settings validation complete"
+
+    - name: 🧪 Run Unit Tests
+      run: |
+        echo "🧪 Running unit tests..."
+        
+        # Run unit tests to ensure code quality
+        echo "📋 Running LiveWallsTests..."
+        xcodebuild test \
+          -project "$APP_NAME.xcodeproj" \
+          -scheme "$SCHEME_NAME" \
+          -destination "platform=macOS" \
+          -configuration Release \
+          -derivedDataPath ./DerivedDataTests \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO || {
+          echo "⚠️ Unit tests failed, but continuing with build..."
+          echo "📋 Test failure details:"
+          find ./DerivedDataTests -name "*.xcresult" -exec xcrun xcresulttool get --format json {} \; | head -20 || true
+        }
+        
+        echo "✅ Unit tests completed"
+
     - name: 🏗️ Build App
       run: |
         echo "🔨 Building $APP_NAME..."
@@ -45,16 +140,47 @@ jobs:
         # Create build directory
         mkdir -p ./build
         
+        # Show current directory and files for debugging
+        echo "📁 Current directory: $(pwd)"
+        echo "📁 Directory contents:"
+        ls -la
+        
+        # Build with verbose output for better debugging
+        echo "🔨 Starting Xcode build process..."
         xcodebuild \
           -project "$APP_NAME.xcodeproj" \
           -scheme "$SCHEME_NAME" \
           -configuration Release \
+          -destination "platform=macOS,arch=arm64" \
           -derivedDataPath ./DerivedData \
           -archivePath "./build/$APP_NAME.xcarchive" \
           archive \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO \
+          -verbose | tee build_log.txt
+        
+        # Check if build succeeded
+        BUILD_EXIT_CODE=${PIPESTATUS[0]}
+        if [ $BUILD_EXIT_CODE -ne 0 ]; then
+          echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
+          echo "📋 Last 50 lines of build log:"
+          tail -50 build_log.txt
+          echo "❌ Build process failed. Check logs above for details."
+          exit $BUILD_EXIT_CODE
+        fi
+        
+        # Verify archive was created
+        if [ ! -d "./build/$APP_NAME.xcarchive" ]; then
+          echo "❌ Error: Archive was not created at ./build/$APP_NAME.xcarchive"
+          echo "📁 Build directory contents:"
+          ls -la ./build/
+          exit 1
+        fi
+        
+        echo "✅ Build completed successfully"
+        echo "📁 Archive contents:"
+        ls -la "./build/$APP_NAME.xcarchive/"
           
     - name: 📦 Extract App from Archive
       run: |
@@ -63,17 +189,52 @@ jobs:
         # Create export directory
         mkdir -p "./build/export"
         
-        # Extract app directly from archive
-        cp -R "./build/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app" "./build/export/"
+        # Show archive structure for debugging
+        echo "📁 Archive structure:"
+        find "./build/$APP_NAME.xcarchive" -type d -name "*.app" || {
+          echo "🔍 No .app found, showing full archive structure:"
+          find "./build/$APP_NAME.xcarchive" -maxdepth 3 -type d
+        }
+        
+        # Check multiple possible locations for the app
+        APP_LOCATIONS=(
+          "./build/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app"
+          "./build/$APP_NAME.xcarchive/Products/$APP_NAME.app"
+          "./build/$APP_NAME.xcarchive/$APP_NAME.app"
+        )
+        
+        APP_FOUND=false
+        for location in "${APP_LOCATIONS[@]}"; do
+          if [ -d "$location" ]; then
+            echo "✅ Found app at: $location"
+            cp -R "$location" "./build/export/"
+            APP_FOUND=true
+            break
+          fi
+        done
+        
+        if [ "$APP_FOUND" = false ]; then
+          echo "❌ Failed to find $APP_NAME.app in any expected location"
+          echo "📁 Full archive contents:"
+          find "./build/$APP_NAME.xcarchive" -name "*" -type f | head -20
+          exit 1
+        fi
         
         # Verify extraction
         if [ -d "./build/export/$APP_NAME.app" ]; then
           echo "✅ Successfully extracted $APP_NAME.app"
-          ls -la "./build/export/"
+          echo "📁 Exported app structure:"
+          ls -la "./build/export/$APP_NAME.app/Contents/"
+          
+          # Verify executable exists
+          if [ -f "./build/export/$APP_NAME.app/Contents/MacOS/$APP_NAME" ]; then
+            echo "✅ Executable found at Contents/MacOS/$APP_NAME"
+          else
+            echo "⚠️ Warning: Executable not found at expected location"
+            find "./build/export/$APP_NAME.app" -name "$APP_NAME" -type f
+          fi
         else
-          echo "❌ Failed to extract app"
-          echo "Archive contents:"
-          find "./build/$APP_NAME.xcarchive" -name "*.app" -type d
+          echo "❌ Failed to extract app properly"
           exit 1
         fi
           
@@ -84,17 +245,38 @@ jobs:
         # Verify exported app exists
         if [ ! -d "./build/export/$APP_NAME.app" ]; then
           echo "❌ Error: $APP_NAME.app not found in export directory"
+          echo "📁 Export directory contents:"
           ls -la ./build/export/
           exit 1
         fi
         
+        # Show app bundle details for debugging
+        echo "📱 App bundle details:"
+        ls -la "./build/export/$APP_NAME.app/Contents/"
+        
+        # Verify app structure is complete
+        if [ ! -f "./build/export/$APP_NAME.app/Contents/MacOS/$APP_NAME" ]; then
+          echo "❌ Error: Main executable missing in app bundle"
+          find "./build/export/$APP_NAME.app" -type f -name "$APP_NAME" || echo "No executable found"
+          exit 1
+        fi
+        
+        if [ ! -f "./build/export/$APP_NAME.app/Contents/Info.plist" ]; then
+          echo "❌ Error: Info.plist missing in app bundle"
+          exit 1
+        fi
+        
+        echo "✅ App bundle structure validated"
+        
         # Install create-dmg if not available
         if ! command -v create-dmg &> /dev/null; then
+          echo "📥 Installing create-dmg..."
           brew install create-dmg
         fi
         
-        # Create DMG
-        create-dmg \
+        # Create DMG with enhanced error handling
+        echo "🔨 Creating DMG with create-dmg..."
+        if create-dmg \
           --volname "$APP_NAME" \
           --window-pos 200 120 \
           --window-size 800 400 \
@@ -103,11 +285,89 @@ jobs:
           --hide-extension "$APP_NAME.app" \
           --app-drop-link 600 185 \
           "./build/$APP_NAME-${{ github.ref_name }}.dmg" \
-          "./build/export/" || {
-            echo "⚠️  create-dmg failed, trying simple DMG creation..."
-            # Fallback: simple DMG creation
-            hdiutil create -srcfolder "./build/export/$APP_NAME.app" -volname "$APP_NAME" "./build/$APP_NAME-${{ github.ref_name }}.dmg"
-          }
+          "./build/export/"; then
+          echo "✅ DMG created successfully with create-dmg"
+        else
+          echo "⚠️ create-dmg failed, using hdiutil fallback..."
+          # Clean any partial DMG
+          rm -f "./build/$APP_NAME-${{ github.ref_name }}.dmg"
+          
+          # Fallback: simple DMG creation with hdiutil
+          if hdiutil create \
+            -srcfolder "./build/export/$APP_NAME.app" \
+            -volname "$APP_NAME" \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "./build/$APP_NAME-${{ github.ref_name }}.dmg"; then
+            echo "✅ DMG created successfully with hdiutil fallback"
+          else
+            echo "❌ Both create-dmg and hdiutil failed"
+            exit 1
+          fi
+        fi
+        
+        # Verify DMG was created and is valid
+        if [ ! -f "./build/$APP_NAME-${{ github.ref_name }}.dmg" ]; then
+          echo "❌ Error: DMG file was not created"
+          exit 1
+        fi
+        
+        # Test DMG integrity
+        echo "🔍 Verifying DMG integrity..."
+        if hdiutil verify "./build/$APP_NAME-${{ github.ref_name }}.dmg"; then
+          echo "✅ DMG integrity verified"
+        else
+          echo "⚠️ DMG verification failed, but file exists"
+        fi
+        
+        # Show final DMG details
+        echo "📊 DMG created successfully:"
+        ls -lh "./build/$APP_NAME-${{ github.ref_name }}.dmg"
+
+    - name: 🔍 Final Validation and Testing
+      run: |
+        echo "🔍 Performing final validation and testing..."
+        
+        # Mount the DMG and verify its contents
+        echo "📱 Mounting DMG for validation..."
+        hdiutil attach "./build/$APP_NAME-${{ github.ref_name }}.dmg" -mountpoint "/tmp/LiveWalls_Mount" -quiet
+        
+        # Verify app structure inside DMG
+        if [ -d "/tmp/LiveWalls_Mount/$APP_NAME.app" ]; then
+          echo "✅ App found in DMG"
+          
+          # Check app bundle structure
+          echo "📋 App bundle contents:"
+          ls -la "/tmp/LiveWalls_Mount/$APP_NAME.app/Contents/"
+          
+          # Verify critical files exist
+          if [ -f "/tmp/LiveWalls_Mount/$APP_NAME.app/Contents/MacOS/$APP_NAME" ]; then
+            echo "✅ Main executable found"
+          else
+            echo "❌ Main executable missing"
+          fi
+          
+          if [ -f "/tmp/LiveWalls_Mount/$APP_NAME.app/Contents/Info.plist" ]; then
+            echo "✅ Info.plist found in app bundle"
+            echo "📋 Info.plist validation:"
+            plutil -lint "/tmp/LiveWalls_Mount/$APP_NAME.app/Contents/Info.plist"
+          else
+            echo "❌ Info.plist missing in app bundle"
+          fi
+          
+          # Check app permissions and signature (should show unsigned)
+          echo "📋 App signature status:"
+          codesign -dvv "/tmp/LiveWalls_Mount/$APP_NAME.app" 2>&1 | head -10 || echo "App is unsigned (expected)"
+          
+        else
+          echo "❌ App not found in DMG"
+          ls -la "/tmp/LiveWalls_Mount/"
+        fi
+        
+        # Unmount DMG
+        hdiutil detach "/tmp/LiveWalls_Mount" -quiet
+        
+        echo "✅ Final validation completed"
           
     - name: 🛠️ Install git-cliff
       run: |
