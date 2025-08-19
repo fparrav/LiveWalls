@@ -41,6 +41,10 @@ jobs:
     - name: 🏗️ Build App
       run: |
         echo "🔨 Building $APP_NAME..."
+        
+        # Create build directory
+        mkdir -p ./build
+        
         xcodebuild \
           -project "$APP_NAME.xcodeproj" \
           -scheme "$SCHEME_NAME" \
@@ -48,39 +52,41 @@ jobs:
           -derivedDataPath ./DerivedData \
           -archivePath "./build/$APP_NAME.xcarchive" \
           archive \
-          CODE_SIGN_STYLE=Automatic \
-          CODE_SIGN_IDENTITY="-"
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
           
-    - name: 📦 Export App
+    - name: 📦 Extract App from Archive
       run: |
-        echo "📦 Exporting $APP_NAME.app..."
+        echo "📦 Extracting $APP_NAME.app from archive..."
         
-        # Create ExportOptions.plist for unsigned export
-        cat > ExportOptions.plist << EOF
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>method</key>
-            <string>mac-application</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-            <key>stripSwiftSymbols</key>
-            <true/>
-        </dict>
-        </plist>
-        EOF
+        # Create export directory
+        mkdir -p "./build/export"
         
-        # Export the archive
-        xcodebuild \
-          -exportArchive \
-          -archivePath "./build/$APP_NAME.xcarchive" \
-          -exportPath "./build/export" \
-          -exportOptionsPlist ExportOptions.plist
+        # Extract app directly from archive
+        cp -R "./build/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app" "./build/export/"
+        
+        # Verify extraction
+        if [ -d "./build/export/$APP_NAME.app" ]; then
+          echo "✅ Successfully extracted $APP_NAME.app"
+          ls -la "./build/export/"
+        else
+          echo "❌ Failed to extract app"
+          echo "Archive contents:"
+          find "./build/$APP_NAME.xcarchive" -name "*.app" -type d
+          exit 1
+        fi
           
-    - name:  Create DMG
+    - name: 💿 Create DMG
       run: |
         echo "💿 Creating DMG..."
+        
+        # Verify exported app exists
+        if [ ! -d "./build/export/$APP_NAME.app" ]; then
+          echo "❌ Error: $APP_NAME.app not found in export directory"
+          ls -la ./build/export/
+          exit 1
+        fi
         
         # Install create-dmg if not available
         if ! command -v create-dmg &> /dev/null; then
@@ -90,16 +96,18 @@ jobs:
         # Create DMG
         create-dmg \
           --volname "$APP_NAME" \
-          --volicon "./icon_asset/icono-macOS-Default-1024x1024@2x.png" \
           --window-pos 200 120 \
           --window-size 800 400 \
           --icon-size 100 \
           --icon "$APP_NAME.app" 200 190 \
           --hide-extension "$APP_NAME.app" \
           --app-drop-link 600 185 \
-          --background "./scripts/dmg-background.png" \
           "./build/$APP_NAME-${{ github.ref_name }}.dmg" \
-          "./build/export/"
+          "./build/export/" || {
+            echo "⚠️  create-dmg failed, trying simple DMG creation..."
+            # Fallback: simple DMG creation
+            hdiutil create -srcfolder "./build/export/$APP_NAME.app" -volname "$APP_NAME" "./build/$APP_NAME-${{ github.ref_name }}.dmg"
+          }
           
     - name: 🛠️ Install git-cliff
       run: |
