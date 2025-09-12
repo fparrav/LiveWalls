@@ -1014,9 +1014,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private func changeToNextVideoWithTransition(to nextVideo: VideoFile) async {
         appLogger.info("🔄 Cambiando con transición a: \(nextVideo.name)")
         
-        // Get the current video URL
-        guard let currentVideo = currentVideo,
-              let currentURL = resolveBookmark(for: currentVideo) else {
+        // Ensure we have a current video selected
+        guard currentVideo != nil else {
             appLogger.error("❌ No se pudo obtener el URL del video actual")
             await setActiveVideo(nextVideo)
             return
