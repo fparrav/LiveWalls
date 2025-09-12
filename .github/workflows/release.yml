@@ -553,15 +553,23 @@ jobs:
         echo "✅ Appcast generated at ./public/sparkle/appcast.xml"
         echo "publish_pages=true" >> "$GITHUB_OUTPUT"
 
-    - name: 🌳 Publish Sparkle to gh-pages branch
-      if: steps.prepare_sparkle.outputs.publish_pages == 'true'
+    - name: 🌳 Publish site & Sparkle to gh-pages branch
+      if: steps.prepare_sparkle.outputs.publish_pages == 'true' || hashFiles('site/**') != ''
       run: |
         set -e
-        echo "🌳 Publishing Sparkle artifacts to gh-pages branch..."
+        echo "🌳 Publishing site and Sparkle artifacts to gh-pages branch..."
         
         # Stash artifacts before switching branches
         TMPDIR=$(mktemp -d)
-        cp -R ./public/sparkle "$TMPDIR/"
+        # Site (optional)
+        if [ -d ./site ]; then
+          mkdir -p "$TMPDIR/site"
+          cp -R ./site/. "$TMPDIR/site/"
+        fi
+        # Sparkle (optional depending on secret)
+        if [ -d ./public/sparkle ]; then
+          cp -R ./public/sparkle "$TMPDIR/"
+        fi
         
         git fetch --all --prune
         if git show-ref --verify --quiet refs/heads/gh-pages; then
@@ -572,16 +580,25 @@ jobs:
           git rm -rf . || true
         fi
         
-        mkdir -p sparkle
-        rsync -a --delete "$TMPDIR/sparkle/" sparkle/
+        # Publish site content to root (without deleting sparkle/)
+        if [ -d "$TMPDIR/site" ]; then
+          rsync -a "$TMPDIR/site/" ./
+        fi
+        # Publish Sparkle under /sparkle (no delete outside that folder)
+        if [ -d "$TMPDIR/sparkle" ]; then
+          mkdir -p sparkle
+          rsync -a --delete "$TMPDIR/sparkle/" sparkle/
+        fi
+        # Avoid Jekyll processing
+        touch .nojekyll
         
         git config user.email "action@github.com"
         git config user.name "GitHub Action"
-        git add sparkle
+        git add -A
         if git diff --staged --quiet; then
           echo "No changes to publish on gh-pages."
         else
-          COMMIT_MSG="📰 docs(sparkle): publicar appcast y artefactos para ${{ github.ref_name }}"
+          COMMIT_MSG="🌐 docs(site): publicar landing y sparkle para ${{ github.ref_name }}"
           git commit -m "$COMMIT_MSG"
           git push origin HEAD:gh-pages
           echo "✅ Published to gh-pages"

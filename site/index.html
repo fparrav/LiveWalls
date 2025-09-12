@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LiveWalls — Animated wallpapers for macOS</title>
+    <meta name="description" content="LiveWalls lets you set videos as animated wallpapers on macOS with multi‑monitor support and Sparkle updates." />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="container">
+      <div class="brand">
+        <img src="https://raw.githubusercontent.com/fparrav/LiveWalls/main/icon_asset/icon_256x256.png" alt="LiveWalls" class="logo" />
+        <h1>LiveWalls</h1>
+      </div>
+      <p class="tagline">Animated wallpapers for macOS — multi‑monitor, SwiftUI, open source.</p>
+      <div class="cta">
+        <a class="button primary" href="https://github.com/fparrav/LiveWalls/releases/latest">Download Latest</a>
+        <a class="button" href="https://github.com/fparrav/LiveWalls">View on GitHub</a>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2>Quick Install (Homebrew)</h2>
+        <pre><code>brew tap fparrav/livewalls
+brew install --cask livewalls</code></pre>
+        <p class="note">Note: first launch may require allowing the app in System Settings → Privacy &amp; Security.</p>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <h3>Features</h3>
+          <ul>
+            <li>Multi‑monitor wallpapers (one window per screen)</li>
+            <li>Video playlist with transitions</li>
+            <li>Per‑monitor management</li>
+            <li>Launch at login and auto‑resume</li>
+            <li>In‑app updates via Sparkle</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Updates</h3>
+          <p>LiveWalls checks for updates using Sparkle.</p>
+          <p>Appcast feed:</p>
+          <p><a href="./sparkle/appcast.xml">/sparkle/appcast.xml</a></p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="container footer">
+      <p>© 2024 LiveWalls — Open source on GitHub.</p>
+    </footer>
+  </body>
+</html>
+
