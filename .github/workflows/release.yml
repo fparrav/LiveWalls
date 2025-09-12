@@ -166,6 +166,7 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
           -verbose | tee build_log.txt
         
         # Check if build succeeded
@@ -513,20 +514,39 @@ jobs:
         echo "✅ Appcast generated at ./public/sparkle/appcast.xml"
         echo "publish_pages=true" >> "$GITHUB_OUTPUT"
 
-    - name: 🌐 Configure GitHub Pages
+    - name: 🌳 Publish Sparkle to gh-pages branch
       if: steps.prepare_sparkle.outputs.publish_pages == 'true'
-      uses: actions/configure-pages@v5
-
-    - name: 📤 Upload Pages Artifact
-      if: steps.prepare_sparkle.outputs.publish_pages == 'true'
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: ./public
-
-    - name: 🚢 Deploy to GitHub Pages
-      if: steps.prepare_sparkle.outputs.publish_pages == 'true'
-      id: deployment
-      uses: actions/deploy-pages@v4
+      run: |
+        set -e
+        echo "🌳 Publishing Sparkle artifacts to gh-pages branch..."
+        
+        # Stash artifacts before switching branches
+        TMPDIR=$(mktemp -d)
+        cp -R ./public/sparkle "$TMPDIR/"
+        
+        git fetch --all --prune
+        if git show-ref --verify --quiet refs/heads/gh-pages; then
+          git checkout gh-pages
+        else
+          git checkout --orphan gh-pages
+          # Remove all files in working tree for clean branch
+          git rm -rf . || true
+        fi
+        
+        mkdir -p sparkle
+        rsync -a --delete "$TMPDIR/sparkle/" sparkle/
+        
+        git config user.email "action@github.com"
+        git config user.name "GitHub Action"
+        git add sparkle
+        if git diff --staged --quiet; then
+          echo "No changes to publish on gh-pages."
+        else
+          COMMIT_MSG="📰 docs(sparkle): publicar appcast y artefactos para ${{ github.ref_name }}"
+          git commit -m "$COMMIT_MSG"
+          git push origin HEAD:gh-pages
+          echo "✅ Published to gh-pages"
+        fi
 
     - name: 🍺 Update Homebrew Formula
       run: |
