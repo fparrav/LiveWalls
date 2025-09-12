@@ -20,6 +20,9 @@ jobs:
       contents: write  # Necesario para crear releases
       pages: write      # Desplegar a GitHub Pages
       id-token: write   # Requerido por deploy-pages
+    env:
+      # Exponer el secreto a nivel de job para usarlo en condiciones y pasos
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
       
     steps:
     - name: 📥 Checkout Code
@@ -457,8 +460,7 @@ jobs:
         prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
         
     - name: 📦 Prepare Sparkle Artifacts (DMG + signature)
-      env:
-        SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      id: prepare_sparkle
       run: |
         set -e
         echo "📦 Preparing Sparkle artifacts..."
@@ -466,6 +468,7 @@ jobs:
         # Validate secret
         if [ -z "${SPARKLE_PRIVATE_KEY}" ]; then
           echo "⚠️ SPARKLE_PRIVATE_KEY secret is not set. Skipping appcast generation."
+          echo "publish_pages=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
         
@@ -508,19 +511,20 @@ jobs:
           ./public/sparkle
         
         echo "✅ Appcast generated at ./public/sparkle/appcast.xml"
+        echo "publish_pages=true" >> "$GITHUB_OUTPUT"
 
     - name: 🌐 Configure GitHub Pages
-      if: env.SPARKLE_PRIVATE_KEY != ''
+      if: steps.prepare_sparkle.outputs.publish_pages == 'true'
       uses: actions/configure-pages@v5
 
     - name: 📤 Upload Pages Artifact
-      if: env.SPARKLE_PRIVATE_KEY != ''
+      if: steps.prepare_sparkle.outputs.publish_pages == 'true'
       uses: actions/upload-pages-artifact@v3
       with:
         path: ./public
 
     - name: 🚢 Deploy to GitHub Pages
-      if: env.SPARKLE_PRIVATE_KEY != ''
+      if: steps.prepare_sparkle.outputs.publish_pages == 'true'
       id: deployment
       uses: actions/deploy-pages@v4
 
