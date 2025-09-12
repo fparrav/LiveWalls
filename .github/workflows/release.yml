@@ -143,6 +143,7 @@ jobs:
 
     - name: 🏗️ Build App
       run: |
+        set -o pipefail
         echo "🔨 Building $APP_NAME..."
         
         # Create build directory
@@ -159,7 +160,7 @@ jobs:
           -project "$APP_NAME.xcodeproj" \
           -scheme "$SCHEME_NAME" \
           -configuration Release \
-          -destination "platform=macOS,arch=arm64" \
+          -destination "generic/platform=macOS" \
           -derivedDataPath ./DerivedData \
           -archivePath "./build/$APP_NAME.xcarchive" \
           archive \
@@ -168,15 +169,41 @@ jobs:
           CODE_SIGNING_ALLOWED=NO \
           ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
           -verbose | tee build_log.txt
-        
+
         # Check if build succeeded
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
         if [ $BUILD_EXIT_CODE -ne 0 ]; then
           echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
-          echo "📋 Last 50 lines of build log:"
-          tail -50 build_log.txt
-          echo "❌ Build process failed. Check logs above for details."
-          exit $BUILD_EXIT_CODE
+          echo "📋 Last 300 lines of build log:"
+          tail -300 build_log.txt || true
+          echo "🛟 Fallback: building (no archive) to extract .app..."
+          xcodebuild \
+            -project "$APP_NAME.xcodeproj" \
+            -scheme "$SCHEME_NAME" \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -derivedDataPath ./DerivedData \
+            build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            -quiet | tee build_fallback_log.txt || true
+
+          # Try to copy built app from DerivedData products to export dir
+          DERIVED_APP=$(find ./DerivedData/Build/Products -type d -name "$APP_NAME.app" | head -n 1 || true)
+          if [ -d "$DERIVED_APP" ]; then
+            mkdir -p ./build/export
+            rm -rf ./build/export/$APP_NAME.app || true
+            cp -R "$DERIVED_APP" ./build/export/
+            echo "✅ Fallback copied app from $DERIVED_APP to ./build/export/$APP_NAME.app"
+          else
+            echo "❌ Fallback build did not produce $APP_NAME.app"
+            echo "📋 Last 200 lines of fallback log:"
+            tail -200 build_fallback_log.txt || true
+            echo "❌ Build process failed. Check logs above for details."
+            exit $BUILD_EXIT_CODE
+          fi
         fi
         
         # Verify archive was created
@@ -197,6 +224,13 @@ jobs:
         
         # Create export directory
         mkdir -p "./build/export"
+        
+        # If app already exists from fallback build, skip archive extraction
+        if [ -d "./build/export/$APP_NAME.app" ]; then
+          echo "ℹ️ App already present at ./build/export/$APP_NAME.app (from fallback). Skipping extraction."
+          ls -la "./build/export/$APP_NAME.app/Contents/" || true
+          exit 0
+        fi
         
         # Show archive structure for debugging
         echo "📁 Archive structure:"
@@ -226,7 +260,12 @@ jobs:
           echo "❌ Failed to find $APP_NAME.app in any expected location"
           echo "📁 Full archive contents:"
           find "./build/$APP_NAME.xcarchive" -name "*" -type f | head -20
-          exit 1
+          # If still not found, but export exists from other steps, continue
+          if [ -d "./build/export/$APP_NAME.app" ]; then
+            echo "⚠️ Archive not found, using pre-existing exported app"
+          else
+            exit 1
+          fi
         fi
         
         # Verify extraction
