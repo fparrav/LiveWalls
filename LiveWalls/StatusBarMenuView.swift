@@ -69,6 +69,21 @@ struct StatusBarMenuView: View {
             ))
             
             Divider()
+
+            // Actualizaciones
+            Button(NSLocalizedString("check_for_updates", comment: "Check for updates")) {
+                InAppUpdater.shared.checkForUpdates()
+            }
+            .keyboardShortcut("u", modifiers: .command)
+
+            Button(NSLocalizedString("about", comment: "About")) {
+                NSApp.activate(ignoringOtherApps: true)
+                openWindow(id: "about")
+            }
+
+            Divider()
+
+            Divider()
             
             // Salir
             Button(NSLocalizedString("quit_app", comment: "Quit app")) {

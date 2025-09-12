@@ -67,6 +67,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let wallpaperOperationActor = WallpaperOperationActor()
     private var isChangingVideo = false
     private var isCleaningUp = false
+    private var autoStartScheduled = false
+    private var autoStartRetries = 0
     
     
     // Actor to serialize wallpaper operations
@@ -92,13 +94,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         setupWorkspaceNotifications()
         setupTerminationHandling()
         setupFullscreenDetection()
+        setupAppActivationNotifications()
         
-        // Auto-start solo si está configurado
-        if !videoFiles.isEmpty && currentVideo != nil && UserDefaults.standard.bool(forKey: "AutoStartWallpaper") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                self.startWallpaperSafe()
-            }
-        }
+        // Intentar auto‑inicio cuando el estado esté listo (sin depender de delays fijos)
+        attemptAutoStart()
         
         appLogger.info("\(NSLocalizedString("wallpaper_manager_initialized", comment: "WallpaperManager initialized"), privacy: .public)")
     }
@@ -109,6 +108,50 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             timerManager.stopTimer()
         }
         cleanupAllResources()
+    }
+
+    // MARK: - Startup Helpers
+    
+    /// Intenta iniciar la reproducción automáticamente cuando la configuración y el sistema estén listos
+    private func attemptAutoStart() {
+        guard UserDefaults.standard.bool(forKey: "AutoStartWallpaper") else { return }
+        guard !autoStartScheduled else { return }
+        
+        // Asegurar que los datos esenciales hayan cargado
+        guard currentVideo != nil, !videoFiles.isEmpty else {
+            // Reintento ligero mientras termina la carga inicial
+            if autoStartRetries < 25 { // ~5s con pasos de 0.2s
+                autoStartRetries += 1
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                    self?.attemptAutoStart()
+                }
+            } else {
+                appLogger.warning("⚠️ AutoStart: datos no listos tras múltiples reintentos")
+            }
+            return
+        }
+        
+        autoStartScheduled = true
+        
+        // Esperar a que el sistema esté listo (pantallas estables)
+        Task { @MainActor in
+            _ = await self.waitForSystemReadiness(timeout: 5.0)
+            self.startWallpaperSafe()
+        }
+    }
+    
+    /// Espera condicionalmente a que el sistema esté listo tras el login (pantallas disponibles/estables)
+    private func waitForSystemReadiness(timeout: TimeInterval) async -> Bool {
+        let start = Date()
+        while Date().timeIntervalSince(start) < timeout {
+            let screens = NSScreen.screens
+            let hasScreens = !screens.isEmpty
+            if hasScreens {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        return false
     }
     
     // MARK: - Video Management
@@ -677,10 +720,18 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
                     self.isPlayingWallpaper = true
                     self.startAutoChangeTimerIfNeeded()
-                    
+
                     // Generar frame estático inicial para Mission Control/Exposé
                     Task {
                         await self.generateInitialStaticFrame()
+                    }
+
+                    // Verificación diferida para asegurar reproducción/aplicación
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        self.ensurePlaying(reason: "post-start check 1s")
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        self.ensurePlaying(reason: "post-start check 3s")
                     }
                 }
             }
@@ -1109,11 +1160,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             try? JSONDecoder().decode(VideoFile.self, from: data)
         }
         
-        DispatchQueue.main.async {
-            self.videoFiles = videos
-            self.appLogger.info("📂 Cargados \(videos.count) videos guardados")
-            self.syncActiveVideoState()
-        }
+        // Ya estamos en @MainActor, asignar sincrónicamente para evitar carreras
+        self.videoFiles = videos
+        self.appLogger.info("📂 Cargados \(videos.count) videos guardados")
+        self.syncActiveVideoState()
     }
     
     private func saveCurrentVideo() {
@@ -1127,10 +1177,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         guard let data = userDefaults.data(forKey: currentVideoKey),
               let video = try? JSONDecoder().decode(VideoFile.self, from: data) else { return }
         
-        DispatchQueue.main.async {
-            self.currentVideo = video
-            self.syncActiveVideoState()
-        }
+        // Ya estamos en @MainActor, asignar sincrónicamente para evitar carreras
+        self.currentVideo = video
+        self.syncActiveVideoState()
     }
     
     /// Sincroniza el estado isActive de todos los videos con el currentVideo
@@ -1368,6 +1417,19 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             object: nil
         )
     }
+
+    /// Observa la activación de la app para asegurar reproducción tras el login
+    private func setupAppActivationNotifications() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            self.appLogger.info("🟢 App didBecomeActive - verificando reproducción")
+            self.ensurePlaying(reason: "didBecomeActive")
+        }
+    }
     
     /// Configura la detección de aplicaciones fullscreen
     private func setupFullscreenDetection() {
@@ -1554,6 +1616,58 @@ extension WallpaperManager {
         }
         
         appLogger.info("📊 Estado actual: Timer saludable=\(isHealthy), Fullscreen=\(fullscreenState.isFullscreen)")
+    }
+
+    /// Verifica y re‑inicia reproducción si no se aplicó correctamente
+    func ensurePlaying(reason: String) {
+        appLogger.info("🩺 ensurePlaying() invocado: \(reason)")
+
+        // Necesitamos datos mínimos
+        guard let currentVideo = currentVideo else {
+            appLogger.debug("ℹ️ No currentVideo disponible")
+            return
+        }
+
+        // Si no se reporta reproducción pero el auto‑inicio está activo, intentar iniciar
+        let shouldAutoStart = UserDefaults.standard.bool(forKey: "AutoStartWallpaper")
+        if !isPlayingWallpaper && shouldAutoStart {
+            appLogger.info("▶️ ensurePlaying: no isPlaying, auto‑inicio activo → startWallpaperSafe()")
+            startWallpaperSafe()
+            return
+        }
+
+        // Si se supone que está reproduciendo, validar que existan ventanas
+        if isPlayingWallpaper {
+            if desktopVideoInstances.isEmpty {
+                appLogger.warning("⚠️ ensurePlaying: 0 ventanas. Reintentando creación…")
+                startWallpaperSafe()
+                return
+            }
+
+            // Si alguna ventana no está reproduciendo, forzar play
+            var restartedAny = false
+            for (window, _) in desktopVideoInstances {
+                let rate = window.getPlaybackRate() ?? 0.0
+                if rate == 0.0 {
+                    appLogger.warning("⚠️ Ventana con rate=0. Forzando play…")
+                    window.forcePlay()
+                    restartedAny = true
+                }
+            }
+
+            if restartedAny {
+                appLogger.info("✅ ensurePlaying: reproducción forzada en ventanas con rate=0")
+            } else {
+                appLogger.debug("ℹ️ ensurePlaying: todas las ventanas en reproducción")
+            }
+            
+            // Validar que el bookmark aún sea accesible si hubo fallas
+            if restartedAny {
+                _ = resolveBookmark(for: currentVideo)
+            }
+        } else {
+            appLogger.debug("ℹ️ ensurePlaying: isPlayingWallpaper=false y auto‑inicio desactivado")
+        }
     }
     
     /// Registra el estado completo del sistema para debugging

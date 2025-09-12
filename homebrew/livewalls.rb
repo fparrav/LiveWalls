@@ -1,3 +1,4 @@
+# Homebrew formula for LiveWalls
 class Livewalls < Formula
   desc "LiveWalls: Use videos as dynamic desktop wallpapers on macOS"
   homepage "https://github.com/fparrav/LiveWalls"

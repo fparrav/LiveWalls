@@ -177,3 +177,10 @@
 "update_available_message" = "LiveWalls %@ está disponible.\nActual: %@\n\n%@";
 "view_on_github" = "Ver en GitHub";
 "dont_remind_version" = "No recordar esta versión";
+"check_for_updates" = "Buscar actualizaciones…";
+"no_updates_title" = "Estás al día";
+"no_updates_message" = "LiveWalls %@ ya es la versión más reciente.";
+"ok_button" = "Aceptar";
+"about" = "Acerca de LiveWalls";
+"version_format" = "Versión %@ (%@)";
+"open_website" = "Abrir sitio web";

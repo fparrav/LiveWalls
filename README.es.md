@@ -76,6 +76,53 @@ brew install livewalls
 
 **📋 Nota:** LiveWalls no está en el repositorio oficial de Homebrew porque requiere certificado Apple Developer ($99/año) para apps firmadas. Como proyecto open source gratuito, usamos un "tap" personal que permite distribución segura de apps no firmadas.
 
+## 🔄 Actualizaciones automáticas (Sparkle)
+
+LiveWalls integra un actualizador con Sparkle para que el usuario decida instalar, cancelar u omitir una versión. Para que funcione en CI y se publique automáticamente:
+
+1) Habilita GitHub Pages del repo (Source: GitHub Actions)
+2) Agrega el secreto `SPARKLE_PRIVATE_KEY` (contenido de tu clave EdDSA privada de Sparkle)
+3) Asegúrate de que `SUFeedURL` en `LiveWalls/Info.plist` apunte a `https://<owner>.github.io/<repo>/sparkle/appcast.xml` (por defecto apunta a tu repo).
+4) Genera un tag con `./scripts/create-release.sh 1.5.2` (o sin arg para patch auto)
+
+El workflow de GitHub Actions:
+- Compila y genera el DMG
+- Firma el update (Sparkle) y genera `appcast.xml`
+- Publica DMG y `appcast.xml` en GitHub Pages (`/sparkle/`)
+- Actualiza el Release y Homebrew
+
+### Integración en Xcode (Sparkle 2)
+
+- Añade Sparkle con Swift Package Manager en Xcode:
+  - File → Add Packages… → `https://github.com/sparkle-project/Sparkle`
+  - Producto a añadir: `Sparkle` (para el target `LiveWalls`). Xcode añadirá los XPC de Sparkle automáticamente.
+- Claves en `LiveWalls/Info.plist` (ya presentes):
+  - `SUFeedURL` → `https://<owner>.github.io/<repo>/sparkle/appcast.xml`
+  - `SUPublicEDKey` → tu clave pública EdDSA (reemplaza `REPLACE_WITH_EDDSA_PUBLIC_KEY`).
+  - `SUEnableAutomaticChecks` = `true` (busca en segundo plano)
+  - `SUAllowsAutomaticUpdates` = `false` (el usuario decide instalar)
+- Código: ya existe `InAppUpdater` que usa `SPUStandardUpdaterController` si Sparkle está disponible (`canImport(Sparkle)`) y expone:
+  - Check manual: `InAppUpdater.shared.checkForUpdates()` (botón en Ajustes, Acerca de y menú).
+  - Check en arranque: `InAppUpdater.shared.checkOnLaunchAndNotify()` (en `AppDelegate`).
+
+### Generar claves Sparkle (EdDSA)
+
+1) Descarga Sparkle local o usa herramientas del release de Sparkle:
+   - `generate_keys` (CLI de Sparkle) produce `ed25519_private.pem` y `ed25519_public.pem`.
+2) Copia el contenido de `ed25519_public.pem` en `SUPublicEDKey` (Info.plist).
+3) Añade el contenido de `ed25519_private.pem` a un secreto de GitHub `SPARKLE_PRIVATE_KEY`.
+
+Al publicar un tag con `./scripts/create-release.sh`, el workflow:
+- Firmará el DMG con tu clave privada (CLI `sign_update`).
+- Generará `appcast.xml` (CLI `generate_appcast`).
+- Subirá `/public/sparkle/` a GitHub Pages. La app leerá ese feed en `SUFeedURL`.
+
+### Seguridad de claves y artefactos
+
+- No commitees tu clave privada Sparkle. El repo ignora: `private_eddsa.pem`, `ed25519_*.pem`, `public/` y `*.tar.xz`.
+- Sube la privada como secreto `SPARKLE_PRIVATE_KEY` en GitHub Actions.
+- El `appcast.xml` y DMGs se publican vía GitHub Actions (no van al repo).
+
 ### ⚠️ Importante: Aplicación sin firma digital
 
 **LiveWalls es un proyecto open source** y no cuenta con certificado de desarrollador de Apple ($99/año).

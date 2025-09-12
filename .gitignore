@@ -178,6 +178,13 @@ sample_videos/
 *.tar.gz
 *.zip
 *.rar
+*.tar.xz
+
+# Sparkle (updater) artifacts and secrets
+private_eddsa.pem
+ed25519_private.pem
+ed25519_public.pem
+public/
 
 # Environment files
 .env
@@ -200,3 +207,10 @@ CLAUDE.md
 # Gemini Code documentation
 GEMINI.md
 QWEN.md
+
+
+memory-bank/
+
+AGENTS.md
+
+.roo/

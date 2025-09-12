@@ -31,14 +31,30 @@ struct LiveWallsApp: App {
         .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
+            // Replace default About panel to show our SwiftUI About window
+            CommandGroup(replacing: .appInfo) {
+                Button(NSLocalizedString("about", comment: "About")) {
+                    NSApp.orderFrontStandardAboutPanel(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                Divider()
+                Button(NSLocalizedString("check_for_updates", comment: "Check for updates")) {
+                    InAppUpdater.shared.checkForUpdates()
+                }
+            }
         }
-        
+
         MenuBarExtra("Live Walls", image: "statusbar-icon") {
             StatusBarMenuView()
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
         }
         .menuBarExtraStyle(.menu)
+
+        // About window
+        WindowGroup(id: "about") {
+            AboutView()
+        }
     }
     
     init() {

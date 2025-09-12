@@ -421,6 +421,11 @@ private var videoURL: URL
     public func getTotalDuration() -> CMTime? {
         return player?.currentItem?.duration
     }
+
+    /// Forces playback on the underlying player if available
+    public func forcePlay() {
+        player?.play()
+    }
     
     private func showErrorInWindow(_ message: String) {
         guard let contentView = self.contentView else { return }

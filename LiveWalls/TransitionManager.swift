@@ -9,6 +9,7 @@ class TransitionManager {
     // MARK: - Properties
     
     private var currentTransition: Transition? = nil
+    private var animationTask: Task<Void, Never>? = nil
     private let transitionDuration: TimeInterval = 2.0 // Default 2 seconds
     
     // MARK: - Types
@@ -46,17 +47,13 @@ class TransitionManager {
     ///   - fromWindow: Current video window (will fade out)
     ///   - toWindow: Next video window (will fade in)
     func startCrossfadeTransition(fromWindow: DesktopVideoWindowMejorada?, toWindow: DesktopVideoWindowMejorada?) {
-        let transition = Transition(
+        currentTransition = Transition(
             type: .crossfade,
             duration: transitionDuration,
             fromWindow: fromWindow,
             toWindow: toWindow
         )
-        
-        currentTransition = transition
-        
-        // Start the transition animation
-        animateTransition()
+        startAnimationTask()
     }
     
     /// Stops any ongoing transition
@@ -66,37 +63,34 @@ class TransitionManager {
     
     // MARK: - Private Methods
     
-    /// Animates the current transition
-    private func animateTransition() {
-        guard let transition = currentTransition else { return }
+    /// Animates the current transition using an async Task on the main actor
+    private func startAnimationTask() {
+        guard currentTransition != nil else { return }
+        // Cancel any running task
+        animationTask?.cancel()
         
-        // Create a timer to update the transition progress
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] timer in
-            guard let self = self, let currentTransition = self.currentTransition else {
-                timer.invalidate()
-                return
-            }
-            
-            let elapsed = Date().timeIntervalSince(currentTransition.startTime)
-            let progress = min(elapsed / currentTransition.duration, 1.0)
-            
-            // Update opacity of windows based on progress
-            switch currentTransition.type {
-            case .crossfade:
-                self.updateCrossfadeOpacity(progress: progress, transition: currentTransition)
-            case .fadeOutFadeIn:
-                self.updateFadeOutFadeInOpacity(progress: progress, transition: currentTransition)
-            }
-            
-            // Stop timer when transition is complete
-            if progress >= 1.0 {
-                timer.invalidate()
-                self.completeTransition(transition: currentTransition)
+        animationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Drive animation at ~60 FPS
+            let frameInterval: UInt64 = 16_666_667 // nanoseconds (~16.67ms)
+            while let t = self.currentTransition {
+                let elapsed = Date().timeIntervalSince(t.startTime)
+                let progress = min(elapsed / t.duration, 1.0)
+                
+                switch t.type {
+                case .crossfade:
+                    self.updateCrossfadeOpacity(progress: progress, transition: t)
+                case .fadeOutFadeIn:
+                    self.updateFadeOutFadeInOpacity(progress: progress, transition: t)
+                }
+                
+                if progress >= 1.0 {
+                    self.completeTransition(transition: t)
+                    break
+                }
+                try? await Task.sleep(nanoseconds: frameInterval)
             }
         }
-        
-        // Keep reference to timer to prevent it from being deallocated
-        // Note: In a real implementation, we'd want to store this timer reference properly
     }
     
     /// Updates opacity for crossfade transition

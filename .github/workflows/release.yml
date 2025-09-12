@@ -12,9 +12,14 @@ env:
 jobs:
   build-and-release:
     runs-on: macos-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     
     permissions:
       contents: write  # Necesario para crear releases
+      pages: write      # Desplegar a GitHub Pages
+      id-token: write   # Requerido por deploy-pages
       
     steps:
     - name: 📥 Checkout Code
@@ -451,6 +456,74 @@ jobs:
         draft: false
         prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
         
+    - name: 📦 Prepare Sparkle Artifacts (DMG + signature)
+      env:
+        SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      run: |
+        set -e
+        echo "📦 Preparing Sparkle artifacts..."
+        
+        # Validate secret
+        if [ -z "${SPARKLE_PRIVATE_KEY}" ]; then
+          echo "⚠️ SPARKLE_PRIVATE_KEY secret is not set. Skipping appcast generation."
+          exit 0
+        fi
+        
+        DMG_PATH="./build/$APP_NAME-${{ github.ref_name }}.dmg"
+        if [ ! -f "$DMG_PATH" ]; then
+          echo "❌ DMG not found at $DMG_PATH"
+          exit 1
+        fi
+        
+        # Install Sparkle CLI tools (generate_appcast, sign_update)
+        SPARKLE_VERSION="2.6.0"
+        echo "📥 Downloading Sparkle CLI $SPARKLE_VERSION..."
+        curl -L -o sparkle.tar.xz "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+        tar -xf sparkle.tar.xz
+        echo "✅ Extracted Sparkle to $(pwd)/Sparkle-${SPARKLE_VERSION}"
+        export PATH="$(pwd)/Sparkle-${SPARKLE_VERSION}/bin:$PATH"
+        which generate_appcast
+        which sign_update
+        
+        mkdir -p ./public/sparkle
+        cp "$DMG_PATH" ./public/sparkle/
+        
+        # Write private key to file with restricted permissions
+        echo "$SPARKLE_PRIVATE_KEY" > ./private_eddsa.pem
+        chmod 600 ./private_eddsa.pem
+        
+        echo "🖊️ Signing DMG for Sparkle..."
+        sign_update -s ./private_eddsa.pem ./public/sparkle/"$APP_NAME-${{ github.ref_name }}.dmg"
+        
+        echo "📰 Generating appcast.xml..."
+        OWNER="${{ github.repository_owner }}"
+        REPO_NAME="${{ github.event.repository.name }}"
+        BASE_URL="https://${OWNER}.github.io/${REPO_NAME}/sparkle/"
+        
+        generate_appcast \
+          --download-url-prefix "$BASE_URL" \
+          --link "$BASE_URL" \
+          --title "$APP_NAME Updates" \
+          --output-dir ./public/sparkle \
+          ./public/sparkle
+        
+        echo "✅ Appcast generated at ./public/sparkle/appcast.xml"
+
+    - name: 🌐 Configure GitHub Pages
+      if: env.SPARKLE_PRIVATE_KEY != ''
+      uses: actions/configure-pages@v5
+
+    - name: 📤 Upload Pages Artifact
+      if: env.SPARKLE_PRIVATE_KEY != ''
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./public
+
+    - name: 🚢 Deploy to GitHub Pages
+      if: env.SPARKLE_PRIVATE_KEY != ''
+      id: deployment
+      uses: actions/deploy-pages@v4
+
     - name: 🍺 Update Homebrew Formula
       run: |
         echo "🍺 Updating Homebrew formula..."

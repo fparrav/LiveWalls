@@ -16,7 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.info("🚀 Starting application")
-        
+
         // Configure window close handling
         setupWindowCloseHandling()
         
@@ -29,6 +29,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Activation policy and windows are now handled completely in LiveWallsApp.swift
         logger.info("✅ AppDelegate configured - windows managed by SwiftUI")
+
+        // Check for app updates in background and notify user (install / cancel / skip)
+        InAppUpdater.shared.checkOnLaunchAndNotify()
     }
     
     /// Configura el manejo de cierre de ventanas
