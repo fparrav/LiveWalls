@@ -412,19 +412,60 @@ jobs:
           cp "$DMG_PATH" ./public/sparkle/
 
           echo "🖊️ Signing DMG for Sparkle..."
-          printf '%s' "$SPARKLE_PRIVATE_KEY" | sign_update --ed-key-file - "./public/sparkle/$APP_NAME-${GITHUB_REF_NAME}.dmg"
+          SIGN_OUTPUT=$(printf '%s' "$SPARKLE_PRIVATE_KEY" | sign_update --ed-key-file - "./public/sparkle/$APP_NAME-${GITHUB_REF_NAME}.dmg")
 
           echo "📰 Generating appcast.xml..."
           OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
           BASE_URL="https://${OWNER}.github.io/${REPO_NAME}/sparkle/"
+          APP_PATH="./build/export/$APP_NAME.app/Contents/Info.plist"
+          SHORT_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH")
+          BUILD_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH")
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP_PATH" 2>/dev/null || echo "")
+          SIGNATURE=$(echo "$SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          ARCHIVE_LENGTH=$(echo "$SIGN_OUTPUT" | sed -n 's/.*length="\([0-9]*\)".*/\1/p')
+          PUBLISH_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S %z")
 
-          printf '%s' "$SPARKLE_PRIVATE_KEY" | generate_appcast \
-            --ed-key-file - \
-            --download-url-prefix "$BASE_URL" \
-            --link "$BASE_URL" \
-            -o ./public/sparkle/appcast.xml \
-            ./public/sparkle
+          if [ -z "$SIGNATURE" ] || [ -z "$ARCHIVE_LENGTH" ]; then
+            echo "❌ Unable to parse signature or length from sign_update output"
+            echo "$SIGN_OUTPUT"
+            exit 1
+          fi
+
+          cat <<EOF > ./public/sparkle/appcast.xml
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>$APP_NAME Updates</title>
+    <link>${BASE_URL}</link>
+    <description>Latest updates for $APP_NAME</description>
+    <language>en</language>
+    <lastBuildDate>$PUBLISH_DATE</lastBuildDate>
+    <item>
+      <title>$APP_NAME $GITHUB_REF_NAME</title>
+      <link>${BASE_URL}$APP_NAME-${GITHUB_REF_NAME}.dmg</link>
+      <pubDate>$PUBLISH_DATE</pubDate>
+      <enclosure url="${BASE_URL}$APP_NAME-${GITHUB_REF_NAME}.dmg"
+                 sparkle:version="$BUILD_VERSION"
+                 sparkle:shortVersionString="$SHORT_VERSION"
+                 sparkle:edSignature="$SIGNATURE"
+                 length="$ARCHIVE_LENGTH"
+                 type="application/octet-stream"/>
+EOF
+
+          if [ -n "$MIN_OS" ]; then
+            cat <<EOF >> ./public/sparkle/appcast.xml
+      <sparkle:minimumSystemVersion>$MIN_OS</sparkle:minimumSystemVersion>
+EOF
+          fi
+
+          cat <<'EOF' >> ./public/sparkle/appcast.xml
+    </item>
+  </channel>
+</rss>
+EOF
 
           echo "✅ Appcast generated at ./public/sparkle/appcast.xml"
           echo "publish_pages=true" >> "$GITHUB_OUTPUT"
