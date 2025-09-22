@@ -45,8 +45,8 @@ class WallpaperTimerManager: ObservableObject {
     }
     
     deinit {
-        logger.info("⏰ Deinitializing WallpaperTimerManager")
-        Task { @MainActor in
+        MainActor.assumeIsolated { [self] in
+            logger.info("⏰ Deinitializing WallpaperTimerManager")
             stopTimer()
         }
     }
@@ -141,10 +141,12 @@ class WallpaperTimerManager: ObservableObject {
         // If remaining time is very small, fire immediately
         if pausedRemainingTime <= 1.0 {
             logger.info("⏰ Remaining time very small, firing immediately")
-            Task {
+            Task { [weak self] in
                 await callback()
-                // Restart with full interval
-                startTimer(interval: currentInterval, callback: callback)
+                guard let self = self else { return }
+                await MainActor.run {
+                    self.startTimer(interval: self.currentInterval, callback: callback)
+                }
             }
             return
         }

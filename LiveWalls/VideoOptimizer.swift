@@ -3,6 +3,8 @@ import AVFoundation
 import CoreGraphics
 import CoreImage
 
+extension AVAssetExportSession: @unchecked @retroactive Sendable {}
+
 @MainActor
 class VideoOptimizer: ObservableObject {
     @Published var processingProgress: [UUID: Double] = [:]

@@ -103,11 +103,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     deinit {
-        appLogger.info("\(NSLocalizedString("deinitializing_wallpaper_manager", comment: "Deinitializing WallpaperManager"), privacy: .public)")
-        Task { @MainActor in
+        MainActor.assumeIsolated { [self] in
+            appLogger.info("\(NSLocalizedString("deinitializing_wallpaper_manager", comment: "Deinitializing WallpaperManager"), privacy: .public)")
             timerManager.stopTimer()
+            cleanupAllResources()
         }
-        cleanupAllResources()
     }
 
     // MARK: - Startup Helpers
@@ -867,8 +867,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             window.close { [weak self] in
                 // Liberar acceso security-scoped después de que la ventana esté completamente cerrada
                 let delay = self?.resourceReleaseDelay ?? 0.1
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    self?.safeStopSecurityScopedAccess(for: accessibleURL)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    if let self {
+                        Task { @MainActor in
+                            self.safeStopSecurityScopedAccess(for: accessibleURL)
+                        }
+                    }
                     group.leave()
                 }
             }
@@ -883,15 +887,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - Security-Scoped Resource Management
     
     /// Detiene el acceso security-scoped de forma segura
+    @MainActor
     private func safeStopSecurityScopedAccess(for url: URL) {
         let normalizedPath = url.path
-        
-        Task { @MainActor in
-            if self.activeSecurityScopedURLs.contains(normalizedPath) {
-                self.activeSecurityScopedURLs.remove(normalizedPath)
-                url.stopAccessingSecurityScopedResource()
-                self.appLogger.debug("🔓 Liberado acceso security-scoped: \(normalizedPath)")
-            }
+        if activeSecurityScopedURLs.contains(normalizedPath) {
+            activeSecurityScopedURLs.remove(normalizedPath)
+            url.stopAccessingSecurityScopedResource()
+            appLogger.debug("🔓 Liberado acceso security-scoped: \(normalizedPath)")
         }
     }
     
@@ -1070,7 +1072,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // Clean up old window after transition
         for (window, url) in oldWindows {
             window.close { [weak self] in
-                self?.safeStopSecurityScopedAccess(for: url)
+                guard let self else { return }
+                Task { @MainActor in
+                    self.safeStopSecurityScopedAccess(for: url)
+                }
             }
         }
         
@@ -1424,9 +1429,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self = self else { return }
-            self.appLogger.info("🟢 App didBecomeActive - verificando reproducción")
-            self.ensurePlaying(reason: "didBecomeActive")
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.appLogger.info("🟢 App didBecomeActive - verificando reproducción")
+                self.ensurePlaying(reason: "didBecomeActive")
+            }
         }
     }
     
@@ -1557,33 +1564,26 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
-        ) { _ in
-            self.cleanupAllResources()
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.cleanupAllResources()
+            }
         }
     }
     
-    nonisolated private func cleanupAllResources() {
+    @MainActor
+    private func cleanupAllResources() {
         appLogger.info("🧹 Cleaning up all resources")
-        Task { @MainActor in
-            self.stopAutoChangeTimer()
-        }
+        stopAutoChangeTimer()
+        cleanupPreviousStaticWallpaper()
         
-        // Limpiar wallpaper estático temporal
-        Task { @MainActor in
-            self.cleanupPreviousStaticWallpaper()
-            
-            // Close all windows and release resources
-            for (window, accessibleURL) in self.desktopVideoInstances {
-                window.close()
-                self.safeStopSecurityScopedAccess(for: accessibleURL)
-            }
-            self.desktopVideoInstances.removeAll()
+        // Close all windows and release resources
+        for (window, accessibleURL) in desktopVideoInstances {
+            window.close()
+            safeStopSecurityScopedAccess(for: accessibleURL)
         }
-        
-        // Liberar cualquier URL security-scoped restante
-        Task { @MainActor in
-            self.activeSecurityScopedURLs.removeAll()
-        }
+        desktopVideoInstances.removeAll()
+        activeSecurityScopedURLs.removeAll()
     }
 }
 

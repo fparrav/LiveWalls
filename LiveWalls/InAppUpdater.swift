@@ -54,7 +54,7 @@ final class InAppUpdater: ObservableObject {
         updater.automaticallyChecksForUpdates = true
         updater.automaticallyDownloadsUpdates = false
         // Check silently; UI appears only if an update exists
-        sparkleController.checkForUpdatesInBackground()
+        updater.checkForUpdatesInBackground()
     }
     #endif
 

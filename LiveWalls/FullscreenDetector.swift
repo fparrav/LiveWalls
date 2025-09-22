@@ -36,14 +36,15 @@ class FullscreenDetector: ObservableObject {
         setupObservers()
         
         // Check initial state
-        Task {
-            await checkInitialFullscreenState()
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            await self.checkInitialFullscreenState()
         }
     }
     
     deinit {
-        logger.info("🔍 Deinitializing FullscreenDetector")
-        Task { @MainActor in
+        MainActor.assumeIsolated { [self] in
+            logger.info("🔍 Deinitializing FullscreenDetector")
             removeObservers()
         }
     }
@@ -62,8 +63,9 @@ class FullscreenDetector: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            Task { @MainActor in
-                await self?.handleApplicationActivated(notification)
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                await self.handleApplicationActivated(notification)
             }
         }
         
@@ -77,8 +79,9 @@ class FullscreenDetector: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
-                await self?.checkPresentationOptions()
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                await self.checkPresentationOptions()
             }
         }
         
