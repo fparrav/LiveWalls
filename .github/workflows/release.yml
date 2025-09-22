@@ -411,11 +411,8 @@ jobs:
           mkdir -p ./public/sparkle
           cp "$DMG_PATH" ./public/sparkle/
 
-          printf '%s' "$SPARKLE_PRIVATE_KEY" > ./private_eddsa.pem
-          chmod 600 ./private_eddsa.pem
-
           echo "🖊️ Signing DMG for Sparkle..."
-          sign_update --ed-key-file ./private_eddsa.pem "./public/sparkle/$APP_NAME-${GITHUB_REF_NAME}.dmg"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | sign_update --ed-key-file - "./public/sparkle/$APP_NAME-${GITHUB_REF_NAME}.dmg"
 
           echo "📰 Generating appcast.xml..."
           OWNER="${{ github.repository_owner }}"
