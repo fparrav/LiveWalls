@@ -419,11 +419,11 @@ jobs:
           REPO_NAME="${{ github.event.repository.name }}"
           BASE_URL="https://${OWNER}.github.io/${REPO_NAME}/sparkle/"
 
-          generate_appcast \
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | generate_appcast \
+            --ed-key-file - \
             --download-url-prefix "$BASE_URL" \
             --link "$BASE_URL" \
-            --title "$APP_NAME Updates" \
-            --output-dir ./public/sparkle \
+            -o ./public/sparkle/appcast.xml \
             ./public/sparkle
 
           echo "✅ Appcast generated at ./public/sparkle/appcast.xml"
