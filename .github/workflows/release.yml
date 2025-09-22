@@ -388,13 +388,25 @@ jobs:
           fi
 
           SPARKLE_VERSION="2.6.0"
+          SPARKLE_DIR="$(pwd)/Sparkle-${SPARKLE_VERSION}"
           echo "📥 Downloading Sparkle CLI $SPARKLE_VERSION..."
           curl -L -o sparkle.tar.xz "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
-          tar -xf sparkle.tar.xz
-          echo "✅ Extracted Sparkle to $(pwd)/Sparkle-${SPARKLE_VERSION}"
-          export PATH="$(pwd)/Sparkle-${SPARKLE_VERSION}/bin:$PATH"
-          which generate_appcast
-          which sign_update
+
+          rm -rf "$SPARKLE_DIR"
+          mkdir -p "$SPARKLE_DIR"
+          tar -xf sparkle.tar.xz -C "$SPARKLE_DIR"
+          echo "✅ Extracted Sparkle to $SPARKLE_DIR"
+          export PATH="$SPARKLE_DIR/bin:$PATH"
+
+          if ! command -v generate_appcast >/dev/null; then
+            echo "❌ generate_appcast not found in $SPARKLE_DIR/bin"
+            exit 1
+          fi
+
+          if ! command -v sign_update >/dev/null; then
+            echo "❌ sign_update not found in $SPARKLE_DIR/bin"
+            exit 1
+          fi
 
           mkdir -p ./public/sparkle
           cp "$DMG_PATH" ./public/sparkle/
