@@ -490,26 +490,15 @@ jobs:
             echo "📝 Primer release - generando changelog completo"
             CHANGELOG=$(git cliff --tag "$VERSION" --strip all --github-token "$GITHUB_TOKEN")
             if [ -z "$CHANGELOG" ] || [[ "$CHANGELOG" == "## [${VERSION#v}] - $(date +%Y-%m-%d)" ]]; then
-              CHANGELOG=$(cat <<'EOF'
-## 🚀 Cambios en esta versión
-
-🎉 **Primera versión de LiveWalls disponible!**
-
-Esta es la versión inicial de LiveWalls, una aplicación para gestionar fondos de pantalla dinámicos en macOS.
-EOF
-)
+              CHANGELOG=$'## 🚀 Cambios en esta versión\n\n🎉 **Primera versión de LiveWalls disponible!**\n\nEsta es la versión inicial de LiveWalls, una aplicación para gestionar fondos de pantalla dinámicos en macOS.'
             fi
           else
             echo "📝 Generando changelog desde $PREVIOUS_TAG hasta $VERSION"
             CHANGELOG=$(git cliff --tag "$VERSION" "$PREVIOUS_TAG".."$VERSION" --strip all --github-token "$GITHUB_TOKEN")
             if [ -z "$CHANGELOG" ] || [[ "$CHANGELOG" == "## [${VERSION#v}] - $(date +%Y-%m-%d)" ]]; then
               echo "⚠️ No se encontraron commits convencionales, usando fallback"
-              CHANGELOG=$(cat <<EOF
-## 🚀 Cambios en esta versión
-
-$(git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" "$PREVIOUS_TAG".."$VERSION")
-EOF
-)
+              LOG_ENTRIES=$(git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" "$PREVIOUS_TAG".."$VERSION")
+              CHANGELOG=$(printf '## 🚀 Cambios en esta versión\n\n%s\n' "$LOG_ENTRIES")
             fi
           fi
 
