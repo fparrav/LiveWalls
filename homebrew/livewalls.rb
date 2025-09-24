@@ -2,9 +2,9 @@
 class Livewalls < Formula
   desc "LiveWalls: Use videos as dynamic desktop wallpapers on macOS"
   homepage "https://github.com/fparrav/LiveWalls"
-  url "https://github.com/fparrav/LiveWalls/releases/download/v1.5.1/LiveWalls-v1.5.1.dmg"
-  version "1.5.1"
-  sha256 "a2807497c027c76b1514ed63bcc48f0bf0c42ce0a9236f2c714d17776476f4da"
+  url "https://github.com/fparrav/LiveWalls/releases/download/v1.5.3/LiveWalls-v1.5.3.dmg"
+  version "1.5.3"
+  sha256 "27bb5fb97044661356228b7a4e312825d6e1b6a020fc77447d75e3596e28ba28"
 
   livecheck do
     url :stable
