@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>LiveWalls Updates</title>
+    <link>https://fparrav.github.io/LiveWalls/sparkle/</link>
+    <description>Latest updates for LiveWalls</description>
+    <language>en</language>
+    <lastBuildDate>Thu, 25 Sep 2025 19:06:44 +0000</lastBuildDate>
+    <item>
+      <title>LiveWalls v1.5.3</title>
+      <link>https://fparrav.github.io/LiveWalls/sparkle/LiveWalls-v1.5.3.dmg</link>
+      <pubDate>Thu, 25 Sep 2025 19:06:44 +0000</pubDate>
+      <enclosure url="https://fparrav.github.io/LiveWalls/sparkle/LiveWalls-v1.5.3.dmg" sparkle:version="202509251604" sparkle:shortVersionString="1.5.3" sparkle:edSignature="j/YEJwJUNoekQSudP2BE3ndXlakLmBbkEh9MGpSmHV1OP6aqBoEO3dWRFPCdllphNaCtg8RcTItjZUxVy6C9Ag==" length="2858414" type="application/octet-stream"/>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+    </item>
+  </channel>
+</rss>
