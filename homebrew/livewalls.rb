@@ -4,7 +4,7 @@ class Livewalls < Formula
   homepage "https://github.com/fparrav/LiveWalls"
   url "https://github.com/fparrav/LiveWalls/releases/download/v1.5.3/LiveWalls-v1.5.3.dmg"
   version "1.5.3"
-  sha256 "27bb5fb97044661356228b7a4e312825d6e1b6a020fc77447d75e3596e28ba28"
+  sha256 "0b0a021fb9a26234f30e2721d73315259862e212e4d09aa0944512d9a4e4a21a"
 
   livecheck do
     url :stable
