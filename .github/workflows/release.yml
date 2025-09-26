@@ -627,20 +627,22 @@ jobs:
             exit 1
           fi
 
+          ARTIFACT_ROOT=$(pwd)
           WORKDIR=$(mktemp -d)
           git clone "https://x-access-token:${GH_TOKEN}@github.com/$DIST_REPO.git" "$WORKDIR"
           cd "$WORKDIR"
 
-          if [ -d "../site-artifact" ] && [ "$(ls -A ../site-artifact 2>/dev/null)" ]; then
+          if [ -d "$ARTIFACT_ROOT/site-artifact" ] && [ "$(ls -A "$ARTIFACT_ROOT/site-artifact" 2>/dev/null)" ]; then
             rm -rf site
             mkdir -p site
-            rsync -a --delete ../site-artifact/ site/
+            rsync -a --delete "$ARTIFACT_ROOT/site-artifact/" site/
+            touch site/.nojekyll
           fi
 
-          if [ -f "../sparkle/appcast.xml" ]; then
+          if [ -f "$ARTIFACT_ROOT/sparkle/appcast.xml" ]; then
             mkdir -p sparkle
-            cp ../sparkle/appcast.xml appcast.xml
-            cp ../sparkle/appcast.xml sparkle/appcast.xml
+            cp "$ARTIFACT_ROOT/sparkle/appcast.xml" appcast.xml
+            cp "$ARTIFACT_ROOT/sparkle/appcast.xml" sparkle/appcast.xml
           fi
 
           git status -sb
