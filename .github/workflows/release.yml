@@ -633,10 +633,9 @@ jobs:
           cd "$WORKDIR"
 
           if [ -d "$ARTIFACT_ROOT/site-artifact" ] && [ "$(ls -A "$ARTIFACT_ROOT/site-artifact" 2>/dev/null)" ]; then
-            rm -rf site
-            mkdir -p site
-            rsync -a --delete "$ARTIFACT_ROOT/site-artifact/" site/
-            touch site/.nojekyll
+            cp "$ARTIFACT_ROOT/site-artifact/index.html" ./index.html
+            cp "$ARTIFACT_ROOT/site-artifact/styles.css" ./styles.css
+            touch .nojekyll
           fi
 
           if [ -f "$ARTIFACT_ROOT/sparkle/appcast.xml" ]; then
