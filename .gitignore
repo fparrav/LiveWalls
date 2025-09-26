@@ -214,3 +214,7 @@ memory-bank/
 AGENTS.md
 
 .roo/
+
+# Local clones of publication repositories
+livewalls-dist/
+homebrew-livewalls/

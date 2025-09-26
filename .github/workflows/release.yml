@@ -8,6 +8,8 @@ on:
 env:
   APP_NAME: "LiveWalls"
   SCHEME_NAME: "LiveWalls"
+  DIST_REPO: "fparrav/livewalls-dist"
+  TAP_REPO: "fparrav/homebrew-livewalls"
 
 jobs:
   build:
@@ -406,16 +408,14 @@ jobs:
             exit 1
           fi
 
-          mkdir -p ./public/sparkle
-          cp "$DMG_PATH" ./public/sparkle/
-
           echo "🖊️ Signing DMG for Sparkle..."
-          SIGN_OUTPUT=$(printf '%s' "$SPARKLE_PRIVATE_KEY" | sign_update --ed-key-file - "./public/sparkle/$APP_NAME-${GITHUB_REF_NAME}.dmg")
+          SIGN_OUTPUT=$(printf '%s' "$SPARKLE_PRIVATE_KEY" | sign_update --ed-key-file - "$DMG_PATH")
 
           echo "📰 Generating appcast.xml..."
-          OWNER="${{ github.repository_owner }}"
-          REPO_NAME="${{ github.event.repository.name }}"
-          BASE_URL="https://${OWNER}.github.io/${REPO_NAME}/sparkle/"
+          DIST_REPO="${{ env.DIST_REPO }}"
+          DIST_OWNER=$(echo "$DIST_REPO" | cut -d'/' -f1)
+          DIST_NAME=$(echo "$DIST_REPO" | cut -d'/' -f2)
+          BASE_URL="https://github.com/$DIST_OWNER/$DIST_NAME/releases/download/${GITHUB_REF_NAME}/"
           APP_PATH="./build/export/$APP_NAME.app/Contents/Info.plist"
           SHORT_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH")
           BUILD_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PATH")
@@ -443,7 +443,10 @@ jobs:
           length = os.environ["ARCHIVE_LENGTH"]
           publish_date = os.environ["PUBLISH_DATE"]
           min_os = os.environ.get("MIN_OS", "")
-          output_path = "./public/sparkle/appcast.xml"
+          dist_repo = os.environ["DIST_REPO"]
+          output_dir = "./public/sparkle"
+          os.makedirs(output_dir, exist_ok=True)
+          output_path = os.path.join(output_dir, "appcast.xml")
 
           lines = [
               '<?xml version="1.0" encoding="utf-8"?>',
@@ -452,13 +455,13 @@ jobs:
               '     xmlns:dc="http://purl.org/dc/elements/1.1/">',
               '  <channel>',
               f'    <title>{app_name} Updates</title>',
-              f'    <link>{base_url}</link>',
+              f'    <link>https://github.com/{dist_repo}/releases/tag/{tag_name}</link>',
               f'    <description>Latest updates for {app_name}</description>',
               '    <language>en</language>',
               f'    <lastBuildDate>{publish_date}</lastBuildDate>',
               '    <item>',
               f'      <title>{app_name} {tag_name}</title>',
-              f'      <link>{base_url}{app_name}-{tag_name}.dmg</link>',
+              f'      <link>https://github.com/{dist_repo}/releases/tag/{tag_name}</link>',
               f'      <pubDate>{publish_date}</pubDate>',
               '      <enclosure url="{url}" sparkle:version="{version}" sparkle:shortVersionString="{short}" sparkle:edSignature="{sig}" length="{length}" type="application/octet-stream"/>'.format(
                   url=f"{base_url}{app_name}-{tag_name}.dmg",
@@ -494,29 +497,6 @@ jobs:
           else
             echo "has_site=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: 📁 Assemble GitHub Pages payload
-        if: steps.prepare_sparkle.outputs.publish_pages == 'true' || steps.site_check.outputs.has_site == 'true'
-        env:
-          PUBLISH_PAGES: ${{ steps.prepare_sparkle.outputs.publish_pages }}
-        run: |
-          mkdir -p public
-          if [ "$PUBLISH_PAGES" = "true" ]; then
-            mkdir -p public/sparkle
-          fi
-          if [ -d ./site ] && [ "$(ls -A ./site)" ]; then
-            cp -R ./site/. public/
-          fi
-          touch public/.nojekyll
-
-      - name: 🚀 Publish GitHub Pages
-        if: steps.prepare_sparkle.outputs.publish_pages == 'true' || steps.site_check.outputs.has_site == 'true'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: public
-          keep_files: true
-          commit_message: "docs: update pages for ${{ steps.meta.outputs.version }}"
 
       - name: 📤 Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -561,6 +541,20 @@ jobs:
           name: livewalls-dmg
           path: ./artifacts
 
+      - name: 📦 Download Sparkle metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: sparkle-artifacts
+          path: ./sparkle
+        continue-on-error: true
+
+      - name: 📦 Download Site bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: livewalls-site
+          path: ./site-artifact
+        continue-on-error: true
+
       - name: 🛠️ Install git-cliff
         run: |
           brew install git-cliff
@@ -595,77 +589,126 @@ jobs:
           echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: 🚀 Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ env.VERSION }}
-          name: "LiveWalls ${{ env.VERSION }}"
-          body: |
-            ${{ steps.release_info.outputs.changelog }}
-
-            ## 📥 Instalación
-
-            1. Descarga el archivo `${{ env.APP_NAME }}-${{ env.VERSION }}.dmg`
-            2. Abre el DMG y arrastra LiveWalls a Aplicaciones
-            3. ¡Disfruta tus fondos de pantalla dinámicos!
-
-            ## 📋 Requisitos
-            - macOS 14.0 (Sonoma) o superior
-
-            ## 🔒 Seguridad
-            ⚠️ **Aplicación sin firma digital**: Esta es una aplicación open source distribuida sin certificado de desarrollador de Apple.
-
-            Para abrir la aplicación por primera vez:
-            ```bash
-            # Opción 1: Desactivar quarantine (recomendado)
-            xattr -d com.apple.quarantine /Applications/LiveWalls.app
-
-            # Opción 2: Ir a Preferencias > Seguridad y permitir la app
-            ```
-
-            💡 **Recomendación**: Para mayor seguridad, considera compilar la aplicación desde el código fuente.
-          files: |
-            ./artifacts/${{ env.APP_NAME }}-${{ env.VERSION }}.dmg
-          draft: false
-          prerelease: ${{ contains(env.VERSION, 'beta') || contains(env.VERSION, 'alpha') }}
-
-      - name: 🍺 Update Homebrew Formula
+      - name: 🚀 Publish release to distribution repo
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPOS_TOKEN }}
+          DIST_REPO: ${{ env.DIST_REPO }}
+          VERSION: ${{ env.VERSION }}
         run: |
-          echo "🍺 Updating Homebrew formula..."
+          if [ -z "$GH_TOKEN" ]; then
+            echo "❌ PUBLIC_REPOS_TOKEN secret is required to publish release"
+            exit 1
+          fi
+
+          NOTES_FILE=$(mktemp)
+          printf "%s\n" "${{ steps.release_info.outputs.changelog }}" > "$NOTES_FILE"
+
+          DMG_FILE="./artifacts/${APP_NAME}-${VERSION}.dmg"
+          if [ ! -f "$DMG_FILE" ]; then
+            echo "❌ DMG file not found at $DMG_FILE"
+            exit 1
+          fi
+
+          if gh release view "$VERSION" --repo "$DIST_REPO" >/dev/null 2>&1; then
+            gh release upload "$VERSION" "$DMG_FILE" --repo "$DIST_REPO" --clobber
+            gh release edit "$VERSION" --repo "$DIST_REPO" --title "LiveWalls $VERSION" --notes-file "$NOTES_FILE"
+          else
+            gh release create "$VERSION" "$DMG_FILE" --repo "$DIST_REPO" --title "LiveWalls $VERSION" --notes-file "$NOTES_FILE"
+          fi
+
+      - name: 🗂️ Sync distribution repository content
+        env:
+          DIST_REPO: ${{ env.DIST_REPO }}
+          VERSION: ${{ env.VERSION }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPOS_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "❌ PUBLIC_REPOS_TOKEN secret is required to sync distribution repository"
+            exit 1
+          fi
+
+          WORKDIR=$(mktemp -d)
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/$DIST_REPO.git" "$WORKDIR"
+          cd "$WORKDIR"
+
+          if [ -d "../site-artifact" ] && [ "$(ls -A ../site-artifact 2>/dev/null)" ]; then
+            rm -rf site
+            mkdir -p site
+            rsync -a --delete ../site-artifact/ site/
+          fi
+
+          if [ -f "../sparkle/appcast.xml" ]; then
+            mkdir -p sparkle
+            cp ../sparkle/appcast.xml appcast.xml
+            cp ../sparkle/appcast.xml sparkle/appcast.xml
+          fi
+
+          git status -sb
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "ℹ️ No distribution changes detected"
+            exit 0
+          fi
+
+          git config user.name "LiveWalls CI"
+          git config user.email "ci@livewalls.app"
+          git add -A
+          git commit -m "chore: actualizar artefactos ${VERSION}"
+          git push
+
+      - name: 🍺 Update Homebrew tap
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPOS_TOKEN }}
+          TAP_REPO: ${{ env.TAP_REPO }}
+          DIST_REPO: ${{ env.DIST_REPO }}
+          VERSION: ${{ env.VERSION }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "❌ PUBLIC_REPOS_TOKEN secret is required to update tap"
+            exit 1
+          fi
 
           DMG_PATH="./artifacts/$APP_NAME-$VERSION.dmg"
+          if [ ! -f "$DMG_PATH" ]; then
+            echo "❌ DMG not found at $DMG_PATH"
+            exit 1
+          fi
+
           SHA256_SUM=$(shasum -a 256 "$DMG_PATH" | cut -d' ' -f1)
           echo "📊 Calculated SHA256: $SHA256_SUM"
 
-          FORMULA_PATH="homebrew/livewalls.rb"
-          VERSION_NUMBER="${VERSION#v}"
+          TAP_DIR=$(mktemp -d)
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/$TAP_REPO.git" "$TAP_DIR"
+          FORMULA_PATH="$TAP_DIR/Formula/livewalls.rb"
 
-          git checkout main
+          if [ ! -f "$FORMULA_PATH" ]; then
+            echo "❌ Formula not found at $FORMULA_PATH"
+            exit 1
+          fi
+
+          VERSION_NUMBER="${VERSION#v}"
+          DOWNLOAD_URL="https://github.com/$DIST_REPO/releases/download/$VERSION/$APP_NAME-$VERSION.dmg"
 
           sed -i '' "s/version \"[^\"]*\"/version \"$VERSION_NUMBER\"/" "$FORMULA_PATH"
-          sed -i '' "s|url \"[^\"]*\"|url \"https://github.com/${{ github.repository }}/releases/download/$VERSION/$APP_NAME-$VERSION.dmg\"|" "$FORMULA_PATH"
+          sed -i '' "s|url \"[^\"]*\"|url \"$DOWNLOAD_URL\"|" "$FORMULA_PATH"
           sed -i '' "s/sha256 \"[^\"]*\"/sha256 \"$SHA256_SUM\"/" "$FORMULA_PATH"
 
-          echo "📋 Changes made to Homebrew formula:"
-          git diff "$FORMULA_PATH" || true
+          git -C "$TAP_DIR" status -sb
 
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add "$FORMULA_PATH"
-          if git diff --staged --quiet; then
-            echo "⚠️ No changes to commit in Homebrew formula"
-          else
-            git commit -m "🍺 update homebrew formula to $VERSION"
-            git push origin HEAD:main || {
-              echo "⚠️ Direct push failed, trying force push"
-              git push origin HEAD:main --force-with-lease
-            }
-            echo "✅ Homebrew formula changes pushed successfully"
+          if git -C "$TAP_DIR" diff --quiet; then
+            echo "ℹ️ No changes detected in tap"
+            exit 0
           fi
+
+          git -C "$TAP_DIR" config user.name "LiveWalls CI"
+          git -C "$TAP_DIR" config user.email "ci@livewalls.app"
+          git -C "$TAP_DIR" add Formula/livewalls.rb
+          git -C "$TAP_DIR" commit -m "chore: actualizar fórmula a $VERSION"
+          git -C "$TAP_DIR" push
 
       - name: ✅ Success Notification
         run: |
           echo "🎉 Release $VERSION created successfully!"
           echo "📦 DMG: $APP_NAME-$VERSION.dmg"
-          echo "🍺 Homebrew formula updated automatically"
-          echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/$VERSION"
+          echo "🍺 Homebrew tap actualizado"
+          echo "🔗 Release público: https://github.com/${{ env.DIST_REPO }}/releases/tag/$VERSION"
