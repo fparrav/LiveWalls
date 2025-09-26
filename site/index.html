@@ -3,54 +3,191 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LiveWalls — Animated wallpapers for macOS</title>
-    <meta name="description" content="LiveWalls lets you set videos as animated wallpapers on macOS with multi‑monitor support and Sparkle updates." />
+    <title>LiveWalls — Dynamic wallpapers tailor-made for macOS</title>
+    <meta name="description" content="LiveWalls is a native macOS app that brings your desktop to life with multi-monitor video wallpapers, Sparkle updates, and a polished SwiftUI experience." />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="container">
-      <div class="brand">
-        <img src="https://raw.githubusercontent.com/fparrav/LiveWalls/main/icon_asset/icon_256x256.png" alt="LiveWalls" class="logo" />
-        <h1>LiveWalls</h1>
-      </div>
-      <p class="tagline">Animated wallpapers for macOS — multi‑monitor, SwiftUI, open source.</p>
-      <div class="cta">
-        <a class="button primary" href="https://github.com/fparrav/LiveWalls/releases/latest">Download Latest</a>
-        <a class="button" href="https://github.com/fparrav/LiveWalls">View on GitHub</a>
-      </div>
-    </header>
+    <div class="page">
+      <div class="background"></div>
 
-    <main class="container">
-      <section class="card">
-        <h2>Quick Install (Homebrew)</h2>
-        <pre><code>brew tap fparrav/livewalls
-brew install --cask livewalls</code></pre>
-        <p class="note">Note: first launch may require allowing the app in System Settings → Privacy &amp; Security.</p>
-      </section>
-
-      <section class="grid">
-        <div class="card">
-          <h3>Features</h3>
-          <ul>
-            <li>Multi‑monitor wallpapers (one window per screen)</li>
-            <li>Video playlist with transitions</li>
-            <li>Per‑monitor management</li>
-            <li>Launch at login and auto‑resume</li>
-            <li>In‑app updates via Sparkle</li>
-          </ul>
+      <header class="top">
+        <div class="top__inner container">
+          <a class="brand" href="#hero">
+            <img src="https://raw.githubusercontent.com/fparrav/LiveWalls/main/icon_asset/icon_256x256.png" alt="LiveWalls" class="brand__logo" />
+            <span class="brand__name">LiveWalls</span>
+          </a>
+          <nav class="top__nav" aria-label="Primary navigation">
+            <a href="#features">Features</a>
+            <a href="#install">Install</a>
+            <a href="#updates">Updates</a>
+            <a href="https://github.com/fparrav/LiveWalls" rel="noopener">GitHub</a>
+          </nav>
+          <a class="chip" href="https://github.com/fparrav/LiveWalls/releases/latest" rel="noopener">
+            <span class="chip__label">v1.5.4</span>
+            <span class="chip__text">Latest release</span>
+          </a>
         </div>
-        <div class="card">
-          <h3>Updates</h3>
-          <p>LiveWalls checks for updates using Sparkle.</p>
-          <p>Appcast feed:</p>
-          <p><a href="./sparkle/appcast.xml">/sparkle/appcast.xml</a></p>
-        </div>
-      </section>
-    </main>
+      </header>
 
-    <footer class="container footer">
-      <p>© 2024 LiveWalls — Open source on GitHub.</p>
-    </footer>
+      <main>
+        <section id="hero" class="hero container" aria-labelledby="hero-title">
+          <div class="hero__text">
+            <p class="hero__eyebrow">Dynamic wallpapers for macOS Sonoma+</p>
+            <h1 id="hero-title">Bring your desktop to life without sacrificing focus</h1>
+            <p class="hero__lead">LiveWalls turns any MP4 or MOV into an immersive wallpaper. Built in SwiftUI, aware of every display you connect, and crafted to stay out of your way while you work.</p>
+            <div class="hero__actions">
+              <a class="button button--primary" href="https://github.com/fparrav/LiveWalls/releases/latest" rel="noopener">Download DMG</a>
+              <a class="button" href="#install">Install with Homebrew</a>
+            </div>
+            <ul class="hero__highlights" role="list">
+              <li>Multi-monitor aware</li>
+              <li>Status-bar control</li>
+              <li>Sparkle auto-updates</li>
+            </ul>
+          </div>
+          <div class="hero__visual" aria-hidden="true">
+            <div class="mockup">
+              <div class="mockup__toolbar">
+                <span class="bullet"></span>
+                <span class="bullet"></span>
+                <span class="bullet"></span>
+              </div>
+              <div class="mockup__wallpaper">
+                <div class="glow"></div>
+                <div class="glow glow--secondary"></div>
+              </div>
+              <div class="mockup__footer">
+                <span>Live video wallpaper</span>
+                <span>● ● ●</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="features" class="section container">
+          <header class="section__header">
+            <h2>Designed for creators, gamers and visual storytellers</h2>
+            <p>LiveWalls embraces the macOS design language while giving you precise control over every screen in your setup.</p>
+          </header>
+          <div class="feature-grid">
+            <article class="feature-card">
+              <span class="feature-card__icon" aria-hidden="true">🖥️</span>
+              <h3>Multi-monitor intelligence</h3>
+              <p>One window per display, seamless spaces support, and automatic reconfiguration when monitors are added or removed.</p>
+            </article>
+            <article class="feature-card">
+              <span class="feature-card__icon" aria-hidden="true">🎛️</span>
+              <h3>Playlist made effortless</h3>
+              <p>Organise your favourite clips, preview with rich thumbnails, and switch wallpapers instantly from the menu bar.</p>
+            </article>
+            <article class="feature-card">
+              <span class="feature-card__icon" aria-hidden="true">🚀</span>
+              <h3>Ready when macOS is</h3>
+              <p>Launch at login, auto-resume the last wallpaper after restart, and stay responsive thanks to a dedicated operation queue.</p>
+            </article>
+            <article class="feature-card">
+              <span class="feature-card__icon" aria-hidden="true">🔒</span>
+              <h3>Privacy-first, open source</h3>
+              <p>Security scoped bookmarks keep your videos safe, and every line of Swift code lives on GitHub ready for review.</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="install" class="section section--accent">
+          <div class="container">
+            <header class="section__header">
+              <h2>Pick the installation that fits your workflow</h2>
+              <p>Whether you prefer a drag-and-drop DMG or a fully scripted setup, LiveWalls is easy to install and update.</p>
+            </header>
+            <div class="install-grid">
+              <article class="install-card">
+                <h3>Download the DMG</h3>
+                <ol>
+                  <li>Grab the latest release from GitHub.</li>
+                  <li>Drag <strong>LiveWalls.app</strong> to Applications.</li>
+                  <li>Launch it and start curating your wallpapers.</li>
+                </ol>
+                <div class="code-block" role="note">
+                  <strong>First launch on macOS</strong>
+                  <p>Because LiveWalls is distributed unsigned, remove the quarantine flag once:</p>
+                  <pre><code>sudo xattr -rd com.apple.quarantine /Applications/LiveWalls.app</code></pre>
+                  <p>Alternatively, use System Settings → Privacy &amp; Security → <em>Open Anyway</em>.</p>
+                </div>
+              </article>
+              <article class="install-card">
+                <h3>Install with Homebrew</h3>
+                <p>Best for power users who want painless upgrades.</p>
+                <pre><code>brew tap fparrav/livewalls
+brew install livewalls</code></pre>
+                <ul class="install-card__list">
+                  <li>No manual quarantine dance.</li>
+                  <li>Update with <code>brew upgrade</code>.</li>
+                  <li>Tap maintained alongside every release.</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section id="updates" class="section container">
+          <div class="updates">
+            <div class="updates__content">
+              <h2>Always up to date with Sparkle</h2>
+              <p>LiveWalls ships with Sparkle 2 so you can receive delta updates directly inside the app. Prefer manual checks? Subscribe to the appcast at any time.</p>
+              <div class="updates__links">
+                <a class="button" href="https://fparrav.github.io/livewalls-dist/sparkle/appcast.xml" rel="noopener">View Appcast</a>
+                <a class="button" href="https://github.com/fparrav/livewalls-dist/releases" rel="noopener">Browse Releases</a>
+              </div>
+            </div>
+            <dl class="updates__meta">
+              <div>
+                <dt>Minimum macOS</dt>
+                <dd>Sonoma 14.0</dd>
+              </div>
+              <div>
+                <dt>Permissions</dt>
+                <dd>Accessibility, Files &amp; Folders</dd>
+              </div>
+              <div>
+                <dt>Tech stack</dt>
+                <dd>SwiftUI · AppKit · AVFoundation</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        <section class="section container">
+          <div class="grid-split">
+            <div>
+              <h2>Built for the community</h2>
+              <p>LiveWalls is MIT licensed. Star the project, file issues, or contribute code and localisation. Every improvement helps keep dynamic wallpapers accessible.</p>
+              <div class="cta-row">
+                <a class="button button--primary" href="https://github.com/fparrav/LiveWalls" rel="noopener">Star on GitHub</a>
+                <a class="button" href="https://github.com/fparrav/LiveWalls/issues" rel="noopener">Report an issue</a>
+              </div>
+            </div>
+            <div class="quote">
+              <p>“Finally, a native macOS wallpaper manager that respects multiple displays and feels at home on Sonoma.”</p>
+              <span>— LiveWalls contributors</span>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container footer__inner">
+          <div>
+            <strong>LiveWalls</strong>
+            <p class="footer__tagline">Crafted with ❤️ for the macOS community.</p>
+          </div>
+          <div class="footer__links">
+            <a href="https://github.com/fparrav/LiveWalls">Source</a>
+            <a href="https://github.com/fparrav/livewalls-dist">Distribution</a>
+            <a href="https://github.com/fparrav/LiveWalls/discussions">Contact</a>
+          </div>
+        </div>
+      </footer>
+    </div>
   </body>
 </html>
-
