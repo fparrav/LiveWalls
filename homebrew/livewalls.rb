@@ -4,8 +4,9 @@ require "fileutils"
 class Livewalls < Formula
   desc "LiveWalls: Use videos as dynamic desktop wallpapers on macOS"
   homepage "https://github.com/fparrav/LiveWalls"
-  url "https://github.com/fparrav/livewalls-dist/releases/download/v1.5.5/LiveWalls-v1.5.5.dmg"
-  sha256 "3e9790db497458bd2d82392d90f749a256990ac6824bf782286a5c66552bb171"
+  url "https://github.com/fparrav/livewalls-dist/releases/download/v1.5.7/LiveWalls-v1.5.7.dmg"
+  version "1.5.7"
+  sha256 "43829ce8a29ac30efbabe8a72eef2f9cab67e360f0f0675a6340e4daca7087f3"
 
   livecheck do
     strategy :github_latest
@@ -14,9 +15,12 @@ class Livewalls < Formula
   depends_on macos: :sonoma
 
   def install
-    mount_dir = Pathname.new(Dir.mktmpdir("livewalls-dmg"))
+    mount_dir = Pathname(Dir.mktmpdir("livewalls-dmg"))
+    mounted = false
+
     begin
       system "hdiutil", "attach", cached_download, "-nobrowse", "-mountpoint", mount_dir
+      mounted = true
 
       app_path = mount_dir/"LiveWalls.app"
       odie "LiveWalls.app not found in DMG" unless app_path.directory?
@@ -25,10 +29,8 @@ class Livewalls < Formula
       destination.dirname.mkpath
       FileUtils.cp_r(app_path, destination)
     ensure
-      if mount_dir.exist?
-        system "hdiutil", "detach", mount_dir
-        FileUtils.remove_entry mount_dir
-      end
+      system "hdiutil", "detach", mount_dir if mounted
+      mount_dir.rmtree if mount_dir.exist?
     end
   end
 

@@ -690,6 +690,26 @@ jobs:
           VERSION_NUMBER="${VERSION#v}"
           DOWNLOAD_URL="https://github.com/$DIST_REPO/releases/download/$VERSION/$APP_NAME-$VERSION.dmg"
 
+          if ! grep -q '^[[:space:]]*version "' "$FORMULA_PATH"; then
+            python3 - "$FORMULA_PATH" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines()
+output = []
+inserted = False
+
+for line in lines:
+    output.append(line)
+    if not inserted and line.strip().startswith('url "'):
+        output.append('  version "0.0.0"')
+        inserted = True
+
+path.write_text("\n".join(output) + "\n")
+PY
+          fi
+
           sed -i '' "s/version \"[^\"]*\"/version \"$VERSION_NUMBER\"/" "$FORMULA_PATH"
           sed -i '' "s|url \"[^\"]*\"|url \"$DOWNLOAD_URL\"|" "$FORMULA_PATH"
           sed -i '' "s/sha256 \"[^\"]*\"/sha256 \"$SHA256_SUM\"/" "$FORMULA_PATH"
