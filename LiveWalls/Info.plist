@@ -85,7 +85,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://fparrav.github.io/LiveWalls/sparkle/appcast.xml</string>
+	<string>https://fparrav.github.io/livewalls-dist/sparkle/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>SgZup16oqTvybkLz577QPXDiIiCeOvPKSmfuIR6Bk7g=</string>
 </dict>
