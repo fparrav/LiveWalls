@@ -34,8 +34,13 @@ class Livewalls < Formula
   end
 
   def post_install
-    # Remove quarantine attribute to avoid security warnings
-    system "xattr", "-d", "com.apple.quarantine", "#{prefix}/Applications/LiveWalls.app"
+    app_path = prefix/"Applications/LiveWalls.app"
+    return unless app_path.exist?
+
+    # Remove quarantine attribute when present to avoid security prompts
+    if quiet_system "xattr", "-p", "com.apple.quarantine", app_path
+      system "xattr", "-d", "com.apple.quarantine", app_path
+    end
   end
 
   test do
