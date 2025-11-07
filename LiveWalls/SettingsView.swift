@@ -588,10 +588,10 @@ struct SettingsView: View {
         // Obtener directorios únicos donde están los videos
         var uniqueDirectories = Set<URL>()
         for videoFile in allVideos {
-            if let url = wallpaperManager.resolveBookmark(for: videoFile) {
+            if let url = await wallpaperManager.resolveBookmark(for: videoFile) {
                 let directory = url.deletingLastPathComponent()
                 uniqueDirectories.insert(directory)
-                url.stopAccessingSecurityScopedResource()
+                await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
             }
         }
         
@@ -674,7 +674,7 @@ struct SettingsView: View {
     
     /// Convierte un video específico con detección de frames negros
     private func convertVideoWithBlackFrames(videoFile: VideoFile, allowedDirectories: Set<URL>) async {
-        guard let originalURL = wallpaperManager.resolveBookmark(for: videoFile) else {
+        guard let originalURL = await wallpaperManager.resolveBookmark(for: videoFile) else {
             await MainActor.run {
                 optimizationErrors.append("❌ \(videoFile.name): Could not access file")
             }
@@ -682,7 +682,9 @@ struct SettingsView: View {
         }
         
         defer {
-            originalURL.stopAccessingSecurityScopedResource()
+            Task {
+                await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: originalURL)
+            }
         }
         
         let directory = originalURL.deletingLastPathComponent()
@@ -741,10 +743,10 @@ struct SettingsView: View {
         // Obtener directorios únicos donde están los videos
         var uniqueDirectories = Set<URL>()
         for videoFile in allVideos {
-            if let url = wallpaperManager.resolveBookmark(for: videoFile) {
+            if let url = await wallpaperManager.resolveBookmark(for: videoFile) {
                 let directory = url.deletingLastPathComponent()
                 uniqueDirectories.insert(directory)
-                url.stopAccessingSecurityScopedResource()
+                await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
             }
         }
         
@@ -837,7 +839,7 @@ struct SettingsView: View {
     
     /// Elimina frames negros de un video específico
     private func removeBlackFramesFromVideo(videoFile: VideoFile, allowedDirectories: Set<URL>) async -> Bool {
-        guard let originalURL = wallpaperManager.resolveBookmark(for: videoFile) else {
+        guard let originalURL = await wallpaperManager.resolveBookmark(for: videoFile) else {
             await MainActor.run {
                 optimizationErrors.append("❌ \(videoFile.name): Could not access file")
             }
@@ -845,7 +847,9 @@ struct SettingsView: View {
         }
         
         defer {
-            originalURL.stopAccessingSecurityScopedResource()
+            Task {
+                await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: originalURL)
+            }
         }
         
         let directory = originalURL.deletingLastPathComponent()
@@ -893,10 +897,10 @@ struct SettingsView: View {
         // Obtener directorios únicos donde están los videos
         var uniqueDirectories = Set<URL>()
         for videoFile in videosNoHEVC {
-            if let url = wallpaperManager.resolveBookmark(for: videoFile) {
+            if let url = await wallpaperManager.resolveBookmark(for: videoFile) {
                 let directory = url.deletingLastPathComponent()
                 uniqueDirectories.insert(directory)
-                url.stopAccessingSecurityScopedResource()
+                await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
             }
         }
         
@@ -993,14 +997,16 @@ struct SettingsView: View {
         
         for videoFile in wallpaperManager.videoFiles {
             // Resolver bookmark para acceso security-scoped
-            guard let url = wallpaperManager.resolveBookmark(for: videoFile) else {
+            guard let url = await wallpaperManager.resolveBookmark(for: videoFile) else {
                 print("⚠️ No se pudo resolver bookmark para: \(videoFile.name)")
                 continue
             }
             
             defer {
                 // Liberar acceso security-scoped
-                url.stopAccessingSecurityScopedResource()
+                Task {
+                    await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
+                }
             }
             
             let asset = AVAsset(url: url)
@@ -1027,13 +1033,15 @@ struct SettingsView: View {
         print("🔍 HEVC preset disponible, iniciando conversión para: \(videoFile.name)")
         
         // Resolver bookmark para acceso security-scoped
-        guard let inputURL = wallpaperManager.resolveBookmark(for: videoFile) else {
+        guard let inputURL = await wallpaperManager.resolveBookmark(for: videoFile) else {
             throw NSError(domain: "OptimizationError", code: 3, userInfo: [NSLocalizedDescriptionKey: "No se pudo acceder al archivo: \(videoFile.name)"])
         }
         
         defer {
             // Liberar acceso security-scoped
-            inputURL.stopAccessingSecurityScopedResource()
+            Task {
+                await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: inputURL)
+            }
         }
         
         let asset = AVAsset(url: inputURL)
@@ -1116,144 +1124,148 @@ struct SettingsView: View {
     
     /// Actualiza la lista de videos reemplazando el original por el optimizado
     private func updateVideoInList(originalVideoFile: VideoFile, optimized: URL, allowedDirectories: Set<URL> = []) async {
-        await MainActor.run {
-            if let index = wallpaperManager.videoFiles.firstIndex(where: { $0.id == originalVideoFile.id }) {
-                var directoryToCleanup: URL?
-                do {
-                    // Resolve original file bookmark
-                    guard let originalURL = wallpaperManager.resolveBookmark(for: originalVideoFile) else {
-                        print("⚠️ No se pudo resolver bookmark del archivo original: \(originalVideoFile.name)")
-                        // Clean up temporary file
-                        try? FileManager.default.removeItem(at: optimized)
-                        return
-                    }
-                    
-                    defer {
-                        originalURL.stopAccessingSecurityScopedResource()
-                    }
-                    
-                    print("🔄 Reemplazando archivo original: \(originalURL.lastPathComponent)")
-                    
-                    let originalDirectory = originalURL.deletingLastPathComponent()
-                    
-                    // If allowed directories were provided, use them for sandbox access
-                    if !allowedDirectories.isEmpty {
-                        // Find the corresponding allowed directory
-                        guard let found = allowedDirectories.first(where: { $0.path == originalDirectory.path }) else {
-                            throw NSError(domain: "OptimizationError", code: 9, userInfo: [NSLocalizedDescriptionKey: "No permissions found for directory: \(originalDirectory.path)"])
-                        }
-                        
-                        // Access directory with sandbox permissions
-                        guard found.startAccessingSecurityScopedResource() else {
-                            throw NSError(domain: "OptimizationError", code: 10, userInfo: [NSLocalizedDescriptionKey: "Could not access directory with sandbox permissions"])
-                        }
-                        
-                        directoryToCleanup = found
-                    }
-                    
-                    // Crear directorio destino si no existe
-                    try FileManager.default.createDirectory(at: originalDirectory, withIntermediateDirectories: true)
-                    
-                    // Generar nombre del archivo optimizado (mantener nombre original pero con indicador)
-                    let originalName = originalURL.deletingPathExtension().lastPathComponent
-                    let finalURL = originalDirectory.appendingPathComponent("\(originalName)_hevc").appendingPathExtension("mp4")
-                    
-                    // Mover archivo temporal a ubicación final
-                    if FileManager.default.fileExists(atPath: finalURL.path) {
-                        try FileManager.default.removeItem(at: finalURL)
-                    }
-                    try FileManager.default.moveItem(at: optimized, to: finalURL)
-                    
-                    print("✅ Archivo convertido movido exitosamente: \(finalURL.lastPathComponent)")
-                    
-                    // Crear bookmark para el archivo convertido
-                    var bookmarkData: Data?
-                    
-                    // Intentar crear bookmark para el archivo específico
-                    do {
-                        // First verify that the file exists and is accessible
-                        guard FileManager.default.fileExists(atPath: finalURL.path) else {
-                            throw NSError(domain: "BookmarkError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Archivo convertido no existe"])
-                        }
-                        
-                        // Intentar crear bookmark con las mismas opciones que los archivos originales
-                        bookmarkData = try finalURL.bookmarkData(
-                            options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
-                            includingResourceValuesForKeys: nil,
-                            relativeTo: nil
-                        )
-                        
-                        // Validar que el bookmark se puede resolver inmediatamente
-                        var isStale = false
-                        let _ = try URL(resolvingBookmarkData: bookmarkData!, 
-                                       options: [.withSecurityScope], 
-                                       relativeTo: nil, 
-                                       bookmarkDataIsStale: &isStale)
-                        
-                        if isStale {
-                            print("⚠️ Bookmark creado pero está obsoleto, regenerando...")
-                            bookmarkData = try finalURL.bookmarkData(
-                                options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
-                                includingResourceValuesForKeys: nil,
-                                relativeTo: nil
-                            )
-                        }
-                        
-                        print("🔖 Bookmark validado para archivo convertido: \(finalURL.lastPathComponent)")
-                        
-                    } catch {
-                        print("❌ Error creando bookmark para archivo convertido: \(error)")
-                        print("💡 Manteniendo archivo sin bookmark actualizado")
-                        bookmarkData = nil
-                    }
-                    
-                    // Actualizar VideoFile con nueva información
-                    var updatedVideoFile = wallpaperManager.videoFiles[index]
-                    updatedVideoFile.url = finalURL
-                    updatedVideoFile.name = finalURL.deletingPathExtension().lastPathComponent
-                    
-                    // Solo actualizar bookmarkData si se creó exitosamente
-                    if let newBookmarkData = bookmarkData {
-                        updatedVideoFile.bookmarkData = newBookmarkData
-                        print("📱 VideoFile actualizado con nuevo bookmark")
-                        
-                        // Verify that the bookmark works before deleting the original
-                        do {
-                            if let testURL = wallpaperManager.resolveBookmark(for: updatedVideoFile) {
-                                testURL.stopAccessingSecurityScopedResource()
-                                
-                                // If we get here, the bookmark works, delete original file
-                                try FileManager.default.removeItem(at: originalURL)
-                                print("🗑️ Original file deleted after verifying bookmark")
-                            } else {
-                                throw NSError(domain: "BookmarkError", code: 2, userInfo: [NSLocalizedDescriptionKey: "No se pudo resolver el bookmark recién creado"])
-                            }
-                        } catch {
-                            print("❌ Error verificando bookmark: \(error)")
-                            print("🔄 Manteniendo archivo original como respaldo")
-                        }
-                    } else {
-                        print("⚠️ VideoFile actualizado sin cambio de bookmark, manteniendo archivo original")
-                    }
-                    
-                    // Reemplazar por el optimizado
-                    wallpaperManager.videoFiles[index] = updatedVideoFile
-                    wallpaperManager.saveVideos()
-                    
-                } catch {
-                    print("❌ Error reemplazando archivo: \(error.localizedDescription)")
-                    // Clean up temporary file in case of error
-                    try? FileManager.default.removeItem(at: optimized)
-                }
-                
-                // Limpiar acceso security-scoped si se usó
-                directoryToCleanup?.stopAccessingSecurityScopedResource()
-            } else {
-                print("⚠️ VideoFile no encontrado en la lista")
+        guard let index = wallpaperManager.videoFiles.firstIndex(where: { $0.id == originalVideoFile.id }) else {
+            print("⚠️ VideoFile no encontrado en la lista")
+            // Clean up temporary file
+            try? FileManager.default.removeItem(at: optimized)
+            return
+        }
+        
+        var directoryToCleanup: URL?
+        
+        do {
+            // Resolve original file bookmark
+            guard let originalURL = await wallpaperManager.resolveBookmark(for: originalVideoFile) else {
+                print("⚠️ No se pudo resolver bookmark del archivo original: \(originalVideoFile.name)")
                 // Clean up temporary file
                 try? FileManager.default.removeItem(at: optimized)
+                return
             }
+            
+            defer {
+                Task {
+                    await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: originalURL)
+                }
+            }
+        
+            print("🔄 Reemplazando archivo original: \(originalURL.lastPathComponent)")
+            
+            let originalDirectory = originalURL.deletingLastPathComponent()
+            
+            // If allowed directories were provided, use them for sandbox access
+            if !allowedDirectories.isEmpty {
+                // Find the corresponding allowed directory
+                guard let found = allowedDirectories.first(where: { $0.path == originalDirectory.path }) else {
+                    throw NSError(domain: "OptimizationError", code: 9, userInfo: [NSLocalizedDescriptionKey: "No permissions found for directory: \(originalDirectory.path)"])
+                }
+                
+                // Access directory with sandbox permissions
+                guard found.startAccessingSecurityScopedResource() else {
+                    throw NSError(domain: "OptimizationError", code: 10, userInfo: [NSLocalizedDescriptionKey: "Could not access directory with sandbox permissions"])
+                }
+                
+                directoryToCleanup = found
+            }
+            
+            // Crear directorio destino si no existe
+            try FileManager.default.createDirectory(at: originalDirectory, withIntermediateDirectories: true)
+            
+            // Generar nombre del archivo optimizado (mantener nombre original pero con indicador)
+            let originalName = originalURL.deletingPathExtension().lastPathComponent
+            let finalURL = originalDirectory.appendingPathComponent("\(originalName)_hevc").appendingPathExtension("mp4")
+            
+            // Mover archivo temporal a ubicación final
+            if FileManager.default.fileExists(atPath: finalURL.path) {
+                try FileManager.default.removeItem(at: finalURL)
+            }
+            try FileManager.default.moveItem(at: optimized, to: finalURL)
+            
+            print("✅ Archivo convertido movido exitosamente: \(finalURL.lastPathComponent)")
+            
+            // Crear bookmark para el archivo convertido
+            var bookmarkData: Data?
+            
+            // Intentar crear bookmark para el archivo específico
+            do {
+                // First verify that the file exists and is accessible
+                guard FileManager.default.fileExists(atPath: finalURL.path) else {
+                    throw NSError(domain: "BookmarkError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Archivo convertido no existe"])
+                }
+                
+                // Intentar crear bookmark con las mismas opciones que los archivos originales
+                bookmarkData = try finalURL.bookmarkData(
+                    options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                )
+                
+                // Validar que el bookmark se puede resolver inmediatamente
+                var isStale = false
+                let _ = try URL(resolvingBookmarkData: bookmarkData!, 
+                               options: [.withSecurityScope], 
+                               relativeTo: nil, 
+                               bookmarkDataIsStale: &isStale)
+                
+                if isStale {
+                    print("⚠️ Bookmark creado pero está obsoleto, regenerando...")
+                    bookmarkData = try finalURL.bookmarkData(
+                        options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+                        includingResourceValuesForKeys: nil,
+                        relativeTo: nil
+                    )
+                }
+                
+                print("🔖 Bookmark validado para archivo convertido: \(finalURL.lastPathComponent)")
+                
+            } catch {
+                print("❌ Error creando bookmark para archivo convertido: \(error)")
+                print("💡 Manteniendo archivo sin bookmark actualizado")
+                bookmarkData = nil
+            }
+            
+            // Actualizar VideoFile con nueva información
+            var updatedVideoFile = wallpaperManager.videoFiles[index]
+            updatedVideoFile.url = finalURL
+            updatedVideoFile.name = finalURL.deletingPathExtension().lastPathComponent
+            
+            // Solo actualizar bookmarkData si se creó exitosamente
+            if let newBookmarkData = bookmarkData {
+                updatedVideoFile.bookmarkData = newBookmarkData
+                print("📱 VideoFile actualizado con nuevo bookmark")
+                
+                // Verify that the bookmark works before deleting the original
+                do {
+                    if let testURL = await wallpaperManager.resolveBookmark(for: updatedVideoFile) {
+                        await wallpaperManager.bookmarkActor.stopAccessingSecurityScopedResource(url: testURL)
+                        
+                        // If we get here, the bookmark works, delete original file
+                        try FileManager.default.removeItem(at: originalURL)
+                        print("🗑️ Original file deleted after verifying bookmark")
+                    } else {
+                        throw NSError(domain: "BookmarkError", code: 2, userInfo: [NSLocalizedDescriptionKey: "No se pudo resolver el bookmark recién creado"])
+                    }
+                } catch {
+                    print("❌ Error verificando bookmark: \(error)")
+                    print("🔄 Manteniendo archivo original como respaldo")
+                }
+            } else {
+                print("⚠️ VideoFile actualizado sin cambio de bookmark, manteniendo archivo original")
+            }
+            
+            // Reemplazar por el optimizado en el MainActor
+            await MainActor.run {
+                wallpaperManager.videoFiles[index] = updatedVideoFile
+                wallpaperManager.saveVideos()
+            }
+            
+        } catch {
+            print("❌ Error reemplazando archivo: \(error.localizedDescription)")
+            // Clean up temporary file in case of error
+            try? FileManager.default.removeItem(at: optimized)
         }
+        
+        // Limpiar acceso security-scoped si se usó
+        directoryToCleanup?.stopAccessingSecurityScopedResource()
     }
     
     /// Muestra una alerta de forma asíncrona

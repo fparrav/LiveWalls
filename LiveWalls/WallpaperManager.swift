@@ -59,6 +59,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let currentVideoKey = "CurrentVideo"
     
     // MARK: - Security-Scoped Resource Tracking
+    let bookmarkActor = BookmarkActor()
     private var activeSecurityScopedURLs: Set<String> = []
     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -691,9 +692,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     self.appLogger.info("▶️ Iniciando wallpaper: \(currentVideo.name)")
                 }
                 
-                let resolvedURL = await MainActor.run { 
-                    return self.resolveBookmark(for: currentVideo) 
-                }
+                let resolvedURL = await self.resolveBookmark(for: currentVideo)
                 guard let accessibleURL = resolvedURL else {
                     await MainActor.run {
                         self.notificationManager.showError(message: "No se pudo acceder al archivo de video")
@@ -768,37 +767,28 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Resuelve un bookmark security-scoped para obtener acceso al archivo
     /// - Parameter video: VideoFile cuyo bookmark se debe resolver
     /// - Returns: URL accesible o nil si falla
-    func resolveBookmark(for video: VideoFile) -> URL? {
+    func resolveBookmark(for video: VideoFile) async -> URL? {
         guard let bookmarkData = video.bookmarkData else {
             appLogger.error("❌ No hay bookmark data para: \(video.name)")
             return nil
         }
         
         do {
-            var isStale = false
-            let url = try URL(
-                resolvingBookmarkData: bookmarkData,
-                options: [.withSecurityScope, .withoutUI],
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
+            // Resolver bookmark de forma asíncrona usando BookmarkActor
+            let url = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
             
-            if isStale {
-                appLogger.warning("⚠️ Bookmark obsoleto para: \(video.name)")
-            }
-            
-            // Iniciar acceso security-scoped
-            guard url.startAccessingSecurityScopedResource() else {
+            // Iniciar acceso security-scoped usando BookmarkActor
+            let started = await bookmarkActor.startAccessingSecurityScopedResource(url: url)
+            guard started else {
                 appLogger.error("❌ No se pudo iniciar acceso security-scoped para: \(video.name)")
                 return nil
             }
             
-            // Registrar URL activa
+            // Registrar URL activa en el conjunto local (para compatibilidad)
             let normalizedPath = url.path
-            Task { @MainActor in
-                self.activeSecurityScopedURLs.insert(normalizedPath)
-            }
+            activeSecurityScopedURLs.insert(normalizedPath)
             
+            appLogger.info("✅ Bookmark resuelto y acceso iniciado: \(video.name)")
             return url
             
         } catch {
@@ -892,7 +882,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let normalizedPath = url.path
         if activeSecurityScopedURLs.contains(normalizedPath) {
             activeSecurityScopedURLs.remove(normalizedPath)
-            url.stopAccessingSecurityScopedResource()
+            
+            // Usar BookmarkActor para detener acceso
+            Task {
+                await bookmarkActor.stopAccessingSecurityScopedResource(url: url)
+            }
+            
             appLogger.debug("🔓 Liberado acceso security-scoped: \(normalizedPath)")
         }
     }
@@ -936,7 +931,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private func generateInitialStaticFrame() async {
         guard let currentVideo = currentVideo, isPlayingWallpaper else { return }
         
-        guard let accessibleURL = resolveBookmark(for: currentVideo) else { return }
+        guard let accessibleURL = await resolveBookmark(for: currentVideo) else { return }
         
         // Generar frame inicial (sin tiempo específico para obtener frame representativo)
         if let staticImageURL = await generateStaticWallpaperFrame(for: accessibleURL, timeOffset: nil) {
@@ -951,7 +946,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private func updateStaticFrameOnSpaceChange() async {
         guard let currentVideo = currentVideo, isPlayingWallpaper else { return }
         
-        guard let accessibleURL = resolveBookmark(for: currentVideo) else { return }
+        guard let accessibleURL = await resolveBookmark(for: currentVideo) else { return }
         
         // Obtener tiempo actual del video para el nuevo Space
         var currentVideoTime: CMTime? = nil
@@ -1024,7 +1019,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         // Get the next video URL
-        guard let nextURL = resolveBookmark(for: nextVideo) else {
+        guard let nextURL = await resolveBookmark(for: nextVideo) else {
             appLogger.error("❌ No se pudo obtener el URL del siguiente video")
             await setActiveVideo(nextVideo)
             return
@@ -1308,7 +1303,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             return
         }
         
-        guard let accessibleURL = resolveBookmark(for: currentVideo) else {
+        guard let accessibleURL = await resolveBookmark(for: currentVideo) else {
             appLogger.error("❌ No se pudo acceder al video para prueba estática")
             return
         }
@@ -1531,20 +1526,26 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         if isPlayingWallpaper {
             appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
             // Optimized restart: first check screens then start
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            Task {
+                try? await Task.sleep(for: .milliseconds(200))
+                
                 // Verificar que aún tenemos un video actual
                 guard let currentVideo = self.currentVideo else { return }
                 
                 // Pre-resolver el bookmark para reducir latencia
-                guard let accessibleURL = self.resolveBookmark(for: currentVideo) else {
-                    self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
+                guard let accessibleURL = await self.resolveBookmark(for: currentVideo) else {
+                    await MainActor.run {
+                        self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
+                    }
                     return
                 }
                 
                 // Crear ventanas inmediatamente con URL ya resuelta
-                self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
-                self.isPlayingWallpaper = true
-                self.startAutoChangeTimerIfNeeded()
+                await MainActor.run {
+                    self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+                    self.isPlayingWallpaper = true
+                    self.startAutoChangeTimerIfNeeded()
+                }
             }
         }
     }
@@ -1662,7 +1663,9 @@ extension WallpaperManager {
             
             // Validar que el bookmark aún sea accesible si hubo fallas
             if restartedAny {
-                _ = resolveBookmark(for: currentVideo)
+                Task {
+                    _ = await resolveBookmark(for: currentVideo)
+                }
             }
         } else {
             appLogger.debug("ℹ️ ensurePlaying: isPlayingWallpaper=false y auto‑inicio desactivado")
