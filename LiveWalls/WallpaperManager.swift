@@ -55,11 +55,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - UserDefaults and configuration
     private let resourceReleaseDelay: TimeInterval = 0.1
     private let userDefaults = UserDefaults.standard
-    private let videosKey = "SavedVideos"
-    private let currentVideoKey = "CurrentVideo"
     
     // MARK: - Security-Scoped Resource Tracking
     let bookmarkActor = BookmarkActor()
+    let persistenceActor = PersistenceActor()
     private var activeSecurityScopedURLs: Set<String> = []
     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -86,10 +85,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         appLogger.info("\(NSLocalizedString("initializing_wallpaper_manager", comment: "Initializing WallpaperManager"), privacy: .public)")
         
-        // Load configuration and saved data
-        loadSavedVideos()
-        loadCurrentVideo()
-        loadAutoChangeSettings()
+        // Cargar configuración en background usando PersistenceActor (NO bloquear init)
+        Task.detached { [weak self] in
+            guard let self else { return }
+            await self.loadDataInBackground()
+        }
+        
         loadTransitionSettings()
         setupScreenChangeNotifications()
         setupWorkspaceNotifications()
@@ -1144,42 +1145,59 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Persistence
     
-    /// Guarda la lista de videos en UserDefaults
+    /// Guarda la lista de videos de forma asíncrona usando PersistenceActor
     func saveVideos() {
-        let videoData = videoFiles.compactMap { video in
-            try? JSONEncoder().encode(video)
+        let videos = videoFiles
+        Task.detached { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.persistenceActor.saveVideos(videos)
+            } catch {
+                await MainActor.run {
+                    self.appLogger.error("❌ Error al guardar videos: \(error.localizedDescription)")
+                }
+            }
         }
-        userDefaults.set(videoData, forKey: videosKey)
     }
     
-    private func loadSavedVideos() {
-        guard let videoDataArray = userDefaults.array(forKey: videosKey) as? [Data] else { return }
-        
-        let videos = videoDataArray.compactMap { data in
-            try? JSONDecoder().decode(VideoFile.self, from: data)
+    /// Carga todos los datos de persistencia en background durante init
+    private func loadDataInBackground() async {
+        do {
+            // Cargar videos de forma asíncrona
+            let videos = try await persistenceActor.loadVideos()
+            
+            // Cargar video actual de forma asíncrona
+            let currentVid = await persistenceActor.loadCurrentVideo()
+            
+            // Cargar configuración de auto-change de forma asíncrona
+            let autoChangeSettings = await persistenceActor.loadAutoChangeSettings()
+            
+            // Actualizar estado en main thread
+            await MainActor.run {
+                self.videoFiles = videos
+                self.currentVideo = currentVid
+                self.isAutoChangeEnabled = autoChangeSettings.isEnabled
+                self.autoChangeInterval = autoChangeSettings.interval
+                
+                self.appLogger.info("📂 Datos cargados en background: \(videos.count) videos, autoChange=\(autoChangeSettings.isEnabled)")
+                self.syncActiveVideoState()
+            }
+        } catch {
+            await MainActor.run {
+                self.appLogger.error("❌ Error al cargar datos en background: \(error.localizedDescription)")
+            }
         }
-        
-        // Ya estamos en @MainActor, asignar sincrónicamente para evitar carreras
-        self.videoFiles = videos
-        self.appLogger.info("📂 Cargados \(videos.count) videos guardados")
-        self.syncActiveVideoState()
     }
     
     private func saveCurrentVideo() {
-        if let currentVideo = currentVideo,
-           let data = try? JSONEncoder().encode(currentVideo) {
-            userDefaults.set(data, forKey: currentVideoKey)
+        let video = currentVideo
+        Task.detached { [weak self] in
+            guard let self else { return }
+            await self.persistenceActor.saveCurrentVideo(video)
         }
     }
     
-    private func loadCurrentVideo() {
-        guard let data = userDefaults.data(forKey: currentVideoKey),
-              let video = try? JSONDecoder().decode(VideoFile.self, from: data) else { return }
-        
-        // Ya estamos en @MainActor, asignar sincrónicamente para evitar carreras
-        self.currentVideo = video
-        self.syncActiveVideoState()
-    }
+
     
     /// Sincroniza el estado isActive de todos los videos con el currentVideo
     private func syncActiveVideoState() {
@@ -1203,14 +1221,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         appLogger.info("🔄 Estado sincronizado - Video activo: \(currentVideo.name)")
     }
     
-    private func loadAutoChangeSettings() {
-        isAutoChangeEnabled = userDefaults.bool(forKey: "AutoChangeEnabled")
-        autoChangeInterval = userDefaults.double(forKey: "AutoChangeInterval")
-        if autoChangeInterval <= 0 {
-            autoChangeInterval = 10 * 60 // Default 10 minutos
-        }
-    }
-    
+
     /// Loads transition settings from UserDefaults
     private func loadTransitionSettings() {
         isTransitionEnabled = userDefaults.bool(forKey: isTransitionEnabledKey)
@@ -1229,10 +1240,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Saves automatic change configuration
+    /// Guarda configuración de cambio automático usando PersistenceActor
     func saveAutoChangeSettings() {
-        userDefaults.set(isAutoChangeEnabled, forKey: "AutoChangeEnabled")
-        userDefaults.set(autoChangeInterval, forKey: "AutoChangeInterval")
+        let isEnabled = isAutoChangeEnabled
+        let interval = autoChangeInterval
+        
+        Task.detached { [weak self] in
+            guard let self else { return }
+            await self.persistenceActor.saveAutoChangeSettings(isEnabled: isEnabled, interval: interval)
+        }
         
         appLogger.info("💾 Saving configuration: enabled=\(self.isAutoChangeEnabled), interval=\(Int(self.autoChangeInterval))s")
         

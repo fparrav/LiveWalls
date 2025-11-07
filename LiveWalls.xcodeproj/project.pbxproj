@@ -7,13 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1A2B3C4D5E6F7890ABCD1234 /* PersistenceActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */; };
+		2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */; };
 		3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */; };
-		7D8E9F1A3B2C4D5E6F7A8B9C /* BookmarkActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8E9F1A3B2C4D5E6F7A8B9B /* BookmarkActor.swift */; };
 		542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */ = {isa = PBXBuildFile; fileRef = 542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */; };
 		55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */; };
 		55F782AC2E062ABF00E3F2E3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F7829E2E062ABF00E3F2E3 /* InfoPlist.strings */; };
 		55F782AD2E062ABF00E3F2E3 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F782A92E062ABF00E3F2E3 /* Localizable.strings */; };
 		55FB53CC2E74B0A60042F3A9 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 55FB53CB2E74B0A60042F3A9 /* Sparkle */; };
+		7D8E9F1A3B2C4D5E6F7A8B9C /* BookmarkActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8E9F1A3B2C4D5E6F7A8B9B /* BookmarkActor.swift */; };
 		8B0C7D2A2B1F4A3000123456 /* LiveWallsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D292B1F4A3000123456 /* LiveWallsApp.swift */; };
 		8B0C7D2C2B1F4A3000123456 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0C7D2B2B1F4A3000123456 /* ContentView.swift */; };
 		8B0C7D2E2B1F4A3100123456 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8B0C7D2D2B1F4A3100123456 /* Assets.xcassets */; };
@@ -52,8 +54,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActor.swift; sourceTree = "<group>"; };
+		2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActorTests.swift; sourceTree = "<group>"; };
 		3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenDetector.swift; sourceTree = "<group>"; };
-		7D8E9F1A3B2C4D5E6F7A8B9B /* BookmarkActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkActor.swift; sourceTree = "<group>"; };
 		542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopVideoWindowMejorada.swift; sourceTree = "<group>"; };
 		55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		55AC1F502DEA0F1400424EA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -97,6 +100,7 @@
 		55F782A62E062ABF00E3F2E3 /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "pt-BR.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		55F782A72E062ABF00E3F2E3 /* zh-CN */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-CN"; path = "zh-CN.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		55F782A82E062ABF00E3F2E3 /* zh-TW */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-TW"; path = "zh-TW.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		7D8E9F1A3B2C4D5E6F7A8B9B /* BookmarkActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkActor.swift; sourceTree = "<group>"; };
 		8B0C7D262B1F4A3000123456 /* LiveWalls.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiveWalls.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8B0C7D292B1F4A3000123456 /* LiveWallsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveWallsApp.swift; sourceTree = "<group>"; };
 		8B0C7D2B2B1F4A3000123456 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -113,9 +117,9 @@
 		9A1B2C3D4E5F6789ABCDEF19 /* TransitionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionManager.swift; sourceTree = "<group>"; };
 		AAAA11112222333344440003 /* WallpaperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperManagerTests.swift; sourceTree = "<group>"; };
 		AAAA11112222333344440004 /* ContentViewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewUITests.swift; sourceTree = "<group>"; };
-		CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkActorTests.swift; sourceTree = "<group>"; };
 		AAAA1111222233334444000F /* LiveWallsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveWallsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAAA11112222333344440010 /* LiveWallsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveWallsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkActorTests.swift; sourceTree = "<group>"; };
 		F0F0F0A02E1F4AAA00000001 /* InAppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InAppUpdater.swift; sourceTree = "<group>"; };
 		F0F0F0B02E1F4BBB00000001 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperTimerManager.swift; sourceTree = "<group>"; };
@@ -219,6 +223,7 @@
 				55AC1F502DEA0F1400424EA9 /* Info.plist */,
 				55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */,
 				7D8E9F1A3B2C4D5E6F7A8B9B /* BookmarkActor.swift */,
+				1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */,
 				8B0C7D292B1F4A3000123456 /* LiveWallsApp.swift */,
 				8B0C7D2B2B1F4A3000123456 /* ContentView.swift */,
 				8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */,
@@ -253,6 +258,7 @@
 			isa = PBXGroup;
 			children = (
 				CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */,
+				2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
 				AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
 			);
 			path = LiveWallsTests;
@@ -387,6 +393,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7D8E9F1A3B2C4D5E6F7A8B9C /* BookmarkActor.swift in Sources */,
+				1A2B3C4D5E6F7890ABCD1234 /* PersistenceActor.swift in Sources */,
 				8B0C7D2C2B1F4A3000123456 /* ContentView.swift in Sources */,
 				8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */,
 				55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */,
@@ -411,6 +418,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB3C5F9A7D8E4B2C91A6E3F0 /* BookmarkActorTests.swift in Sources */,
+				2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */,
 				AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
