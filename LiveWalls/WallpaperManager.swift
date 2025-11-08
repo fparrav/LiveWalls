@@ -725,14 +725,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     }
                 }
                 
-                await MainActor.run {
-                    self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                    self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
-                    
-                    // Programar aplicación para todos los Spaces
-                    self.scheduleWallpaperApplicationForAllSpaces()
-                }
-                
                 // Crear ventanas de forma asíncrona sin bloquear main thread
                 await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
                 
