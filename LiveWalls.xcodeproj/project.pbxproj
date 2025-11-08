@@ -11,6 +11,7 @@
 		2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */; };
 		3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */; };
 		542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */ = {isa = PBXBuildFile; fileRef = 542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */; };
+		55846EB82EBED2B600E46C3B /* SystemReadinessObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */; };
 		55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */; };
 		55F782AC2E062ABF00E3F2E3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F7829E2E062ABF00E3F2E3 /* InfoPlist.strings */; };
 		55F782AD2E062ABF00E3F2E3 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F782A92E062ABF00E3F2E3 /* Localizable.strings */; };
@@ -58,6 +59,7 @@
 		2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActorTests.swift; sourceTree = "<group>"; };
 		3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenDetector.swift; sourceTree = "<group>"; };
 		542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopVideoWindowMejorada.swift; sourceTree = "<group>"; };
+		55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemReadinessObserver.swift; sourceTree = "<group>"; };
 		55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		55AC1F502DEA0F1400424EA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		55F781EC2E06282E00E3F2E3 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
@@ -219,6 +221,7 @@
 		8B0C7D282B1F4A3000123456 /* LiveWalls */ = {
 			isa = PBXGroup;
 			children = (
+				55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */,
 				55F782AB2E062ABF00E3F2E3 /* Resources */,
 				55AC1F502DEA0F1400424EA9 /* Info.plist */,
 				55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */,
@@ -395,6 +398,7 @@
 				7D8E9F1A3B2C4D5E6F7A8B9C /* BookmarkActor.swift in Sources */,
 				1A2B3C4D5E6F7890ABCD1234 /* PersistenceActor.swift in Sources */,
 				8B0C7D2C2B1F4A3000123456 /* ContentView.swift in Sources */,
+				55846EB82EBED2B600E46C3B /* SystemReadinessObserver.swift in Sources */,
 				8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */,
 				55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */,
 				542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */,

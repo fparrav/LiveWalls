@@ -59,6 +59,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - Security-Scoped Resource Tracking
     let bookmarkActor = BookmarkActor()
     let persistenceActor = PersistenceActor()
+    private let systemReadinessObserver = SystemReadinessObserver()
     private var activeSecurityScopedURLs: Set<String> = []
     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -135,26 +136,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         autoStartScheduled = true
         
-        // Esperar a que el sistema esté listo (pantallas estables)
+        // Esperar a que el sistema esté listo (pantallas estables) usando observador reactivo
         Task { @MainActor in
-            _ = await self.waitForSystemReadiness(timeout: 5.0)
+            _ = await self.systemReadinessObserver.waitUntilReady(timeout: 5.0)
             self.startWallpaperSafe()
         }
     }
     
-    /// Espera condicionalmente a que el sistema esté listo tras el login (pantallas disponibles/estables)
-    private func waitForSystemReadiness(timeout: TimeInterval) async -> Bool {
-        let start = Date()
-        while Date().timeIntervalSince(start) < timeout {
-            let screens = NSScreen.screens
-            let hasScreens = !screens.isEmpty
-            if hasScreens {
-                return true
-            }
-            try? await Task.sleep(for: .milliseconds(150))
-        }
-        return false
-    }
+
     
     // MARK: - Video Management
     
