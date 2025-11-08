@@ -62,6 +62,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let systemReadinessObserver = SystemReadinessObserver()
     private let startupCoordinator = StartupCoordinator()
     private let playbackHealthChecker = PlaybackHealthChecker()
+    private let windowCreationCoordinator = WindowCreationCoordinator()
     private var activeSecurityScopedURLs: Set<String> = []
     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -725,7 +726,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 }
                 
                 await MainActor.run {
-                    self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+                    self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                    self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
+                    
+                    // Programar aplicación para todos los Spaces
+                    self.scheduleWallpaperApplicationForAllSpaces()
+                }
+                
+                // Crear ventanas de forma asíncrona sin bloquear main thread
+                await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+                
+                await MainActor.run {
                     self.isPlayingWallpaper = true
                     self.startAutoChangeTimerIfNeeded()
 
@@ -808,8 +819,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Desktop Windows Management
     
-    /// Crea ventanas de video para todas las pantallas
-    private func createDesktopWindows(for video: VideoFile, accessibleURL: URL) {
+    /// Crea ventanas de video para todas las pantallas de forma asíncrona
+    private func createDesktopWindows(for video: VideoFile, accessibleURL: URL) async {
         // Limpiar instancias previas
         if !desktopVideoInstances.isEmpty {
             appLogger.warning("⚠️ Limpiando ventanas previas antes de crear nuevas")
@@ -820,27 +831,25 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         let screens = NSScreen.screens
-        var createdWindows: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)] = []
         
-        for screen in screens {
-            let window = DesktopVideoWindowMejorada(screen: screen, videoURL: accessibleURL)
-            window.delegate = self
-            window.orderFront(nil)
-            window.orderBack(nil)
-            
-            createdWindows.append((window: window, accessibleURL: accessibleURL))
-            
-            // Reducir demora para mejorar latencia en wake-up
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
-        }
+        // Usar WindowCreationCoordinator para crear ventanas de forma asíncrona
+        let createdWindows = await windowCreationCoordinator.createWindowsAsync(
+            screens: screens,
+            videoFile: video,
+            bookmarkActor: bookmarkActor
+        )
         
         if createdWindows.isEmpty {
             appLogger.error("❌ No se pudo crear ninguna ventana de escritorio")
             notificationManager.showError(message: "No se pudo crear ventanas de fondo de pantalla")
             safeStopSecurityScopedAccess(for: accessibleURL)
         } else {
-            desktopVideoInstances = createdWindows
-            appLogger.info("✅ Creadas \(createdWindows.count) ventanas de escritorio")
+            // Convertir NSWindow a DesktopVideoWindowMejorada para mantener compatibilidad
+            let desktopWindows = createdWindows.map { window in
+                (window: window as! DesktopVideoWindowMejorada, accessibleURL: accessibleURL)
+            }
+            desktopVideoInstances = desktopWindows
+            appLogger.info("✅ Creadas \(createdWindows.count) ventanas de escritorio de forma asíncrona")
         }
     }
     
@@ -1071,7 +1080,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         desktopVideoInstances.removeAll()
         
         // Create new windows for the next video
-        createDesktopWindows(for: nextVideo, accessibleURL: nextURL)
+        await createDesktopWindows(for: nextVideo, accessibleURL: nextURL)
         
         // Clean up old window after transition
         for (window, url) in oldWindows {
@@ -1564,9 +1573,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     return
                 }
                 
-                // Crear ventanas inmediatamente con URL ya resuelta
+                // Crear ventanas de forma asíncrona sin bloquear main thread
+                await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+                
                 await MainActor.run {
-                    self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
                     self.isPlayingWallpaper = true
                     self.startAutoChangeTimerIfNeeded()
                 }
