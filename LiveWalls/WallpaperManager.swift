@@ -63,6 +63,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let startupCoordinator = StartupCoordinator()
     private let playbackHealthChecker = PlaybackHealthChecker()
     private let windowCreationCoordinator = WindowCreationCoordinator()
+    private let scheduledHealthCheckManager = ScheduledHealthCheckManager()
     private var activeSecurityScopedURLs: Set<String> = []
     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -736,15 +737,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     Task {
                         await self.generateInitialStaticFrame()
                     }
-
-                    // Verificación diferida para asegurar reproducción/aplicación
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        self.ensurePlaying(reason: "post-start check 1s")
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                        self.ensurePlaying(reason: "post-start check 3s")
-                    }
                 }
+
+                // Programar verificaciones de salud post‑arranque en background (Phase 7)
+                await self.scheduledHealthCheckManager.scheduleHealthChecks(
+                    action: { [weak self] in
+                        await MainActor.run {
+                            self?.ensurePlaying(reason: "post-start scheduled check")
+                        }
+                    },
+                    intervals: [1.0, 3.0]
+                )
             }
         }
     }

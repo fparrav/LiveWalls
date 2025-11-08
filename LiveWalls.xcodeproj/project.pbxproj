@@ -15,6 +15,12 @@
 		55846EB82EBED2B600E46C3B /* SystemReadinessObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */; };
 		55846EBA2EBEFA0800E46C3B /* StartupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EB92EBEFA0800E46C3B /* StartupCoordinator.swift */; };
 		55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */; };
+		55846EBE2EBF778A00E46C3B /* WindowCreationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBD2EBF778A00E46C3B /* WindowCreationCoordinator.swift */; };
+		55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */; };
+		55846EC32EBF77A900E46C3B /* VideoOptimizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */; };
+		55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */; };
+		55846EC62EBF883100E46C3B /* ScheduledHealthCheckManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC52EBF883100E46C3B /* ScheduledHealthCheckManager.swift */; };
+		55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */; };
 		55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */; };
 		55F782AC2E062ABF00E3F2E3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F7829E2E062ABF00E3F2E3 /* InfoPlist.strings */; };
 		55F782AD2E062ABF00E3F2E3 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F782A92E062ABF00E3F2E3 /* Localizable.strings */; };
@@ -67,6 +73,12 @@
 		55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemReadinessObserver.swift; sourceTree = "<group>"; };
 		55846EB92EBEFA0800E46C3B /* StartupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupCoordinator.swift; sourceTree = "<group>"; };
 		55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupCoordinatorTests.swift; sourceTree = "<group>"; };
+		55846EBD2EBF778A00E46C3B /* WindowCreationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCreationCoordinator.swift; sourceTree = "<group>"; };
+		55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemReadinessObserverTests.swift; sourceTree = "<group>"; };
+		55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoOptimizerTests.swift; sourceTree = "<group>"; };
+		55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCreationCoordinatorTests.swift; sourceTree = "<group>"; };
+		55846EC52EBF883100E46C3B /* ScheduledHealthCheckManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledHealthCheckManager.swift; sourceTree = "<group>"; };
+		55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledHealthCheckManagerTests.swift; sourceTree = "<group>"; };
 		55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		55AC1F502DEA0F1400424EA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		55F781EC2E06282E00E3F2E3 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
@@ -229,6 +241,8 @@
 		8B0C7D282B1F4A3000123456 /* LiveWalls */ = {
 			isa = PBXGroup;
 			children = (
+				55846EC52EBF883100E46C3B /* ScheduledHealthCheckManager.swift */,
+				55846EBD2EBF778A00E46C3B /* WindowCreationCoordinator.swift */,
 				55846EB92EBEFA0800E46C3B /* StartupCoordinator.swift */,
 				55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */,
 				55F782AB2E062ABF00E3F2E3 /* Resources */,
@@ -270,6 +284,10 @@
 		AAAA11112222333344440011 /* LiveWallsTests */ = {
 			isa = PBXGroup;
 			children = (
+				55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */,
+				55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */,
+				55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */,
+				55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */,
 				55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */,
 				CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */,
 				2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
@@ -413,6 +431,7 @@
 				55846EB82EBED2B600E46C3B /* SystemReadinessObserver.swift in Sources */,
 				8B0C7D3E2B1F4A7000123456 /* VideoFile.swift in Sources */,
 				55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */,
+				55846EC62EBF883100E46C3B /* ScheduledHealthCheckManager.swift in Sources */,
 				542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */,
 				8B0C7D402B1F4A8000123456 /* SettingsView.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF03 /* StatusBarMenuView.swift in Sources */,
@@ -428,6 +447,7 @@
 				F0F0F0B12E1F4BBB00000002 /* AboutView.swift in Sources */,
 				8B0C7D2A2B1F4A3000123456 /* LiveWallsApp.swift in Sources */,
 				1E989763C576060F77A4B154 /* PlaybackHealthChecker.swift in Sources */,
+				55846EBE2EBF778A00E46C3B /* WindowCreationCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -440,6 +460,10 @@
 				55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */,
 				AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */,
 				E6827EA47D70ACDD0E819BAE /* PlaybackHealthCheckerTests.swift in Sources */,
+				55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */,
+				55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */,
+				55846EC32EBF77A900E46C3B /* VideoOptimizerTests.swift in Sources */,
+				55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

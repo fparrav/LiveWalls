@@ -102,14 +102,13 @@ Icon
 # Ignorar archivos de configuración de usuario de Xcode
 *.xcuserstate
 
-# Ignorar archivos de configuración de esquemas de Xcode
-xcshareddata/
+# Xcode project tracking ajustes
+# Dejamos de ignorar el .xcodeproj para versionar project.pbxproj y esquemas compartidos.
+# Seguimos ignorando datos de usuario y workspace internos.
+LiveWalls.xcodeproj/xcuserdata/
+LiveWalls.xcodeproj/project.xcworkspace/
+# IMPORTANTE: Al remover *.xcodeproj permitimos añadir el proyecto sin usar -f.
 
-# Ignorar archivos de configuración de workspaces de Xcode
-*.xcworkspace
-
-# Ignorar archivos de configuración de proyectos de Xcode
-*.xcodeproj
 
 # Ignorar archivos de configuración de paquetes de Swift
 .swiftpm/
@@ -219,5 +218,5 @@ AGENTS.md
 livewalls-dist/
 homebrew-livewalls/
 
-
-plans/
+# Permitimos versionar documentación de planes
+# (antes se ignoraba toda la carpeta plans/)
