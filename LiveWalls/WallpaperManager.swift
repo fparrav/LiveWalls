@@ -60,6 +60,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     let bookmarkActor = BookmarkActor()
     let persistenceActor = PersistenceActor()
     private let systemReadinessObserver = SystemReadinessObserver()
+    private let startupCoordinator = StartupCoordinator()
     private var activeSecurityScopedURLs: Set<String> = []
     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -69,7 +70,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private var isChangingVideo = false
     private var isCleaningUp = false
     private var autoStartScheduled = false
-    private var autoStartRetries = 0
     
     
     // Actor to serialize wallpaper operations
@@ -116,30 +116,48 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - Startup Helpers
     
     /// Intenta iniciar la reproducción automáticamente cuando la configuración y el sistema estén listos
+    /// Usa StartupCoordinator para evitar bloqueos del main thread con backoff exponencial
     private func attemptAutoStart() {
         guard UserDefaults.standard.bool(forKey: "AutoStartWallpaper") else { return }
         guard !autoStartScheduled else { return }
         
-        // Asegurar que los datos esenciales hayan cargado
-        guard currentVideo != nil, !videoFiles.isEmpty else {
-            // Reintento ligero mientras termina la carga inicial
-            if autoStartRetries < 25 { // ~5s con pasos de 0.2s
-                autoStartRetries += 1
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                    self?.attemptAutoStart()
+        autoStartScheduled = true
+        appLogger.info("🚀 Iniciando coordinación de startup con backoff exponencial")
+        
+        // Lanzar coordinación de startup sin bloquear
+        Task { [weak self] in
+            guard let self else { return }
+            
+            // Coordinar startup con backoff exponencial (máximo 5 reintentos)
+            let success = await self.startupCoordinator.coordinateStartup(
+                hasVideo: { [weak self] in
+                    guard let self else { return false }
+                    return await MainActor.run {
+                        self.currentVideo != nil && !self.videoFiles.isEmpty
+                    }
+                },
+                hasScreens: { [weak self] in
+                    guard let self else { return false }
+                    return await self.systemReadinessObserver.waitUntilReady(timeout: 5.0)
+                },
+                maxRetries: 5,
+                startAction: { [weak self] in
+                    await MainActor.run {
+                        guard let self else { return }
+                        self.startWallpaperSafe()
+                    }
+                }
+            )
+            
+            if success {
+                await MainActor.run {
+                    self.appLogger.info("✅ AutoStart completado exitosamente")
                 }
             } else {
-                appLogger.warning("⚠️ AutoStart: datos no listos tras múltiples reintentos")
+                await MainActor.run {
+                    self.appLogger.warning("⚠️ AutoStart: condiciones no cumplidas después de reintentos")
+                }
             }
-            return
-        }
-        
-        autoStartScheduled = true
-        
-        // Esperar a que el sistema esté listo (pantallas estables) usando observador reactivo
-        Task { @MainActor in
-            _ = await self.systemReadinessObserver.waitUntilReady(timeout: 5.0)
-            self.startWallpaperSafe()
         }
     }
     

@@ -12,6 +12,8 @@
 		3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */; };
 		542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */ = {isa = PBXBuildFile; fileRef = 542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */; };
 		55846EB82EBED2B600E46C3B /* SystemReadinessObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */; };
+		55846EBA2EBEFA0800E46C3B /* StartupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EB92EBEFA0800E46C3B /* StartupCoordinator.swift */; };
+		55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */; };
 		55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */; };
 		55F782AC2E062ABF00E3F2E3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F7829E2E062ABF00E3F2E3 /* InfoPlist.strings */; };
 		55F782AD2E062ABF00E3F2E3 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F782A92E062ABF00E3F2E3 /* Localizable.strings */; };
@@ -60,6 +62,8 @@
 		3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenDetector.swift; sourceTree = "<group>"; };
 		542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopVideoWindowMejorada.swift; sourceTree = "<group>"; };
 		55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemReadinessObserver.swift; sourceTree = "<group>"; };
+		55846EB92EBEFA0800E46C3B /* StartupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupCoordinator.swift; sourceTree = "<group>"; };
+		55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupCoordinatorTests.swift; sourceTree = "<group>"; };
 		55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		55AC1F502DEA0F1400424EA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		55F781EC2E06282E00E3F2E3 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
@@ -221,6 +225,7 @@
 		8B0C7D282B1F4A3000123456 /* LiveWalls */ = {
 			isa = PBXGroup;
 			children = (
+				55846EB92EBEFA0800E46C3B /* StartupCoordinator.swift */,
 				55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */,
 				55F782AB2E062ABF00E3F2E3 /* Resources */,
 				55AC1F502DEA0F1400424EA9 /* Info.plist */,
@@ -260,6 +265,7 @@
 		AAAA11112222333344440011 /* LiveWallsTests */ = {
 			isa = PBXGroup;
 			children = (
+				55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */,
 				CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */,
 				2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
 				AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
@@ -409,6 +415,7 @@
 				8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF20 /* TransitionManager.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF05 /* VideoOptimizer.swift in Sources */,
+				55846EBA2EBEFA0800E46C3B /* StartupCoordinator.swift in Sources */,
 				3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */,
 				F2227C492E1F40488BAD0026 /* WallpaperTimerManager.swift in Sources */,
 				F0F0F0A12E1F4AAA00000002 /* InAppUpdater.swift in Sources */,
@@ -423,6 +430,7 @@
 			files = (
 				BB3C5F9A7D8E4B2C91A6E3F0 /* BookmarkActorTests.swift in Sources */,
 				2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */,
+				55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */,
 				AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
