@@ -24,9 +24,8 @@ final class PersistenceActorTests: XCTestCase {
     
     override func tearDown() async throws {
         // Limpiar UserDefaults de prueba
-        if let suiteName = testUserDefaults.persistentDomain(forName: testUserDefaults.suiteName ?? "") {
-            testUserDefaults.removePersistentDomain(forName: testUserDefaults.suiteName ?? "")
-        }
+        let testSuiteName = "com.livewalls.tests"
+        testUserDefaults.removePersistentDomain(forName: testSuiteName)
         
         persistenceActor = nil
         testUserDefaults = nil

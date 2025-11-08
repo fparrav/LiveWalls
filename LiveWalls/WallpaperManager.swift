@@ -61,6 +61,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     let persistenceActor = PersistenceActor()
     private let systemReadinessObserver = SystemReadinessObserver()
     private let startupCoordinator = StartupCoordinator()
+    private let playbackHealthChecker = PlaybackHealthChecker()
     private var activeSecurityScopedURLs: Set<String> = []
     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -1642,6 +1643,7 @@ extension WallpaperManager {
     }
 
     /// Verifica y re‑inicia reproducción si no se aplicó correctamente
+    /// Refactorizado para usar verificaciones asíncronas no bloqueantes con PlaybackHealthChecker
     func ensurePlaying(reason: String) {
         appLogger.info("🩺 ensurePlaying() invocado: \(reason)")
 
@@ -1659,35 +1661,24 @@ extension WallpaperManager {
             return
         }
 
-        // Si se supone que está reproduciendo, validar que existan ventanas
+        // Si se supone que está reproduciendo, validar de forma asíncrona
         if isPlayingWallpaper {
-            if desktopVideoInstances.isEmpty {
-                appLogger.warning("⚠️ ensurePlaying: 0 ventanas. Reintentando creación…")
-                startWallpaperSafe()
-                return
-            }
-
-            // Si alguna ventana no está reproduciendo, forzar play
-            var restartedAny = false
-            for (window, _) in desktopVideoInstances {
-                let rate = window.getPlaybackRate() ?? 0.0
-                if rate == 0.0 {
-                    appLogger.warning("⚠️ Ventana con rate=0. Forzando play…")
-                    window.forcePlay()
-                    restartedAny = true
-                }
-            }
-
-            if restartedAny {
-                appLogger.info("✅ ensurePlaying: reproducción forzada en ventanas con rate=0")
-            } else {
-                appLogger.debug("ℹ️ ensurePlaying: todas las ventanas en reproducción")
-            }
-            
-            // Validar que el bookmark aún sea accesible si hubo fallas
-            if restartedAny {
-                Task {
-                    _ = await resolveBookmark(for: currentVideo)
+            // Lanzar verificación de salud de forma asíncrona sin bloquear main thread
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                
+                // Usar PlaybackHealthChecker para verificación asíncrona
+                let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
+                    windows: self.desktopVideoInstances,
+                    currentVideo: self.currentVideo,
+                    bookmarkActor: self.bookmarkActor
+                )
+                
+                if !isHealthy {
+                    self.appLogger.warning("⚠️ ensurePlaying: verificación de salud falló, reiniciando...")
+                    self.startWallpaperSafe()
+                } else {
+                    self.appLogger.debug("✅ ensurePlaying: reproducción verificada como saludable")
                 }
             }
         } else {
