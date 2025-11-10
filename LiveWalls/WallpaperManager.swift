@@ -313,9 +313,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 case .replace:
                     appLogger.info("🔄 Reemplazando existente: \(existingVideo.name)")
                     // Remover el video existente y continuar con el procesamiento normal
-                    DispatchQueue.main.async {
-                        self.videoFiles.removeAll { $0.id == existingVideo.id }
-                    }
+                    self.videoFiles.removeAll { $0.id == existingVideo.id }
                     replacedCount += 1
                     
                 case .keepBoth:
@@ -370,19 +368,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     bookmarkData: bookmarkData
                 )
                 
-                DispatchQueue.main.async {
-                    let countBefore = self.videoFiles.count
-                    self.videoFiles.append(videoFile)
-                    let countAfter = self.videoFiles.count
-                    
-                    self.saveVideos()
-                    self.appLogger.info("\(String(format: NSLocalizedString("video_added", comment: "Video added"), videoFile.name), privacy: .public)")
-                    self.appLogger.info("\(String(format: NSLocalizedString("videos_count_updated", comment: "Videos count updated"), countBefore, countAfter), privacy: .public)")
-                    
-                    // Additional debug to verify SwiftUI receives the update
-                    print(String(format: NSLocalizedString("videofiles_updated_debug", comment: "VideoFiles updated debug"), self.videoFiles.count))
-                    print(String(format: NSLocalizedString("names_debug", comment: "Names debug"), self.videoFiles.map { $0.name }.joined(separator: ", ")))
-                }
+                let countBefore = self.videoFiles.count
+                self.videoFiles.append(videoFile)
+                let countAfter = self.videoFiles.count
+                
+                self.saveVideos()
+                self.appLogger.info("\(String(format: NSLocalizedString("video_added", comment: "Video added"), videoFile.name), privacy: .public)")
+                self.appLogger.info("\(String(format: NSLocalizedString("videos_count_updated", comment: "Videos count updated"), countBefore, countAfter), privacy: .public)")
+                
+                // Additional debug to verify SwiftUI receives the update
+                print(String(format: NSLocalizedString("videofiles_updated_debug", comment: "VideoFiles updated debug"), self.videoFiles.count))
+                print(String(format: NSLocalizedString("names_debug", comment: "Names debug"), self.videoFiles.map { $0.name }.joined(separator: ", ")))
                 
                 addedCount += 1
                 
@@ -400,24 +396,22 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         // Show import summary
-        DispatchQueue.main.async {
-            var summaryMessage = ""
-            if addedCount > 0 {
-                summaryMessage += String(format: NSLocalizedString("import_summary_added", comment: "Import summary added"), addedCount)
-            }
-            if skippedCount > 0 {
-                if !summaryMessage.isEmpty { summaryMessage += "\n" }
-                summaryMessage += String(format: NSLocalizedString("import_summary_skipped", comment: "Import summary skipped"), skippedCount)
-            }
-            if replacedCount > 0 {
-                if !summaryMessage.isEmpty { summaryMessage += "\n" }
-                summaryMessage += String(format: NSLocalizedString("import_summary_replaced", comment: "Import summary replaced"), replacedCount)
-            }
-            
-            if !summaryMessage.isEmpty {
-                self.notificationManager.showMessage(title: NSLocalizedString("import_completed_title", comment: "Import completed"), message: summaryMessage)
-                self.appLogger.info("📊 Import summary: \(summaryMessage)")
-            }
+        var summaryMessage = ""
+        if addedCount > 0 {
+            summaryMessage += String(format: NSLocalizedString("import_summary_added", comment: "Import summary added"), addedCount)
+        }
+        if skippedCount > 0 {
+            if !summaryMessage.isEmpty { summaryMessage += "\n" }
+            summaryMessage += String(format: NSLocalizedString("import_summary_skipped", comment: "Import summary skipped"), skippedCount)
+        }
+        if replacedCount > 0 {
+            if !summaryMessage.isEmpty { summaryMessage += "\n" }
+            summaryMessage += String(format: NSLocalizedString("import_summary_replaced", comment: "Import summary replaced"), replacedCount)
+        }
+        
+        if !summaryMessage.isEmpty {
+            self.notificationManager.showMessage(title: NSLocalizedString("import_completed_title", comment: "Import completed"), message: summaryMessage)
+            self.appLogger.info("📊 Import summary: \(summaryMessage)")
         }
     }
     
@@ -674,18 +668,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Removes a video from the wallpaper list
     /// - Parameter video: VideoFile to remove
     func removeVideo(_ video: VideoFile) {
-        DispatchQueue.main.async {
-            self.appLogger.info("🗑️ Removing video: \(video.name)")
-            
-            // If it's the current video, stop the wallpaper
-            if self.currentVideo?.id == video.id {
-                self.stopWallpaper()
-                self.currentVideo = nil
-            }
-            
-            self.videoFiles.removeAll { $0.id == video.id }
-            self.saveVideos()
+        self.appLogger.info("🗑️ Removing video: \(video.name)")
+        
+        // If it's the current video, stop the wallpaper
+        if self.currentVideo?.id == video.id {
+            self.stopWallpaper()
+            self.currentVideo = nil
         }
+        
+        self.videoFiles.removeAll { $0.id == video.id }
+        self.saveVideos()
     }
     
     // MARK: - Wallpaper Control

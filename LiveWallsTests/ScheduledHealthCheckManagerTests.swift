@@ -1,99 +1,4 @@
-import XCTest
-@testable import LiveWalls
 
-/// Tests para ScheduledHealthCheckManager
-/// Verifica que las comprobaciones programadas se ejecuten fuera del main thread,
-/// no saturen el hilo principal y puedan cancelarse correctamente.
-final class ScheduledHealthCheckManagerTests: XCTestCase {
-    
-    /// Actor simple para recolectar resultados de forma thread-safe
-    actor Colector {
-        private(set) var razones: [String] = []
-        func agregar(_ razon: String) { razones.append(razon) }
-        func conteo() -> Int { razones.count }
-        func todas() -> [String] { razones }
-    }
-    
-    // MARK: - Test 1: Ejecuta en background sin bloquear main
-    func testScheduledHealthChecksRunInBackground() async throws {
-        let manager = ScheduledHealthCheckManager()
-        let colector = Colector()
-        
-        _ = await manager.scheduleChecks(
-            delays: [0.2, 0.4],
-            reasonPrefix: "test"
-        ) { razon in
-            await colector.agregar(razon)
-        }
-        
-        // Medir una operación trivial en MainActor que debe ser rápida (< 50 ms)
-        let t0 = Date()
-        await MainActor.run { _ = 1 + 1 }
-        let dt = Date().timeIntervalSince(t0)
-        
-        XCTAssertLessThan(dt, 0.05, "El main thread debe permanecer responsivo (<50ms)")
-        
-        // Esperar suficiente tiempo para que ambas comprobaciones se ejecuten
-        try? await Task.sleep(for: .milliseconds(700))
-        let count = await colector.conteo()
-        XCTAssertGreaterThanOrEqual(count, 2, "Deben ejecutarse al menos 2 comprobaciones programadas")
-    }
-    
-    // MARK: - Test 2: No satura el main thread con muchas tareas
-    func testHealthCheckManagerDoesNotSaturateMainThread() async throws {
-        let manager = ScheduledHealthCheckManager()
-        let colector = Colector()
-        
-        // Programar muchas comprobaciones rápidas
-        let delays = stride(from: 0.0, through: 0.5, by: 0.01).map { $0 }
-        _ = await manager.scheduleChecks(
-            delays: delays,
-            reasonPrefix: "stress"
-        ) { razon in
-            await colector.agregar(razon)
-        }
-        
-        // Tres operaciones en MainActor deben ser rápidas incluso bajo carga
-        for _ in 0..<3 {
-            let t0 = Date()
-            await MainActor.run { _ = 2 + 2 }
-            let dt = Date().timeIntervalSince(t0)
-            XCTAssertLessThan(dt, 0.05, "MainActor debe responder <50ms incluso con carga programada")
-        }
-        
-        // Esperar a que la mayor parte de tareas ejecuten
-        try? await Task.sleep(for: .seconds(1))
-        let count = await colector.conteo()
-        XCTAssertGreaterThan(count, 10, "Se espera que múltiples comprobaciones se hayan ejecutado")
-    }
-    
-    // MARK: - Test 3: Cancelación detiene ejecuciones posteriores
-    func testHealthChecksCanBeCancelled() async throws {
-        let manager = ScheduledHealthCheckManager()
-        let colector = Colector()
-        
-        let id = await manager.scheduleChecks(
-            delays: [0.1, 0.3, 0.5],
-            reasonPrefix: "cancel"
-        ) { razon in
-            await colector.agregar(razon)
-        }
-        
-        // Cancelar después de que potencialmente ejecute la primera
-        try? await Task.sleep(for: .milliseconds(150))
-        await manager.cancelSchedule(id: id)
-        
-        // Dar tiempo para validar que no se ejecutan posteriores
-        try? await Task.sleep(for: .milliseconds(600))
-        let todas = await colector.todas()
-        
-        // Debe ejecutarse a lo sumo la primera
-        XCTAssertLessThanOrEqual(todas.count, 1, "La cancelación debe prevenir ejecuciones posteriores")
-        if let unica = todas.first {
-            XCTAssertTrue(unica.contains("0.1"), "Si se ejecutó alguna, debe ser la primera (0.1s)")
-        }
-    }
-}
 import XCTest
 @testable import LiveWalls
 
@@ -138,9 +43,6 @@ final class ScheduledHealthCheckManagerTests: XCTestCase {
             expectation.fulfill()
         }
         
-        // Registrar el thread actual (main thread)
-        let initialThread = Thread.current
-        
         // Lanzar chequeos
         await manager.scheduleHealthChecks(action: action, intervals: intervals)
         
@@ -152,7 +54,7 @@ final class ScheduledHealthCheckManagerTests: XCTestCase {
         XCTAssertEqual(mainThreadCallCount, 0, "Health checks debe ejecutarse en background, no en main thread")
         
         // 2. Se debe ejecutar en background thread
-        XCTAssertGreater(backgroundThreadCallCount, 0, "Health checks debe ejecutarse en al menos 1 background thread")
+        XCTAssertTrue(backgroundThreadCallCount > 0, "Health checks debe ejecutarse en al menos 1 background thread")
         
         // 3. Main thread debe permanecer responsivo (esto se verifica si el test no se cuelga)
     }
@@ -166,12 +68,7 @@ final class ScheduledHealthCheckManagerTests: XCTestCase {
         
         let intervals: [TimeInterval] = [0.1] // Un único intervalo para simplificar
         
-        var threadIds: Set<UInt64> = []
-        
         let action: @Sendable () async -> Void = { [weak self] in
-            // Registrar ID del thread en el que se ejecuta
-            let threadId = pthread_self()
-            threadIds.insert(threadId)
             
             // Simular algo de trabajo
             try? await Task.sleep(nanoseconds: 10_000_000) // 10ms

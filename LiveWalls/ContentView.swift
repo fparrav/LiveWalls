@@ -67,6 +67,7 @@ struct ContentView: View {
             Text(NSLocalizedString("app_title", comment: "Application title"))
                 .font(.title2)
                 .fontWeight(.bold)
+                .accessibilityIdentifier("app_title_text")
             
             Spacer()
             
@@ -79,6 +80,7 @@ struct ContentView: View {
                 }
                 .help(NSLocalizedString("import_help", comment: "Import help text"))
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier("toolbar_import_button")
                 
                 Button(action: {
                     showSettings = true
@@ -87,6 +89,7 @@ struct ContentView: View {
                 }
                 .help(NSLocalizedString("settings_help", comment: "Settings help text"))
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier("toolbar_settings_button")
                 
                 
             }
@@ -157,6 +160,7 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .accessibilityIdentifier("empty_import_button")
             
             Spacer()
         }
@@ -206,6 +210,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(wallpaperManager.currentVideo == nil)
+                .accessibilityIdentifier("bottom_play_toggle_button")
                 
                 // Botón establecer como wallpaper
                 Button(action: {
@@ -221,6 +226,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedVideo == nil)
+                .accessibilityIdentifier("bottom_set_wallpaper_button")
                 
                 // Botón eliminar
                 Button(action: {
@@ -233,6 +239,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(selectedVideo == nil)
+                .accessibilityIdentifier("bottom_delete_button")
             }
         }
         .padding()

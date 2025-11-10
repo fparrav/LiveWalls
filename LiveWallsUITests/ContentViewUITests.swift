@@ -91,4 +91,36 @@ final class ContentViewUITests: XCTestCase {
         // Cerrar ventana
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
     }
+    
+    // MARK: - Tests con identificadores de accesibilidad (Fase 1)
+    
+    /// Test para verificar la existencia de botones de la barra superior usando identificadores
+    func testToolbarButtonsExistByIdentifier() {
+        // Verificar título de la app
+        let titleText = app.staticTexts["app_title_text"]
+        XCTAssertTrue(titleText.waitForExistence(timeout: 2), "El texto del título con identificador 'app_title_text' debería existir")
+        
+        // Verificar botón de importar
+        let importButton = app.buttons["toolbar_import_button"]
+        XCTAssertTrue(importButton.waitForExistence(timeout: 2), "El botón de importar con identificador 'toolbar_import_button' debería existir")
+        
+        // Verificar botón de configuración
+        let settingsButton = app.buttons["toolbar_settings_button"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 2), "El botón de configuración con identificador 'toolbar_settings_button' debería existir")
+    }
+    
+    /// Test para verificar la existencia de controles inferiores usando identificadores
+    func testBottomControlsExistByIdentifier() {
+        // Verificar botón de reproducir/detener
+        let playToggleButton = app.buttons["bottom_play_toggle_button"]
+        XCTAssertTrue(playToggleButton.waitForExistence(timeout: 2), "El botón de reproducir/detener con identificador 'bottom_play_toggle_button' debería existir")
+        
+        // Verificar botón de establecer como wallpaper
+        let setWallpaperButton = app.buttons["bottom_set_wallpaper_button"]
+        XCTAssertTrue(setWallpaperButton.waitForExistence(timeout: 2), "El botón de establecer wallpaper con identificador 'bottom_set_wallpaper_button' debería existir")
+        
+        // Verificar botón de eliminar
+        let deleteButton = app.buttons["bottom_delete_button"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 2), "El botón de eliminar con identificador 'bottom_delete_button' debería existir")
+    }
 } 

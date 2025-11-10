@@ -377,6 +377,7 @@ struct SettingsView: View {
             }
             .buttonStyle(.bordered)
             .keyboardShortcut(.cancelAction)
+            .accessibilityIdentifier("settings_cancel_button")
             
             Button(NSLocalizedString("accept_button", comment: "Accept button")) {
                 saveAllSettings()
@@ -384,6 +385,7 @@ struct SettingsView: View {
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
+            .accessibilityIdentifier("settings_accept_button")
         }
     }
     

@@ -26,13 +26,16 @@ actor ScheduledHealthCheckManager {
         healthCheckTask?.cancel()
         
         // Crear una tarea que se ejecute en background
-        let task = Task.detached { [weak self] in
+        let task = Task.detached {
             for interval in intervals {
-                // Usar Task.sleep en lugar de DispatchQueue.main.asyncAfter
-                // Esto NO bloquea el main thread
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                
-                // Ejecutar la acción en background
+                if Task.isCancelled { break }
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                } catch {
+                    // Cancelado durante el sleep
+                    break
+                }
+                if Task.isCancelled { break }
                 await action()
             }
         }

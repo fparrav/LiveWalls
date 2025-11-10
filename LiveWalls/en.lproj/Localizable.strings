@@ -1,3 +1,49 @@
+/* Application Title and Buttons */
+"app_title" = "LiveWalls";
+"import_button" = "Import";
+"settings_button" = "Settings";
+"import_help" = "Import videos";
+"settings_help" = "Open settings";
+
+/* Empty State */
+"no_videos_title" = "No videos";
+"no_videos_description" = "Import videos to use as animated wallpaper";
+"import_videos_button" = "Import Videos";
+
+/* Bottom Controls */
+"play_button" = "Play";
+"stop_button" = "Stop";
+"set_as_wallpaper" = "Set as Wallpaper";
+"delete_button" = "Delete";
+
+/* Status Messages */
+"active_wallpaper" = "Active: %@";
+"no_active_wallpaper" = "No active wallpaper";
+"videos_total" = "%d videos total";
+
+/* Settings View */
+"settings_title" = "Settings";
+"cancel_button" = "Cancel";
+"accept_button" = "Accept";
+
+/* General Playback Section */
+"general_playback_section" = "General Playback";
+"auto_start_wallpaper" = "Auto-start wallpaper";
+"mute_videos" = "Mute videos";
+
+/* System Section */
+"system_section" = "System";
+"launch_at_login" = "Launch at login";
+"launch_at_login_help" = "Start LiveWalls automatically when logging in";
+"check_for_updates" = "Check for updates";
+"macos_compatibility_warning" = "Some features require macOS 13.0 or higher";
+
+/* Auto Change Section */
+"auto_change_section" = "Auto Change";
+"enable_auto_change" = "Enable auto change";
+"interval_label" = "Interval";
+"minutes_format" = "%d minutes";
+
 /* Transition Section */
 "transition_section" = "Transitions";
 "enable_transitions" = "Enable smooth transitions";
@@ -5,6 +51,57 @@
 "transition_type_label" = "Transition type";
 "crossfade_transition" = "Crossfade";
 "fade_out_fade_in_transition" = "Fade out and fade in";
+
+/* Video Management Section */
+"video_management_section" = "Video Management";
+"videos_saved" = "%d videos saved";
+"duplicate_handling_title" = "Duplicate Handling";
+"duplicate_handling_description" = "Action when importing duplicate videos";
+"duplicate_preference_skip" = "Skip";
+"duplicate_preference_replace" = "Replace";
+"duplicate_preference_keep_both" = "Keep both";
+"optimize_videos_hevc" = "Optimize to HEVC";
+"remove_black_frames" = "Remove black frames";
+"clear_all_videos" = "Clear all videos";
+
+/* Context Menu */
+"disable_for_random" = "Disable for random rotation";
+"enable_for_random" = "Enable for random rotation";
+
+/* Alerts */
+"delete_all_videos_title" = "Delete all videos?";
+"delete_all_videos_message" = "This action cannot be undone";
+"optimize_videos_title" = "Optimize Videos";
+"optimize_videos_message" = "Do you want to optimize all videos to HEVC format?";
+"optimize_button" = "Optimize";
+"remove_black_frames_title" = "Remove Black Frames";
+"remove_black_frames_message" = "Do you want to remove black frames from all videos?";
+"no_videos_to_optimize_title" = "No videos to optimize";
+"no_videos_to_optimize_message" = "All videos are already in HEVC format";
+"permissions_required_title" = "Permissions Required";
+"permissions_required_message" = "Permissions are required for all directories";
+"optimization_completed_title" = "Optimization Completed";
+"optimization_completed_message" = "%d videos optimized successfully";
+"no_videos_available_title" = "No videos available";
+"no_videos_available_message" = "No videos to process";
+"select_directory_black_frames_permission" = "Select directory '%@' to grant write permissions:";
+"insufficient_permissions_title" = "Insufficient Permissions";
+"insufficient_permissions_message" = "Permissions not granted for all directories";
+"optimization_complete_title" = "Optimization Complete";
+"optimization_complete_message" = "%d videos processed successfully";
+"optimization_errors_title" = "Optimization Errors";
+"optimization_errors_message" = "Errors found:\n%@";
+"black_frames_complete_title" = "Black Frame Removal Complete";
+"black_frames_complete_message" = "%d videos processed: %d with frames removed, %d skipped";
+"processing_video_black_frames" = "Processing: %@";
+"video_skipped_no_black_frames" = "Skipped (no black frames): %@";
+"hevc_conversion_completed" = "HEVC conversion completed";
+"optimizing_videos_progress" = "Optimizing Videos";
+"progress_label" = "Progress";
+"processing_video" = "Processing";
+
+/* App Version */
+"app_version" = "Live Walls";
 
 /* Time formats */
 "seconds_format" = "%.1fs";

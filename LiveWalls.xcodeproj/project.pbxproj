@@ -17,10 +17,11 @@
 		55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */; };
 		55846EBE2EBF778A00E46C3B /* WindowCreationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBD2EBF778A00E46C3B /* WindowCreationCoordinator.swift */; };
 		55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */; };
-		55846EC32EBF77A900E46C3B /* VideoOptimizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */; };
 		55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */; };
 		55846EC62EBF883100E46C3B /* ScheduledHealthCheckManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC52EBF883100E46C3B /* ScheduledHealthCheckManager.swift */; };
 		55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */; };
+		55846ECB2EBF8D6B00E46C3B /* MainThreadBlockingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC92EBF8D6B00E46C3B /* MainThreadBlockingTests.swift */; };
+		55846ECC2EBF8D6B00E46C3B /* StartupPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846ECA2EBF8D6B00E46C3B /* StartupPerformanceTests.swift */; };
 		55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */; };
 		55F782AC2E062ABF00E3F2E3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F7829E2E062ABF00E3F2E3 /* InfoPlist.strings */; };
 		55F782AD2E062ABF00E3F2E3 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55F782A92E062ABF00E3F2E3 /* Localizable.strings */; };
@@ -79,6 +80,8 @@
 		55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCreationCoordinatorTests.swift; sourceTree = "<group>"; };
 		55846EC52EBF883100E46C3B /* ScheduledHealthCheckManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledHealthCheckManager.swift; sourceTree = "<group>"; };
 		55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledHealthCheckManagerTests.swift; sourceTree = "<group>"; };
+		55846EC92EBF8D6B00E46C3B /* MainThreadBlockingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadBlockingTests.swift; sourceTree = "<group>"; };
+		55846ECA2EBF8D6B00E46C3B /* StartupPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupPerformanceTests.swift; sourceTree = "<group>"; };
 		55AC1F4E2DE9465900424EA9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		55AC1F502DEA0F1400424EA9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		55F781EC2E06282E00E3F2E3 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
@@ -284,6 +287,8 @@
 		AAAA11112222333344440011 /* LiveWallsTests */ = {
 			isa = PBXGroup;
 			children = (
+				55846EC92EBF8D6B00E46C3B /* MainThreadBlockingTests.swift */,
+				55846ECA2EBF8D6B00E46C3B /* StartupPerformanceTests.swift */,
 				55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */,
 				55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */,
 				55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */,
@@ -462,8 +467,9 @@
 				E6827EA47D70ACDD0E819BAE /* PlaybackHealthCheckerTests.swift in Sources */,
 				55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */,
 				55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */,
-				55846EC32EBF77A900E46C3B /* VideoOptimizerTests.swift in Sources */,
 				55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */,
+				55846ECB2EBF8D6B00E46C3B /* MainThreadBlockingTests.swift in Sources */,
+				55846ECC2EBF8D6B00E46C3B /* StartupPerformanceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -656,13 +662,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LiveWalls/LiveWalls.entitlements;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 202510091125;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"LiveWalls/Preview Content\"";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = CED7KEV553;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LiveWalls/Info.plist;
@@ -677,6 +683,7 @@
 				MARKETING_VERSION = 1.5.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -688,13 +695,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LiveWalls/LiveWalls.entitlements;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 202510091125;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"LiveWalls/Preview Content\"";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = CED7KEV553;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = LiveWalls/Info.plist;
@@ -709,6 +716,7 @@
 				MARKETING_VERSION = 1.5.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -720,8 +728,8 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 202510091125;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
+				DEVELOPMENT_TEAM = CED7KEV553;
+				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.5.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.LiveWallsTests;
@@ -738,8 +746,8 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 202510091125;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
+				DEVELOPMENT_TEAM = CED7KEV553;
+				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.5.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.LiveWallsTests;
@@ -755,8 +763,8 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 202510091125;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
+				DEVELOPMENT_TEAM = CED7KEV553;
+				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.5.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.LiveWallsUITests;
@@ -772,8 +780,8 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 202510091125;
-				DEVELOPMENT_TEAM = "";
-				GENERATE_INFOPLIST_FILE = NO;
+				DEVELOPMENT_TEAM = CED7KEV553;
+				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.5.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.livewalls.LiveWallsUITests;
