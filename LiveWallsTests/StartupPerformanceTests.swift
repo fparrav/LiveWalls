@@ -26,7 +26,7 @@ final class StartupPerformanceTests: XCTestCase {
         let dt = Date().timeIntervalSince(t0)
         XCTAssertLessThan(dt, 0.05, "Main thread debe permanecer responsivo (<50ms)")
         
-        wait(for: [ready], timeout: 1.0)
+        await fulfillment(of: [ready], timeout: 1.0)
     }
 
     // Verifica que el tiempo del "arranque" coordinado esté bajo 200ms en condiciones ideales
@@ -74,7 +74,7 @@ final class StartupPerformanceTests: XCTestCase {
             XCTAssertLessThan(dt, 0.05)
         }
         
-        wait(for: [ready], timeout: 3.0)
+        await fulfillment(of: [ready], timeout: 3.0)
     }
 
     // Verifica que tareas de background completen dentro de un timeout razonable
@@ -90,6 +90,6 @@ final class StartupPerformanceTests: XCTestCase {
         // El main debe seguir responsivo
         await MainActor.run { _ = 3 + 3 }
         
-        wait(for: [exp], timeout: 1.0)
+        await fulfillment(of: [exp], timeout: 1.0)
     }
 }
