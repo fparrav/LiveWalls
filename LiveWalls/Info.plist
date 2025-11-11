@@ -44,11 +44,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.5.10</string>
+	<string>1.6.0</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>202510091125</string>
+	<string>202511111819</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.graphics-design</string>
 	<key>LSBackgroundOnly</key>
@@ -84,10 +84,10 @@
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
-	<key>SUFeedURL</key>
-	<string>https://fparrav.github.io/livewalls-dist/sparkle/appcast.xml</string>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>https://fparrav.github.io/livewalls-dist/sparkle/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>SgZup16oqTvybkLz577QPXDiIiCeOvPKSmfuIR6Bk7g=</string>
 </dict>
