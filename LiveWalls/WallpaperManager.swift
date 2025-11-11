@@ -135,10 +135,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             let success = await self.startupCoordinator.coordinateStartup(
                 hasVideo: { [weak self] in
                     guard let self else { return false }
-                    return await MainActor.run { [weak self] in
-                        guard let self else { return false }
-                        return self.currentVideo != nil && !self.videoFiles.isEmpty
-                    }
+                    return self.currentVideo != nil && !self.videoFiles.isEmpty
                 },
                 hasScreens: { [weak self] in
                     guard let self else { return false }
@@ -146,10 +143,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 },
                 maxRetries: 5,
                 startAction: { [weak self] in
-                    await MainActor.run { [weak self] in
-                        guard let self else { return }
-                        self.startWallpaperSafe()
-                    }
+                    guard let self else { return }
+                    self.startWallpaperSafe()
                 }
             )
             
@@ -754,7 +749,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 // Programar verificaciones de salud post‑arranque en background (Phase 7)
                 await self.scheduledHealthCheckManager.scheduleHealthChecks(
                     action: { [weak self] in
-                        await MainActor.run {
+                        await MainActor.run { [weak self] in
                             self?.ensurePlaying(reason: "post-start scheduled check")
                         }
                     },

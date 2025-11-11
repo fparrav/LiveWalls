@@ -22,16 +22,16 @@ actor StartupCoordinator {
     
     /// Coordina el inicio diferido con backoff exponencial
     /// - Parameters:
-    ///   - hasVideo: Closure async que verifica si hay video disponible
+    ///   - hasVideo: Closure sincrónico en main thread que verifica si hay video disponible
     ///   - hasScreens: Closure async que verifica si hay pantallas disponibles
     ///   - maxRetries: Número máximo de reintentos (default: 5)
-    ///   - startAction: Acción async a ejecutar cuando las condiciones se cumplan
+    ///   - startAction: Acción sincrónica en main thread a ejecutar cuando las condiciones se cumplan
     /// - Returns: `true` si el inicio fue exitoso, `false` si se agotaron los reintentos
     func coordinateStartup(
-        hasVideo: @Sendable () async -> Bool,
+        hasVideo: @MainActor () -> Bool,
         hasScreens: @Sendable () async -> Bool,
         maxRetries: Int = 5,
-        startAction: @Sendable () async -> Void
+        startAction: @MainActor () -> Void
     ) async -> Bool {
         
         logger.info("🔄 Iniciando coordinación de startup (maxRetries: \(maxRetries))")
@@ -44,14 +44,14 @@ actor StartupCoordinator {
             logger.debug("🔍 Intento \(attempt)/\(maxRetries + 1): verificando condiciones...")
             
             // Verificar condiciones
-            let videoAvailable = await hasVideo()
+            let videoAvailable = await MainActor.run { hasVideo() }
             let screensAvailable = await hasScreens()
             
             if videoAvailable && screensAvailable {
                 logger.info("✅ Condiciones cumplidas en intento \(attempt): iniciando wallpaper")
                 
                 // Ejecutar acción de inicio
-                await startAction()
+                await MainActor.run { startAction() }
                 
                 return true
             }

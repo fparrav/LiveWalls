@@ -26,7 +26,7 @@ final class StartupCoordinatorTests: XCTestCase {
         var actionExecuted = false
         
         // Simular condiciones donde NO hay video (debe reintentar)
-        let hasVideo: () -> Bool = { false }
+        let hasVideo: @MainActor () -> Bool = { false }
         let hasScreens: () async -> Bool = { true }
         let startAction: @MainActor () -> Void = {
             actionExecuted = true
@@ -57,7 +57,7 @@ final class StartupCoordinatorTests: XCTestCase {
         var retryCount = 0
         var retryTimestamps: [Date] = []
         
-        let hasVideo: () -> Bool = {
+        let hasVideo: @MainActor () -> Bool = {
             retryCount += 1
             retryTimestamps.append(Date())
             return false // Siempre falla para forzar reintentos
@@ -94,7 +94,7 @@ final class StartupCoordinatorTests: XCTestCase {
     func testCoordinateStartupStopsAfterMaxRetries() async throws {
         var attemptCount = 0
         
-        let hasVideo: () -> Bool = {
+        let hasVideo: @MainActor () -> Bool = {
             attemptCount += 1
             return false // Siempre falla
         }
@@ -119,7 +119,7 @@ final class StartupCoordinatorTests: XCTestCase {
     func testCoordinateStartupExecutesStartActionWhenReady() async throws {
         var actionExecuted = false
         
-        let hasVideo: () -> Bool = { true } // Video disponible
+        let hasVideo: @MainActor () -> Bool = { true } // Video disponible
         let hasScreens: () async -> Bool = { true } // Pantallas disponibles
         let startAction: @MainActor () -> Void = {
             actionExecuted = true
