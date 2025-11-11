@@ -135,8 +135,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             let success = await self.startupCoordinator.coordinateStartup(
                 hasVideo: { [weak self] in
                     guard let self else { return false }
-                    return await MainActor.run {
-                        self.currentVideo != nil && !self.videoFiles.isEmpty
+                    return await MainActor.run { [weak self] in
+                        guard let self else { return false }
+                        return self.currentVideo != nil && !self.videoFiles.isEmpty
                     }
                 },
                 hasScreens: { [weak self] in
@@ -145,7 +146,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 },
                 maxRetries: 5,
                 startAction: { [weak self] in
-                    await MainActor.run {
+                    await MainActor.run { [weak self] in
                         guard let self else { return }
                         self.startWallpaperSafe()
                     }
@@ -1645,7 +1646,7 @@ extension WallpaperManager {
         appLogger.info("🩺 ensurePlaying() invocado: \(reason)")
 
         // Necesitamos datos mínimos
-        guard let currentVideo = currentVideo else {
+        guard currentVideo != nil else {
             appLogger.debug("ℹ️ No currentVideo disponible")
             return
         }
