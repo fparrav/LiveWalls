@@ -373,6 +373,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 self.videoFiles.append(videoFile)
                 let countAfter = self.videoFiles.count
                 
+                // Si no hay video activo y este es el primer video, establecerlo como activo
+                if self.currentVideo == nil && countBefore == 0 {
+                    self.currentVideo = videoFile
+                    await self.persistenceActor.saveCurrentVideo(videoFile)
+                    self.appLogger.info("✨ Primer video agregado, establecido como activo: \(videoFile.name)")
+                }
+                
                 self.saveVideos()
                 self.appLogger.info("\(String(format: NSLocalizedString("video_added", comment: "Video added"), videoFile.name), privacy: .public)")
                 self.appLogger.info("\(String(format: NSLocalizedString("videos_count_updated", comment: "Videos count updated"), countBefore, countAfter), privacy: .public)")
@@ -671,13 +678,25 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     func removeVideo(_ video: VideoFile) {
         self.appLogger.info("🗑️ Removing video: \(video.name)")
         
-        // If it's the current video, stop the wallpaper
-        if self.currentVideo?.id == video.id {
+        // If it's the current video, stop the wallpaper and select another
+        let wasCurrentVideo = self.currentVideo?.id == video.id
+        if wasCurrentVideo {
             self.stopWallpaper()
             self.currentVideo = nil
         }
         
         self.videoFiles.removeAll { $0.id == video.id }
+        
+        // Si era el video actual y quedan otros videos, seleccionar el primero
+        if wasCurrentVideo && !self.videoFiles.isEmpty {
+            let newCurrentVideo = self.videoFiles.first!
+            self.currentVideo = newCurrentVideo
+            Task {
+                await self.persistenceActor.saveCurrentVideo(newCurrentVideo)
+            }
+            self.appLogger.info("🔄 Video actual eliminado, nuevo video seleccionado: \(newCurrentVideo.name)")
+        }
+        
         self.saveVideos()
     }
     
