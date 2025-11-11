@@ -49,15 +49,26 @@ final class StartupPerformanceTests: XCTestCase {
         let coordinator = StartupCoordinator()
         let ready = XCTestExpectation(description: "coordinateStartup finished with retries")
         
+        // Actor para encapsular el contador mutable y evitar warning de captura mutable en closure @Sendable
+        actor RetryTracker {
+            private var count = 0
+            func increment() {
+                count += 1
+            }
+            func shouldRetry() -> Bool {
+                count > 1
+            }
+        }
+        
         // Simular que pantallas no listas al inicio y listas luego
-        var attempts = 0
+        let tracker = RetryTracker()
         Task {
             let ok = await coordinator.coordinateStartup(
                 hasVideo: { true },
                 hasScreens: {
-                    attempts += 1
+                    await tracker.increment()
                     // Falla la primera vez, luego true
-                    return attempts > 1
+                    return await tracker.shouldRetry()
                 },
                 maxRetries: 3,
                 startAction: { /* no-op */ }

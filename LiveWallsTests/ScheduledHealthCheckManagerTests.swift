@@ -104,12 +104,23 @@ final class ScheduledHealthCheckManagerTests: XCTestCase {
     /// Verifica que los chequeos programados pueden ser cancelados correctamente
     func testHealthChecksCanBeCancelled() async {
         let expectation = XCTestExpectation(description: "Health checks cancelled")
-        var executionCount = 0
+        
+        // Actor para encapsular el contador mutable y evitar warning de captura mutable en closure @Sendable
+        actor ExecutionCounter {
+            private var count = 0
+            func increment() {
+                count += 1
+            }
+            func getCount() -> Int {
+                count
+            }
+        }
         
         let intervals: [TimeInterval] = [0.1, 0.3, 0.5]
+        let counter = ExecutionCounter()
         
         let action: @Sendable () async -> Void = {
-            executionCount += 1
+            await counter.increment()
         }
         
         // Lanzar chequeos
@@ -126,6 +137,7 @@ final class ScheduledHealthCheckManagerTests: XCTestCase {
         
         // Verificar que se ejecutó al menos una vez (probablemente solo 1)
         // pero no todas las programadas
+        let executionCount = await counter.getCount()
         XCTAssertLessThan(executionCount, 3, "Cancelación debe prevenir ejecuciones futuras")
         
         expectation.fulfill()
