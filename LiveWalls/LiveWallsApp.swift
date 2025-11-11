@@ -5,8 +5,6 @@ import os.log
 /// Logger for the main application
 fileprivate let appLogger = Logger(subsystem: "com.livewalls.app", category: "MainApp")
 
-
-
 @main
 struct LiveWallsApp: App {
     // AppDelegate initialization
@@ -23,23 +21,20 @@ struct LiveWallsApp: App {
         CommandLine.arguments.contains("-UITests")
     }
     
-    @SceneBuilder
     var body: some Scene {
         WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
                 .onAppear {
-                    // Configure AppDelegate after the view appears
                     appDelegate.wallpaperManager = wallpaperManager
-                    
-                    // In UI test mode, ensure window becomes key and visible
                     if isUITesting {
+                        appLogger.info("🧪 UI test window content appeared")
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             if let window = NSApp.windows.first(where: { !$0.className.contains("StatusBar") && !$0.className.contains("MenuWindow") }) {
                                 window.makeKeyAndOrderFront(nil)
                                 NSApp.activate(ignoringOtherApps: true)
-                                appLogger.info("🧪 UI test window activated and brought to front")
+                                appLogger.info("🧪 UI test window activated - Window count: \(NSApp.windows.count)")
                             }
                         }
                     } else {
@@ -49,31 +44,14 @@ struct LiveWallsApp: App {
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
-        .commands {
-            // Remove the "New" menu item since this is not a document-based app
-            CommandGroup(replacing: .newItem) { }
-            
-            // Replace default About panel to show our SwiftUI About window
-            CommandGroup(replacing: .appInfo) {
-                Button(NSLocalizedString("about", comment: "About")) {
-                    NSApp.orderFrontStandardAboutPanel(nil)
-                    NSApp.activate(ignoringOtherApps: true)
-                }
-                Divider()
-                Button(NSLocalizedString("check_for_updates", comment: "Check for updates")) {
-                    InAppUpdater.shared.checkForUpdates()
-                }
-            }
-        }
-
+        
         MenuBarExtra("Live Walls", image: "statusbar-icon") {
             StatusBarMenuView()
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
         }
         .menuBarExtraStyle(.menu)
-
-        // About window
+        
         WindowGroup(id: "about") {
             AboutView()
         }
@@ -99,16 +77,3 @@ struct LiveWallsApp: App {
         }
     }
 }
-
-// Considera añadir un MockWallpaperManager si necesitas comentar el real para pruebas:
-// final class MockWallpaperManager: ObservableObject {
-//     @Published var videoFiles: [VideoFile] = []
-//     @Published var currentVideo: VideoFile? = nil
-//     @Published var isPlayingWallpaper: Bool = false
-//     func setActiveVideo(_ video: VideoFile) {}
-//     func removeVideo(_ video: VideoFile) {}
-//     func addVideoFiles(urls: [URL]) {}
-//     func toggleWallpaper() {}
-//     func stopWallpaper() {}
-//     func resolveBookmark(for video: VideoFile) -> URL? { nil }
-// }

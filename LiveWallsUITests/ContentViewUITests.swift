@@ -106,49 +106,52 @@ final class ContentViewUITests: XCTestCase {
     
     // MARK: - Tests con identificadores de accesibilidad (Fase 1)
     
-    /// Test de diagnóstico: verificar qué elementos encuentra XCTest
-    func testDiagnosticUIHierarchy() {
-        print("=== DIAGNOSTIC TEST START ===")
-        print("Windows count: \(app.windows.count)")
-        print("Buttons count: \(app.buttons.count)")
-        print("StaticTexts count: \(app.staticTexts.count)")
-        
-        // Give extra time for window to appear (increased from 2s to 3s)
-        sleep(3)
-        
-        print("After 3s - Windows count: \(app.windows.count)")
-        print("After 3s - Buttons count: \(app.buttons.count)")
-        print("After 3s - StaticTexts count: \(app.staticTexts.count)")
-        
-        // Try to find ANY button
-        if app.buttons.count > 0 {
-            print("=== BUTTONS FOUND ===")
-            for i in 0..<min(app.buttons.count, 5) {
-                let button = app.buttons.element(boundBy: i)
-                print("Button \(i): identifier='\(button.identifier)', label='\(button.label)'")
-            }
-        }
-        
-        // Try to find ANY static text
-        if app.staticTexts.count > 0 {
-            print("=== STATIC TEXTS FOUND ===")
-            for i in 0..<min(app.staticTexts.count, 5) {
-                let text = app.staticTexts.element(boundBy: i)
-                print("StaticText \(i): identifier='\(text.identifier)', label='\(text.label)'")
-            }
-        }
-        
-        // Try to find ANY window
-        if app.windows.count > 0 {
-            print("=== WINDOWS FOUND ===")
-            for i in 0..<app.windows.count {
-                let window = app.windows.element(boundBy: i)
-                print("Window \(i): identifier='\(window.identifier)', title='\(window.title)'")
-            }
-        }
-        
-        print("=== DIAGNOSTIC TEST END ===")
-    }
+     /// Test de diagnóstico: verificar qué elementos encuentra XCTest
+     func testDiagnosticUIHierarchy() {
+         print("=== DIAGNOSTIC TEST START ===")
+         print("Windows count: \(app.windows.count)")
+         print("Buttons count: \(app.buttons.count)")
+         print("StaticTexts count: \(app.staticTexts.count)")
+         
+         // Give extra time for window to appear (increased from 2s to 3s)
+         sleep(3)
+         
+         print("After 3s - Windows count: \(app.windows.count)")
+         print("After 3s - Buttons count: \(app.buttons.count)")
+         print("After 3s - StaticTexts count: \(app.staticTexts.count)")
+         
+         // Try to find ANY button
+         if app.buttons.count > 0 {
+             print("=== BUTTONS FOUND ===")
+             for i in 0..<min(app.buttons.count, 5) {
+                 let button = app.buttons.element(boundBy: i)
+                 print("Button \(i): identifier='\(button.identifier)', label='\(button.label)'")
+             }
+         }
+         
+         // Try to find ANY static text
+         if app.staticTexts.count > 0 {
+             print("=== STATIC TEXTS FOUND ===")
+             for i in 0..<min(app.staticTexts.count, 5) {
+                 let text = app.staticTexts.element(boundBy: i)
+                 print("StaticText \(i): identifier='\(text.identifier)', label='\(text.label)'")
+             }
+         }
+         
+         // Try to find ANY window
+         if app.windows.count > 0 {
+             print("=== WINDOWS FOUND ===")
+             for i in 0..<app.windows.count {
+                 let window = app.windows.element(boundBy: i)
+                 print("Window \(i): identifier='\(window.identifier)', title='\(window.title)'")
+             }
+         }
+         
+         print("=== DIAGNOSTIC TEST END ===")
+         
+         // Assertion: At least one window should exist in UI test mode
+         XCTAssertTrue(app.windows.count > 0, "At least one window should exist in UI test mode")
+     }
     
     /// Test para verificar la existencia de botones de la barra superior usando identificadores
     func testToolbarButtonsExistByIdentifier() {
