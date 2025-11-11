@@ -34,6 +34,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         InAppUpdater.shared.checkOnLaunchAndNotify()
     }
     
+    // Prevent automatic document creation when app launches
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        logger.info("🚫 Preventing automatic untitled document creation")
+        return false
+    }
+    
+    // Prevent automatic document creation on reopen
+    func applicationOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        logger.info("🚫 Preventing automatic untitled file creation on reopen")
+        return false
+    }
+    
     /// Configura el manejo de cierre de ventanas
     private func setupWindowCloseHandling() {
         // Observar el cierre de ventanas para ajustar la política de activación
