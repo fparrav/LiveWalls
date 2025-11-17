@@ -1126,8 +1126,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         // FASE 5.3: Destruir ventanas antiguas de forma garantizada usando DispatchGroup
-        await withCheckedContinuation { continuation in
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let group = DispatchGroup()
+            var hasResumed = false
+            let resumeLock = NSLock()
+            
+            // Helper para resumir solo una vez
+            let resumeOnce = {
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+                if !hasResumed {
+                    hasResumed = true
+                    continuation.resume()
+                }
+            }
             
             for (window, url) in oldInstances {
                 group.enter()
@@ -1146,13 +1158,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             // Esperar con timeout de 5 segundos
             group.notify(queue: .main) {
                 self.appLogger.info("✅ Ventanas antiguas destruidas completamente")
-                continuation.resume()
+                resumeOnce()
             }
             
             // Timeout de seguridad
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
                 self.appLogger.warning("⚠️ Timeout esperando destrucción de ventanas - continuando")
-                continuation.resume()
+                resumeOnce()
             }
         }
         
