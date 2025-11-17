@@ -107,6 +107,16 @@ private var videoURL: URL
 
     // Definition of playerItem property
     private var playerItem: AVPlayerItem?
+    
+    // FASE 5.1: Garantizar Player Ready antes de Transición
+    /// Indica si el reproductor está completamente configurado y listo para reproducir
+    private(set) var isPlayerReady: Bool = false
+    
+    /// Indica si el reproductor debe iniciar en pausa para pre-carga
+    private let startPaused: Bool
+    
+    /// Indica si hay una activación de reproducción pendiente
+    private var activationPending: Bool = false
 
     /// Initializes the window with the screen and accessible video URL (active security-scoped).
     /// IMPORTANT: The window does NOT take ownership of security-scoped access.
@@ -114,9 +124,12 @@ private var videoURL: URL
     /// - Parameters:
     ///   - screen: Target screen.
     ///   - videoURL: Video URL with active security-scoped access.
-    public init(screen: NSScreen, videoURL: URL) {
+    ///   - startPaused: Si es true, el reproductor se configura pero no inicia reproducción automáticamente
+    ///   - staticImageURL: URL opcional de imagen estática para mostrar como placeholder durante pre-carga
+    public init(screen: NSScreen, videoURL: URL, startPaused: Bool = false, staticImageURL: URL? = nil) {
         self.videoURL = videoURL
         self.urlSecurityScoped = nil
+        self.startPaused = startPaused
         let contentRect = screen.frame
         super.init(
             contentRect: contentRect,
@@ -125,6 +138,12 @@ private var videoURL: URL
             defer: false
         )
         setupWindow(for: screen)
+        
+        // Si hay imagen estática, mostrarla como placeholder
+        if let staticImageURL = staticImageURL {
+            showStaticPlaceholder(from: staticImageURL)
+        }
+        
         Task {
             await setupPlayer(with: videoURL)
         }
@@ -227,10 +246,19 @@ private var videoURL: URL
                         self.playerItem = newPlayerItem
                         self.playerLayer = newPlayerLayer
 
-                        // Start playback
-                        newPlayer.play()
+                        // Marcar como listo antes de reproducir
+                        self.isPlayerReady = true
                         
-                        memoryLogger.info("✅ Player configured successfully for: \(url.lastPathComponent)")
+                        // Start playback solo si NO está en modo pausado
+                        if !self.startPaused {
+                            newPlayer.play()
+                            memoryLogger.info("✅ Player configured and playing: \(url.lastPathComponent)")
+                        } else {
+                            // En modo pausado, mantener pausa pero marcar como listo
+                            newPlayer.pause()
+                            memoryLogger.info("✅ Player configured (paused, ready for activation): \(url.lastPathComponent)")
+                        }
+                        
                         continuation.resume()
                     }
                 } catch {
@@ -257,7 +285,10 @@ private var videoURL: URL
             switch item.status {
             case .readyToPlay:
                 memoryLogger.info("✅ PlayerItem ready to play")
-                player.play()
+                // Solo auto-play si NO está en modo pausado
+                if !self.startPaused {
+                    player.play()
+                }
             case .failed:
                 memoryLogger.error("❌ PlayerItem failed: \(item.error?.localizedDescription ?? "Unknown error")")
                 self.cleanupPlayer()
@@ -271,7 +302,8 @@ private var videoURL: URL
         // Observe playback rate
         playerRateObserver = player.observe(\.rate, options: [.new]) { [weak self] player, _ in
             guard let self = self else { return }
-            if player.rate == 0 && !self.isClosing {
+            // Solo reiniciar si no está cerrando, no está pausado intencionalmente, y no hay activación pendiente
+            if player.rate == 0 && !self.isClosing && !self.startPaused && !self.activationPending {
                 memoryLogger.warning("⚠️ Player stopped unexpectedly")
                 player.play()
             }
@@ -284,10 +316,83 @@ private var videoURL: URL
             queue: .main
         ) { [weak self] _ in
             guard let self = self else { return }
-            if !self.isClosing {
+            // Solo reiniciar si no está cerrando y no está en modo pausado
+            if !self.isClosing && !self.startPaused {
                 memoryLogger.info("🔄 Video reached end, restarting...")
                 player.seek(to: .zero)
                 player.play()
+            }
+        }
+    }
+    
+    // MARK: - FASE 5.1: Activación de Reproducción
+    
+    /// Activa la reproducción del video pre-cargado
+    /// Este método debe llamarse después de que la transición visual haya finalizado
+    /// - Returns: true si la activación fue exitosa, false si el player no está listo
+    @discardableResult
+    public func activatePlayback() -> Bool {
+        guard isPlayerReady else {
+            memoryLogger.warning("⚠️ Intento de activar playback pero player no está listo")
+            return false
+        }
+        
+        guard let player = player else {
+            memoryLogger.error("❌ Intento de activar playback pero player es nil")
+            return false
+        }
+        
+        activationPending = true
+        
+        // Remover placeholder estático si existe
+        removeStaticPlaceholder()
+        
+        // Iniciar reproducción
+        player.play()
+        activationPending = false
+        
+        memoryLogger.info("✅ Reproducción activada exitosamente")
+        return true
+    }
+    
+    /// Muestra una imagen estática como placeholder mientras se carga el video
+    private func showStaticPlaceholder(from url: URL) {
+        guard let contentView = self.contentView else { return }
+        
+        // Cargar imagen en background thread para no bloquear main thread (FASE 5.2)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            guard let imageData = try? Data(contentsOf: url),
+                  let nsImage = NSImage(data: imageData) else {
+                memoryLogger.warning("⚠️ No se pudo cargar imagen placeholder desde: \(url.path)")
+                return
+            }
+            
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                
+                // Crear y configurar image view
+                let imageView = NSImageView(frame: contentView.bounds)
+                imageView.image = nsImage
+                imageView.imageScaling = .scaleProportionallyUpOrDown
+                imageView.autoresizingMask = [.width, .height]
+                imageView.identifier = NSUserInterfaceItemIdentifier("staticPlaceholder")
+                
+                contentView.addSubview(imageView)
+                memoryLogger.info("📷 Placeholder estático mostrado")
+            }
+        }
+    }
+    
+    /// Remueve el placeholder estático si existe
+    private func removeStaticPlaceholder() {
+        guard let contentView = self.contentView else { return }
+        
+        for subview in contentView.subviews {
+            if subview.identifier?.rawValue == "staticPlaceholder" {
+                subview.removeFromSuperview()
+                memoryLogger.info("🗑️ Placeholder estático removido")
             }
         }
     }
