@@ -54,27 +54,11 @@ Una aplicación nativa de macOS para usar videos como fondos de pantalla dinámi
 
 ## ⚙️ Instalación
 
-### 📥 Descarga Release (Recomendado)
+### 📥 Descarga DMG
 
 1. Ve a [GitHub Releases](https://github.com/fparrav/LiveWalls/releases)
 2. Descarga el archivo `.dmg` más reciente
 3. Abre el DMG y arrastra LiveWalls a Aplicaciones
-
-### 🍺 Instalación con Homebrew (Recomendado para usuarios avanzados)
-
-**¿No tienes Homebrew?** [Instálalo aquí](https://brew.sh)
-
-```bash
-brew tap fparrav/livewalls
-brew install livewalls
-```
-
-**Ventajas del método Homebrew:**
-- ✅ Instalación automática sin configuración manual
-- ✅ Sin problemas de quarantine de macOS  
-- ✅ Actualizaciones fáciles con `brew upgrade`
-
-**📋 Nota:** LiveWalls no está en el repositorio oficial de Homebrew porque requiere certificado Apple Developer ($99/año) para apps firmadas. Como proyecto open source gratuito, usamos un "tap" personal que permite distribución segura de apps no firmadas.
 
 ### ⚠️ Importante: Aplicación sin firma digital
 
@@ -102,23 +86,6 @@ xattr -d com.apple.quarantine /Applications/LiveWalls.app
 - Xcode 15.0 o superior (para compilar desde código)
 
 ## 🛠️ Compilar desde código fuente
-
-1. **Clonar el repositorio**:
-   ```bash
-   git clone https://github.com/fparrav/LiveWalls.git
-   cd LiveWalls
-   ```
-
-2. **Abrir en Xcode**:
-   ```bash
-   open LiveWalls.xcodeproj
-   ```
-
-3. **Compilar y ejecutar**:
-   - Presiona `⌘+R` en Xcode
-   - O usa el script: `./build.sh run`
-
-### 🛠️ Compilar desde código fuente
 
 1. **Clonar el repositorio**:
    ```bash

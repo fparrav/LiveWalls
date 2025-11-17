@@ -80,15 +80,5 @@
 	<string>alert</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>notification_usage_description</string>
-	<key>SUAllowsAutomaticUpdates</key>
-	<false/>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUEnableInstallerLauncherService</key>
-	<true/>
-	<key>SUFeedURL</key>
-	<string>https://fparrav.github.io/livewalls-dist/sparkle/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>SgZup16oqTvybkLz577QPXDiIiCeOvPKSmfuIR6Bk7g=</string>
 </dict>
 </plist>
