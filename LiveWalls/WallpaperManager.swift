@@ -47,6 +47,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private var transitionDuration: TimeInterval = 2.0
     private var transitionType: TransitionManager.TransitionType = .crossfade
     
+    // FASE 5.3: Flag para prevenir transiciones concurrentes
+    private var isTransitioning = false
+    
     // MARK: - Variables for window destruction synchronization
     var pendingDestroyCompletion: (() -> Void)? = nil
     var pendingWindowClosures: Set<NSWindow> = []
@@ -1028,12 +1031,22 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     /// Changes to the next video with a smooth transition
+    /// FASE 5.1 + 5.3: Pre-carga con frame estático y destrucción garantizada
     private func changeToNextVideoWithTransition(to nextVideo: VideoFile) async {
+        // FASE 5.3: Prevenir transiciones concurrentes
+        guard !isTransitioning else {
+            appLogger.warning("⚠️ Transición ya en progreso - ignorando solicitud")
+            return
+        }
+        
+        isTransitioning = true
+        defer { isTransitioning = false }
+        
         appLogger.info("🔄 Cambiando con transición a: \(nextVideo.name)")
         
         // Ensure we have a current video selected
         guard currentVideo != nil else {
-            appLogger.error("❌ No se pudo obtener el URL del video actual")
+            appLogger.error("❌ No hay video actual")
             await setActiveVideo(nextVideo)
             return
         }
@@ -1045,57 +1058,111 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             return
         }
         
-        // Create a temporary window for the next video to start playing
-        let nextWindow = DesktopVideoWindowMejorada(screen: NSScreen.main ?? NSScreen.screens.first!, videoURL: nextURL)
-        nextWindow.delegate = self
-        nextWindow.orderFront(nil)
-        nextWindow.orderBack(nil)
+        // FASE 5.1: Generar frame estático en background (no bloqueante)
+        let staticImageURL = await generateStaticWallpaperFrame(for: nextURL)
         
-        // Set initial opacity for smooth transition
-        DispatchQueue.main.async {
-            nextWindow.setOpacity(0.0) // Start with invisible
+        // FASE 5.1: Crear ventanas con startPaused=true y placeholder estático
+        let screens = NSScreen.screens
+        let newWindows = await windowCreationCoordinator.createWindowsAsync(
+            screens: screens,
+            videoFile: nextVideo,
+            bookmarkActor: bookmarkActor,
+            startPaused: true,
+            staticImageURL: staticImageURL
+        )
+        
+        // Verificar que todas las ventanas fueron creadas
+        guard !newWindows.isEmpty else {
+            appLogger.error("❌ No se pudieron crear ventanas para transición")
+            return
         }
         
-        // Get the current window
-        let currentWindow = desktopVideoInstances.first?.window
+        // FASE 5.1: Esperar a que TODAS las ventanas estén ready (ya implementado en coordinator)
+        appLogger.info("✅ \(newWindows.count) ventanas listas para transición")
         
-        // Perform transition using TransitionManager
+        // Configurar ventanas para transición
+        for window in newWindows {
+            if let videoWindow = window as? DesktopVideoWindowMejorada {
+                videoWindow.delegate = self
+                videoWindow.orderFront(nil)
+                videoWindow.orderBack(nil)
+                videoWindow.setOpacity(0.0) // Iniciar invisible
+            }
+        }
+        
+        // Obtener ventanas actuales para la transición
+        let currentWindows = desktopVideoInstances.map { $0.window }
+        let currentWindow = currentWindows.first
+        let firstNewWindow = newWindows.first as? DesktopVideoWindowMejorada
+        
+        // Realizar transición visual usando TransitionManager
         if isTransitionEnabled {
             switch transitionType {
             case .crossfade:
-                transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: nextWindow)
+                transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: firstNewWindow)
             case .fadeOutFadeIn:
-                // For fadeOutFadeIn, we would need to implement this in TransitionManager
-                // For now, we'll use crossfade as default
-                transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: nextWindow)
+                transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: firstNewWindow)
             }
             
-            // Wait for transition to complete
+            // Esperar que la transición visual complete
             try? await Task.sleep(for: .seconds(transitionDuration))
         } else {
-            // If transitions are disabled, just wait a short time for the new window to be ready
+            // Sin transición, esperar brevemente
             try? await Task.sleep(for: .milliseconds(100))
         }
         
-        // After transition, clean up old windows and set new video as active
-        let oldWindows = desktopVideoInstances
-        desktopVideoInstances.removeAll()
+        // FASE 5.1: DESPUÉS de la transición visual, activar reproducción
+        await windowCreationCoordinator.activatePlaybackInWindows(newWindows)
         
-        // Create new windows for the next video
-        await createDesktopWindows(for: nextVideo, accessibleURL: nextURL)
+        // FASE 5.3: Guardar referencias de ventanas antiguas y limpiar
+        let oldInstances = desktopVideoInstances
         
-        // Clean up old window after transition
-        for (window, url) in oldWindows {
-            window.close { [weak self] in
-                guard let self else { return }
-                Task { @MainActor in
-                    self.safeStopSecurityScopedAccess(for: url)
+        // Actualizar desktopVideoInstances con las nuevas ventanas
+        desktopVideoInstances = newWindows.compactMap { window in
+            if let videoWindow = window as? DesktopVideoWindowMejorada {
+                return (window: videoWindow, accessibleURL: nextURL)
+            }
+            return nil
+        }
+        
+        // FASE 5.3: Destruir ventanas antiguas de forma garantizada usando DispatchGroup
+        await withCheckedContinuation { continuation in
+            let group = DispatchGroup()
+            
+            for (window, url) in oldInstances {
+                group.enter()
+                window.close { [weak self] in
+                    guard let self else {
+                        group.leave()
+                        return
+                    }
+                    Task { @MainActor in
+                        self.safeStopSecurityScopedAccess(for: url)
+                        group.leave()
+                    }
                 }
+            }
+            
+            // Esperar con timeout de 5 segundos
+            group.notify(queue: .main) {
+                self.appLogger.info("✅ Ventanas antiguas destruidas completamente")
+                continuation.resume()
+            }
+            
+            // Timeout de seguridad
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                self.appLogger.warning("⚠️ Timeout esperando destrucción de ventanas - continuando")
+                continuation.resume()
             }
         }
         
-        // Update active video
+        // Actualizar video activo
         await setActiveVideo(nextVideo)
+        
+        // Limpiar frame estático temporal si existe
+        if let staticImageURL = staticImageURL {
+            try? FileManager.default.removeItem(at: staticImageURL)
+        }
         
         appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
     }
