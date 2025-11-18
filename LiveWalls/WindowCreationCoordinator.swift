@@ -70,21 +70,31 @@ actor WindowCreationCoordinator {
         // FASE 5.1: Si startPaused es true, esperar a que TODAS las ventanas estén ready
         if startPaused {
             print("⏳ Esperando a que todas las ventanas estén listas...")
-            let maxWaitTime: TimeInterval = 10.0 // Timeout de 10 segundos
+            let maxWaitTime: TimeInterval = 5.0 // Timeout de 5 segundos
             let startTime = Date()
             
-            while !createdWindows.allSatisfy({ $0.isPlayerReady }) {
+            var allReady = false
+            while !allReady {
                 // Verificar timeout
                 if Date().timeIntervalSince(startTime) > maxWaitTime {
                     print("⚠️ Timeout esperando ventanas ready - continuando de todas formas")
                     break
                 }
                 
-                // Esperar un poco antes de verificar nuevamente
-                try? await Task.sleep(for: .milliseconds(100))
+                // Verificar estado de las ventanas en MainActor
+                allReady = await MainActor.run {
+                    createdWindows.allSatisfy({ $0.isPlayerReady })
+                }
+                
+                if !allReady {
+                    // Esperar un poco antes de verificar nuevamente
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
             }
             
-            let readyCount = createdWindows.filter({ $0.isPlayerReady }).count
+            let readyCount = await MainActor.run {
+                createdWindows.filter({ $0.isPlayerReady }).count
+            }
             print("✅ \(readyCount)/\(createdWindows.count) ventanas listas")
         }
         

@@ -1112,7 +1112,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         // FASE 5.1: DESPUÉS de la transición visual, activar reproducción
-        await windowCreationCoordinator.activatePlaybackInWindows(newWindows)
+        let successCount = await windowCreationCoordinator.activatePlaybackInWindows(newWindows)
+        
+        // Verificar que al menos algunas ventanas activaron reproducción
+        if successCount == 0 {
+            appLogger.warning("⚠️ Ninguna ventana pudo activar reproducción - posible problema de timing")
+        } else if successCount < newWindows.count {
+            appLogger.warning("⚠️ Solo \(successCount)/\(newWindows.count) ventanas activaron reproducción")
+        }
         
         // FASE 5.3: Guardar referencias de ventanas antiguas y limpiar
         let oldInstances = desktopVideoInstances
@@ -1132,11 +1139,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             let resumeLock = NSLock()
             
             // Helper para resumir solo una vez
-            let resumeOnce = {
+            let resumeOnce = { (reason: String) in
                 resumeLock.lock()
                 defer { resumeLock.unlock() }
                 if !hasResumed {
                     hasResumed = true
+                    self.appLogger.info("📍 Continuando ejecución: \(reason)")
                     continuation.resume()
                 }
             }
@@ -1157,14 +1165,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             
             // Esperar con timeout de 5 segundos
             group.notify(queue: .main) {
-                self.appLogger.info("✅ Ventanas antiguas destruidas completamente")
-                resumeOnce()
+                resumeOnce("Todas las ventanas antiguas fueron destruidas")
             }
             
             // Timeout de seguridad
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                self.appLogger.warning("⚠️ Timeout esperando destrucción de ventanas - continuando")
-                resumeOnce()
+                resumeOnce("Timeout de 5s alcanzado esperando destrucción")
             }
         }
         
