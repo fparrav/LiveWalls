@@ -10,11 +10,15 @@ actor WindowCreationCoordinator {
     ///   - screens: Array de pantallas donde crear las ventanas
     ///   - videoFile: Archivo de video para el wallpaper
     ///   - bookmarkActor: Actor para resolver bookmarks de seguridad
+    ///   - startPaused: Si es true, las ventanas se crean pausadas para pre-carga
+    ///   - staticImageURL: URL opcional de imagen estática para placeholder
     /// - Returns: Array de NSWindow creadas
     func createWindowsAsync(
         screens: [NSScreen],
         videoFile: VideoFile,
-        bookmarkActor: BookmarkActor
+        bookmarkActor: BookmarkActor,
+        startPaused: Bool = false,
+        staticImageURL: URL? = nil
     ) async -> [NSWindow] {
         guard let bookmarkData = videoFile.bookmarkData else {
             print("❌ No hay bookmark data disponible")
@@ -37,13 +41,18 @@ actor WindowCreationCoordinator {
             return []
         }
         
-        var createdWindows: [NSWindow] = []
+        var createdWindows: [DesktopVideoWindowMejorada] = []
         
         // Crear ventanas para cada pantalla de forma asíncrona
         for screen in screens {
             // Crear ventana de video para esta pantalla usando Task.detached en MainActor
             let window = await Task.detached { @MainActor in
-                DesktopVideoWindowMejorada(screen: screen, videoURL: accessibleURL)
+                DesktopVideoWindowMejorada(
+                    screen: screen,
+                    videoURL: accessibleURL,
+                    startPaused: startPaused,
+                    staticImageURL: staticImageURL
+                )
             }.value
             
             // Configurar ventana
@@ -58,10 +67,62 @@ actor WindowCreationCoordinator {
             await Task.yield()
         }
         
+        // FASE 5.1: Si startPaused es true, esperar a que TODAS las ventanas estén ready
+        if startPaused {
+            print("⏳ Esperando a que todas las ventanas estén listas...")
+            let maxWaitTime: TimeInterval = 5.0 // Timeout de 5 segundos
+            let startTime = Date()
+            
+            var allReady = false
+            while !allReady {
+                // Verificar timeout
+                if Date().timeIntervalSince(startTime) > maxWaitTime {
+                    print("⚠️ Timeout esperando ventanas ready - continuando de todas formas")
+                    break
+                }
+                
+                // Verificar estado de las ventanas en MainActor
+                allReady = await MainActor.run {
+                    createdWindows.allSatisfy({ $0.isPlayerReady })
+                }
+                
+                if !allReady {
+                    // Esperar un poco antes de verificar nuevamente
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+            
+            let readyCount = await MainActor.run {
+                createdWindows.filter({ $0.isPlayerReady }).count
+            }
+            print("✅ \(readyCount)/\(createdWindows.count) ventanas listas")
+        }
+        
         // Liberar acceso security-scoped después de crear todas las ventanas
         await bookmarkActor.stopAccessingSecurityScopedResource(url: accessibleURL)
         
         print("✅ Creadas \(createdWindows.count) ventanas de forma asíncrona")
         return createdWindows
+    }
+    
+    /// Activa la reproducción en todas las ventanas después de la transición
+    /// - Parameter windows: Array de ventanas donde activar reproducción
+    /// - Returns: Número de ventanas donde se activó correctamente la reproducción
+    @discardableResult
+    func activatePlaybackInWindows(_ windows: [NSWindow]) async -> Int {
+        var successCount = 0
+        
+        for window in windows {
+            if let videoWindow = window as? DesktopVideoWindowMejorada {
+                await MainActor.run {
+                    if videoWindow.activatePlayback() {
+                        successCount += 1
+                    }
+                }
+            }
+        }
+        
+        print("✅ Reproducción activada en \(successCount)/\(windows.count) ventanas")
+        return successCount
     }
 }
