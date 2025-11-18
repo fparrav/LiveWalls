@@ -251,7 +251,7 @@ struct SettingsView: View {
                 
                 if isTransitionEnabled {
                     transitionDurationPickerView
-                    transitionTypePickerView
+                    // Tipo de transición fijo: siempre crossfade (optimizado)
                 }
             }
             .padding(12)

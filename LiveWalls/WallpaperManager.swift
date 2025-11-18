@@ -1042,7 +1042,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     /// Changes to the next video with a smooth transition
-    /// FASE 5.1 + 5.3: Pre-carga con frame estático y destrucción garantizada
+    /// OPTIMIZADO: Transición inmediata, frame estático generado en background después
     private func changeToNextVideoWithTransition(to nextVideo: VideoFile) async {
         // FASE 5.3: Prevenir transiciones concurrentes
         guard !isTransitioning else {
@@ -1069,17 +1069,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             return
         }
         
-        // FASE 5.1: Generar frame estático en background (no bloqueante)
-        let staticImageURL = await generateStaticWallpaperFrame(for: nextURL)
+        // OPTIMIZACIÓN: NO esperar frame estático - generarlo en background después
+        // Esto hace las transiciones instantáneas (~300ms vs ~2000ms)
         
-        // FASE 5.1: Crear ventanas con startPaused=true y placeholder estático
+        // FASE 5.1: Crear ventanas con startPaused=true SIN placeholder estático
         let screens = NSScreen.screens
         let newWindows = await windowCreationCoordinator.createWindowsAsync(
             screens: screens,
             videoFile: nextVideo,
             bookmarkActor: bookmarkActor,
             startPaused: true,
-            staticImageURL: staticImageURL
+            staticImageURL: nil  // Sin placeholder - transición inmediata
         )
         
         // Verificar que todas las ventanas fueron creadas
@@ -1106,21 +1106,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let currentWindow = currentWindows.first
         let firstNewWindow = newWindows.first as? DesktopVideoWindowMejorada
         
-        // Realizar transición visual usando TransitionManager
-        if isTransitionEnabled {
-            switch transitionType {
-            case .crossfade:
-                transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: firstNewWindow)
-            case .fadeOutFadeIn:
-                transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: firstNewWindow)
-            }
-            
-            // Esperar que la transición visual complete
-            try? await Task.sleep(for: .seconds(transitionDuration))
-        } else {
-            // Sin transición, esperar brevemente
-            try? await Task.sleep(for: .milliseconds(100))
-        }
+        // Realizar transición visual usando TransitionManager (siempre crossfade)
+        transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: firstNewWindow)
+        
+        // Esperar que la transición visual complete
+        try? await Task.sleep(for: .seconds(transitionDuration))
         
         // FASE 5.1: DESPUÉS de la transición visual, activar reproducción
         let successCount = await windowCreationCoordinator.activatePlaybackInWindows(newWindows)
@@ -1188,12 +1178,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // Actualizar video activo
         await setActiveVideo(nextVideo)
         
-        // Limpiar frame estático temporal si existe
-        if let staticImageURL = staticImageURL {
-            try? FileManager.default.removeItem(at: staticImageURL)
-        }
-        
         appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
+        
+        // OPTIMIZACIÓN: Generar frame estático en background DESPUÉS de la transición
+        // Esto no bloquea la transición pero asegura que Exposé/Lock Screen tengan imagen actualizada
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            
+            // Generar frame estático
+            if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
+                await MainActor.run {
+                    self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                    self.appLogger.info("🖼️ Frame estático generado en background para Exposé/Lock Screen")
+                }
+                
+                // Limpiar archivo temporal después de aplicarlo
+                try? FileManager.default.removeItem(at: staticImageURL)
+            }
+        }
     }
     
     // MARK: - Manual Next Wallpaper & Random Play Control

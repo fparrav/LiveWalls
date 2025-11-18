@@ -73,6 +73,9 @@ actor WindowCreationCoordinator {
             let maxWaitTime: TimeInterval = 5.0 // Timeout de 5 segundos
             let startTime = Date()
             
+            // Crear copia local para evitar warnings de Swift 6 concurrency
+            let windows = createdWindows
+            
             var allReady = false
             while !allReady {
                 // Verificar timeout
@@ -83,7 +86,7 @@ actor WindowCreationCoordinator {
                 
                 // Verificar estado de las ventanas en MainActor
                 allReady = await MainActor.run {
-                    createdWindows.allSatisfy({ $0.isPlayerReady })
+                    windows.allSatisfy({ $0.isPlayerReady })
                 }
                 
                 if !allReady {
@@ -93,9 +96,9 @@ actor WindowCreationCoordinator {
             }
             
             let readyCount = await MainActor.run {
-                createdWindows.filter({ $0.isPlayerReady }).count
+                windows.filter({ $0.isPlayerReady }).count
             }
-            print("✅ \(readyCount)/\(createdWindows.count) ventanas listas")
+            print("✅ \(readyCount)/\(windows.count) ventanas listas")
         }
         
         // Liberar acceso security-scoped después de crear todas las ventanas
@@ -110,14 +113,16 @@ actor WindowCreationCoordinator {
     /// - Returns: Número de ventanas donde se activó correctamente la reproducción
     @discardableResult
     func activatePlaybackInWindows(_ windows: [NSWindow]) async -> Int {
+        // Contar activaciones exitosas sin capturar variable mutable
         var successCount = 0
         
         for window in windows {
             if let videoWindow = window as? DesktopVideoWindowMejorada {
-                await MainActor.run {
-                    if videoWindow.activatePlayback() {
-                        successCount += 1
-                    }
+                let activated = await MainActor.run {
+                    videoWindow.activatePlayback()
+                }
+                if activated {
+                    successCount += 1
                 }
             }
         }

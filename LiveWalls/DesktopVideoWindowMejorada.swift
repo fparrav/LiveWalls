@@ -361,7 +361,7 @@ private var videoURL: URL
         
         // Cargar imagen en background thread para no bloquear main thread (FASE 5.2)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
+            guard self != nil else { return }
             
             guard let imageData = try? Data(contentsOf: url),
                   let nsImage = NSImage(data: imageData) else {
@@ -370,7 +370,7 @@ private var videoURL: URL
             }
             
             DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
                 
                 // Crear y configurar image view
                 let imageView = NSImageView(frame: contentView.bounds)
