@@ -602,13 +602,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // Apply immediately
         applyWallpaper()
         
-        // Apply again after a brief delay to ensure persistence
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        // Apply again after brief delays to ensure it sticks in all Spaces
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             applyWallpaper()
         }
         
-        // One more application after 1 second to capture any Space that has changed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            applyWallpaper()
+        }
+        
+        // Final application to capture any Space that changed
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             applyWallpaper()
         }
         
@@ -982,16 +986,35 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         guard let accessibleURL = await resolveBookmark(for: currentVideo) else { return }
         
+        // CRÍTICO: Reactivar reproducción de video en todas las ventanas
+        // Al cambiar de Space, macOS puede pausar o congelar el video
+        await MainActor.run {
+            appLogger.info("🔄 Reactivando reproducción de video después de cambio de Space")
+            for (window, _) in desktopVideoInstances {
+                // Forzar reproducción
+                window.forcePlay()
+            }
+        }
+        
         // Obtener tiempo actual del video para el nuevo Space
         var currentVideoTime: CMTime? = nil
         if let firstInstance = desktopVideoInstances.first {
             currentVideoTime = firstInstance.window.getCurrentTime()
         }
         
-        // Generar nuevo frame para el Space actual
-        if let staticImageURL = await generateStaticWallpaperFrame(for: accessibleURL, timeOffset: currentVideoTime) {
-            setSystemStaticWallpaper(imageURL: staticImageURL)
-            appLogger.info("🔄 Frame estático actualizado por cambio de Space - tiempo: \(currentVideoTime.map { "\(CMTimeGetSeconds($0))s" } ?? "inicial")")
+        // Generar nuevo frame para el Space actual en background (no bloquear)
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            
+            if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL, timeOffset: currentVideoTime) {
+                await MainActor.run {
+                    self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                    self.appLogger.info("🔄 Frame estático actualizado por cambio de Space - tiempo: \(currentVideoTime.map { "\(CMTimeGetSeconds($0))s" } ?? "inicial")")
+                }
+                
+                // Limpiar archivo temporal
+                try? FileManager.default.removeItem(at: staticImageURL)
+            }
         }
         
         // Liberar acceso
@@ -1181,15 +1204,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
         
         // OPTIMIZACIÓN: Generar frame estático en background DESPUÉS de la transición
-        // Esto no bloquea la transición pero asegura que Exposé/Lock Screen tengan imagen actualizada
+        // Limpiar frame anterior INMEDIATAMENTE para evitar que se vea el video anterior
+        cleanupPreviousStaticWallpaper()
+        
         Task.detached { [weak self] in
             guard let self = self else { return }
             
             // Generar frame estático
             if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
                 await MainActor.run {
-                    self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                    self.appLogger.info("🖼️ Frame estático generado en background para Exposé/Lock Screen")
+                    // Aplicar inmediatamente a todos los Spaces
+                    let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                    if success {
+                        self.appLogger.info("🖼️ Frame estático generado y aplicado para Exposé/Lock Screen")
+                    }
                 }
                 
                 // Limpiar archivo temporal después de aplicarlo
@@ -1479,8 +1507,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         appLogger.info("📅 Programando aplicación de wallpaper para todos los Spaces")
         
-        // Aplicar en intervalos para asegurar que cubra todos los Spaces posibles
-        let intervals: [TimeInterval] = [2.0, 5.0, 10.0, 15.0]
+        // Aplicar en intervalos más cortos para cubrir Spaces activos/inactivos
+        let intervals: [TimeInterval] = [0.5, 1.0, 2.0, 4.0]
         
         for interval in intervals {
             DispatchQueue.main.asyncAfter(deadline: .now() + interval) {

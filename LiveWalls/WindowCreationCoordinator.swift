@@ -70,7 +70,7 @@ actor WindowCreationCoordinator {
         // FASE 5.1: Si startPaused es true, esperar a que TODAS las ventanas estén ready
         if startPaused {
             print("⏳ Esperando a que todas las ventanas estén listas...")
-            let maxWaitTime: TimeInterval = 5.0 // Timeout de 5 segundos
+            let maxWaitTime: TimeInterval = 2.0 // Timeout reducido a 2 segundos para transiciones más rápidas
             let startTime = Date()
             
             // Crear copia local para evitar warnings de Swift 6 concurrency
@@ -90,8 +90,8 @@ actor WindowCreationCoordinator {
                 }
                 
                 if !allReady {
-                    // Esperar un poco antes de verificar nuevamente
-                    try? await Task.sleep(for: .milliseconds(100))
+                    // Verificar más frecuentemente para transiciones más rápidas
+                    try? await Task.sleep(for: .milliseconds(50))
                 }
             }
             
