@@ -44,11 +44,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let transitionDurationKey = "TransitionDuration"
     private let transitionTypeKey = "TransitionType"
     private var isTransitionEnabled = true
-    private var transitionDuration: TimeInterval = 2.0
+    private var transitionDuration: TimeInterval = 1.0  // Reducido de 2.0s a 1.0s para transiciones más rápidas
     private var transitionType: TransitionManager.TransitionType = .crossfade
     
     // FASE 5.3: Flag para prevenir transiciones concurrentes
     private var isTransitioning = false
+    
+    // MARK: - Background color windows for transitions
+    private var backgroundColorWindows: [NSWindow] = []
     
     // MARK: - Variables for window destruction synchronization
     var pendingDestroyCompletion: (() -> Void)? = nil
@@ -1095,6 +1098,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // OPTIMIZACIÓN: NO esperar frame estático - generarlo en background después
         // Esto hace las transiciones instantáneas (~300ms vs ~2000ms)
         
+        // NUEVO: Crear ventanas de color de fondo para evitar ver wallpaper del sistema
+        await MainActor.run {
+            self.createBackgroundColorWindows()
+        }
+        
+        // Pequeño delay para asegurar que las ventanas de color se muestren
+        try? await Task.sleep(for: .milliseconds(50))
+        
         // FASE 5.1: Crear ventanas con startPaused=true SIN placeholder estático
         let screens = NSScreen.screens
         let newWindows = await windowCreationCoordinator.createWindowsAsync(
@@ -1200,6 +1211,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         // Actualizar video activo
         await setActiveVideo(nextVideo)
+        
+        // NUEVO: Limpiar ventanas de color de fondo ahora que la transición terminó
+        await MainActor.run {
+            self.cleanupBackgroundColorWindows()
+        }
         
         appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
         
@@ -1757,11 +1773,51 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
+    // MARK: - Background Color Window Management
+    
+    /// Create background color windows for all screens
+    @MainActor
+    private func createBackgroundColorWindows() {
+        self.appLogger.info("🎨 Creating background color windows for transition")
+        
+        // Clean up any existing background windows first
+        self.cleanupBackgroundColorWindows()
+        
+        let screens = NSScreen.screens
+        for screen in screens {
+            let colorWindow = BackgroundColorWindow(screen: screen)
+            colorWindow.orderFront(self)
+            colorWindow.orderBack(self)
+            self.backgroundColorWindows.append(colorWindow)
+        }
+        
+        self.appLogger.info("✅ Created \(self.backgroundColorWindows.count) background color windows")
+    }
+    
+    /// Clean up background color windows
+    @MainActor
+    private func cleanupBackgroundColorWindows() {
+        guard !self.backgroundColorWindows.isEmpty else { return }
+        
+        self.appLogger.info("🧹 Cleaning up \(self.backgroundColorWindows.count) background color windows")
+        
+        for window in self.backgroundColorWindows {
+            if let colorWindow = window as? BackgroundColorWindow {
+                colorWindow.cleanup()
+            } else {
+                window.orderOut(self)
+                window.close()
+            }
+        }
+        self.backgroundColorWindows.removeAll()
+    }
+    
     @MainActor
     private func cleanupAllResources() {
         appLogger.info("🧹 Cleaning up all resources")
         stopAutoChangeTimer()
         cleanupPreviousStaticWallpaper()
+        cleanupBackgroundColorWindows()
         
         // Close all windows and release resources
         for (window, accessibleURL) in desktopVideoInstances {

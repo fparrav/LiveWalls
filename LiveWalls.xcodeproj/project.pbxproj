@@ -12,6 +12,7 @@
 		2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */; };
 		3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */; };
 		542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */ = {isa = PBXBuildFile; fileRef = 542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */; };
+		5D8FD7DDB6204E38BC116DA652B2DB41 /* BackgroundColorWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C9D22B0E404B85A1190DCA93CFE7B8 /* BackgroundColorWindow.swift */; };
 		55846EB82EBED2B600E46C3B /* SystemReadinessObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */; };
 		55846EBA2EBEFA0800E46C3B /* StartupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EB92EBEFA0800E46C3B /* StartupCoordinator.swift */; };
 		55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */; };
@@ -70,6 +71,7 @@
 		2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActorTests.swift; sourceTree = "<group>"; };
 		30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaybackHealthCheckerTests.swift; sourceTree = "<group>"; };
 		3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenDetector.swift; sourceTree = "<group>"; };
+		23C9D22B0E404B85A1190DCA93CFE7B8 /* BackgroundColorWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundColorWindow.swift; sourceTree = "<group>"; };
 		542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopVideoWindowMejorada.swift; sourceTree = "<group>"; };
 		55846EB72EBED2B600E46C3B /* SystemReadinessObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemReadinessObserver.swift; sourceTree = "<group>"; };
 		55846EB92EBEFA0800E46C3B /* StartupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupCoordinator.swift; sourceTree = "<group>"; };
@@ -259,6 +261,7 @@
 				9A1B2C3D4E5F6789ABCDEF02 /* StatusBarMenuView.swift */,
 				9A1B2C3D4E5F6789ABCDEF00 /* LaunchManager.swift */,
 				542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */,
+				23C9D22B0E404B85A1190DCA93CFE7B8 /* BackgroundColorWindow.swift */,
 				8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */,
 				F0F0F0B02E1F4BBB00000001 /* AboutView.swift */,
 				F0F0F0A02E1F4AAA00000001 /* InAppUpdater.swift */,
@@ -441,6 +444,7 @@
 				55AC1F4F2DE9465900424EA9 /* AppDelegate.swift in Sources */,
 				55846EC62EBF883100E46C3B /* ScheduledHealthCheckManager.swift in Sources */,
 				542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */,
+				5D8FD7DDB6204E38BC116DA652B2DB41 /* BackgroundColorWindow.swift in Sources */,
 				8B0C7D402B1F4A8000123456 /* SettingsView.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF03 /* StatusBarMenuView.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */,
