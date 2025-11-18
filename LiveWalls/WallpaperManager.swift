@@ -1723,11 +1723,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     @objc private func activeSpaceDidChange(notification: NSNotification) {
-        appLogger.info("🔄 Space activo cambió - actualizando frame estático con tiempo actual del video")
+        appLogger.info("🔄 Space activo cambió - reactivando video INMEDIATAMENTE")
         
-        // Pequeño delay para asegurar que el Space está completamente cargado
-        Task {
-            try? await Task.sleep(for: .milliseconds(500))
+        // CRÍTICO: Reactivar video INMEDIATAMENTE (no esperar 500ms)
+        Task { @MainActor in
+            // Primera reactivación inmediata
+            self.ensurePlaying(reason: "Space change - immediate")
+            
+            // Reintentos para asegurar que el video no se detenga
+            try? await Task.sleep(for: .milliseconds(100))
+            self.ensurePlaying(reason: "Space change - retry 100ms")
+            
+            try? await Task.sleep(for: .milliseconds(300))
+            self.ensurePlaying(reason: "Space change - retry 400ms")
+            
+            try? await Task.sleep(for: .milliseconds(600))
+            self.ensurePlaying(reason: "Space change - retry 1000ms")
+            
+            // Actualizar frame estático en background (no bloquear)
             await self.updateStaticFrameOnSpaceChange()
         }
     }
