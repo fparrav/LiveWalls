@@ -949,6 +949,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         appLogger.info("⏹️ Timer de cambio automático detenido")
     }
     
+    /// Reinicia el timer de cambio automático (útil después de cambios manuales)
+    private func restartAutoChangeTimerIfNeeded() {
+        guard timerManager.isTimerActive else {
+            appLogger.debug("💡 No se reinicia timer: no está activo")
+            return
+        }
+        
+        appLogger.info("🔄 Reiniciando timer después de cambio manual")
+        startAutoChangeTimerIfNeeded()
+    }
+    
     // MARK: - Static Frame Update Timer
     
     private func generateInitialStaticFrame() async {
@@ -1201,10 +1212,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             // Si el video actual no está en la lista habilitada, ir al primer habilitado
             if let firstEnabled = enabledVideos.first {
                 appLogger.info("🔄 Cambiando manualmente al primer wallpaper habilitado: \(firstEnabled.name)")
-                await setActiveVideo(firstEnabled)
                 
                 if isPlayingWallpaper {
-                    startWallpaperSafe()
+                    await changeToNextVideoWithTransition(to: firstEnabled)
+                    // Reiniciar timer después de cambio manual
+                    await MainActor.run {
+                        self.restartAutoChangeTimerIfNeeded()
+                    }
+                } else {
+                    await setActiveVideo(firstEnabled)
                 }
             }
             return
@@ -1214,10 +1230,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let nextVideo = enabledVideos[nextIndex]
         
         appLogger.info("🔄 Cambiando manualmente a: \(nextVideo.name)")
-        await setActiveVideo(nextVideo)
         
         if isPlayingWallpaper {
-            startWallpaperSafe()
+            await changeToNextVideoWithTransition(to: nextVideo)
+            // Reiniciar timer después de cambio manual
+            await MainActor.run {
+                self.restartAutoChangeTimerIfNeeded()
+            }
+        } else {
+            await setActiveVideo(nextVideo)
         }
     }
     
