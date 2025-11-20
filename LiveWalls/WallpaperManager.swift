@@ -1113,10 +1113,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Changes to the next video with a smooth transition
-    /// OPTIMIZADO: Transición inmediata, frame estático generado en background después
+    /// Changes to the next video without crossfade (instant switch)
     private func changeToNextVideoWithTransition(to nextVideo: VideoFile) async {
-        // FASE 5.3: Prevenir transiciones concurrentes
         guard !isTransitioning else {
             appLogger.warning("⚠️ Transición ya en progreso - ignorando solicitud")
             return
@@ -1125,7 +1123,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         isTransitioning = true
         defer { isTransitioning = false }
         
-        appLogger.info("🔄 Cambiando con transición a: \(nextVideo.name)")
+        appLogger.info("🔄 Cambiando sin transición a: \(nextVideo.name)")
         
         // Ensure we have a current video selected
         guard currentVideo != nil else {
@@ -1142,23 +1140,19 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
 
         let oldInstances = desktopVideoInstances
-        let startTime = Date()
         
-        appLogger.info("⏱️ T+0ms: Iniciando transición de \(self.currentVideo?.name ?? "?") → \(nextVideo.name)")
+        appLogger.info("⏱️ Iniciando cambio directo de \(self.currentVideo?.name ?? "?") → \(nextVideo.name)")
         
-        // Create paused windows to prepare the transition
+        // Crear ventanas para el siguiente video (sin placeholders ni crossfade)
         let screens = NSScreen.screens
         let newWindows = await windowCreationCoordinator.createWindowsAsync(
             screens: screens,
             videoFile: nextVideo,
             bookmarkActor: bookmarkActor,
             startPaused: true,
-            staticImageURL: nil  // No placeholder for faster transition
+            staticImageURL: nil  // Sin placeholder
         )
         let newVideoWindows = newWindows.compactMap { $0 as? DesktopVideoWindowMejorada }
-        
-        let t1 = Date().timeIntervalSince(startTime)
-        appLogger.info("⏱️ T+\(Int(t1*1000))ms: \(newVideoWindows.count) ventanas nuevas creadas")
         
         // Validate creation
         guard !newVideoWindows.isEmpty else {
@@ -1169,25 +1163,19 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             return
         }
         
-        // Prepare new windows hidden at start
+        // Prepare new windows visible immediately
         await MainActor.run {
             newVideoWindows.forEach { window in
                 window.delegate = self
                 window.orderFront(nil)
                 window.orderBack(nil)
-                window.setOpacity(0.0)
+                window.setOpacity(1.0)
             }
         }
-        
-        let t2 = Date().timeIntervalSince(startTime)
-        appLogger.info("⏱️ T+\(Int(t2*1000))ms: Nuevas ventanas preparadas (opacidad 0)")
-        
-        // Activate playback in new windows BEFORE fading out the old ones
+
+        // Activate playback in new windows
         let successCount = await windowCreationCoordinator.activatePlaybackInWindows(newVideoWindows.map { $0 as NSWindow })
-        
-        let t3 = Date().timeIntervalSince(startTime)
-        appLogger.info("⏱️ T+\(Int(t3*1000))ms: Reproducción activada (\(successCount)/\(newVideoWindows.count) ventanas)")
-        
+
         // If nothing played, keep the previous wallpaper and clean up
         guard successCount > 0 else {
             appLogger.error("❌ Ninguna ventana pudo activar reproducción - conservando wallpaper previo")
@@ -1204,41 +1192,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             return
         }
         
-        // Pause old windows to freeze their last frame while new ones fade in
-        await MainActor.run {
-            oldInstances.forEach { $0.window.forcePause() }
-        }
-        
-        let t3a = Date().timeIntervalSince(startTime)
-        appLogger.info("⏱️ T+\(Int(t3a*1000))ms: Ventanas antiguas pausadas para crossfade")
-        
-        // Run transition across all monitors
-        let currentWindows = oldInstances.map { $0.window }
-        transitionManager.startCrossfadeTransition(fromWindows: currentWindows, toWindows: newVideoWindows)
-        
-        let t4 = Date().timeIntervalSince(startTime)
-        appLogger.info("⏱️ T+\(Int(t4*1000))ms: Crossfade iniciado - esperando \(Int(self.transitionDuration*1000))ms")
-        
-        // Allow visual transition time
-        try? await Task.sleep(for: .seconds(transitionDuration))
-        
-        let t5 = Date().timeIntervalSince(startTime)
-        appLogger.info("⏱️ T+\(Int(t5*1000))ms: Crossfade completado - aplicando opacidades finales")
-        
-        // Ensure all new windows are visible (multi-monitor)
-        await MainActor.run {
-            newVideoWindows.forEach { $0.setOpacity(1.0) }
-            oldInstances.forEach { $0.window.setOpacity(0.0) }
-        }
-        
-        let t6 = Date().timeIntervalSince(startTime)
-        appLogger.info("⏱️ T+\(Int(t6*1000))ms: Opacidades finales aplicadas")
-        
-        if successCount < newVideoWindows.count {
-            appLogger.warning("⚠️ Solo \(successCount)/\(newVideoWindows.count) ventanas activaron reproducción")
-        } else {
-            appLogger.info("✅ Todas las ventanas activaron reproducción exitosamente")
-        }
+        appLogger.info("✅ Reproducción activada (\(successCount)/\(newVideoWindows.count) ventanas)")
         
         // Update active instances and selected video
         desktopVideoInstances = newVideoWindows.map { (window: $0, accessibleURL: nextURL) }
@@ -1492,20 +1446,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
 
     /// Loads transition settings from UserDefaults
     private func loadTransitionSettings() {
-        isTransitionEnabled = userDefaults.bool(forKey: isTransitionEnabledKey)
-        transitionDuration = userDefaults.double(forKey: transitionDurationKey)
-        if transitionDuration <= 0 {
-            transitionDuration = 2.0 // Default 2 segundos
-        }
-        
-        // Load transition type
-        let transitionTypeRawValue = userDefaults.string(forKey: transitionTypeKey) ?? "crossfade"
-        switch transitionTypeRawValue {
-        case "fadeOutFadeIn":
-            transitionType = .fadeOutFadeIn
-        default:
-            transitionType = .crossfade
-        }
+        // Transitions disabled: enforce instant switch
+        isTransitionEnabled = false
+        transitionDuration = 0.0
+        transitionType = .crossfade
     }
     
     /// Guarda configuración de cambio automático usando PersistenceActor
@@ -1536,43 +1480,33 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     /// Saves transition configuration
     func saveTransitionSettings() {
-        userDefaults.set(isTransitionEnabled, forKey: isTransitionEnabledKey)
-        userDefaults.set(transitionDuration, forKey: transitionDurationKey)
-        
-        // Save transition type
-        let transitionTypeRawValue: String
-        switch transitionType {
-        case .fadeOutFadeIn:
-            transitionTypeRawValue = "fadeOutFadeIn"
-        default:
-            transitionTypeRawValue = "crossfade"
-        }
-        userDefaults.set(transitionTypeRawValue, forKey: transitionTypeKey)
-        
-        appLogger.info("💾 Saving transition configuration: enabled=\(self.isTransitionEnabled), duration=\(self.transitionDuration)s, type=\(transitionTypeRawValue)")
+        // No-op: transitions are disabled
+        isTransitionEnabled = false
+        transitionDuration = 0.0
     }
     
     /// Sets whether transitions are enabled
     func setTransitionEnabled(_ enabled: Bool) {
-        isTransitionEnabled = enabled
+        isTransitionEnabled = false
+        transitionDuration = 0.0
         saveTransitionSettings()
     }
     
     /// Sets the transition duration
     func setTransitionDuration(_ duration: TimeInterval) {
-        transitionDuration = duration
+        transitionDuration = 0.0
         saveTransitionSettings()
     }
     
     /// Sets the transition type
     func setTransitionType(_ type: TransitionManager.TransitionType) {
-        transitionType = type
+        transitionType = .crossfade
         saveTransitionSettings()
     }
     
     /// Gets the current transition settings
     func getTransitionSettings() -> (isEnabled: Bool, duration: TimeInterval, type: TransitionManager.TransitionType) {
-        return (isTransitionEnabled, transitionDuration, transitionType)
+        return (false, 0.0, .crossfade)
     }
     
     /// Función para compatibilidad con ContentView - llama a stopWallpaper()
