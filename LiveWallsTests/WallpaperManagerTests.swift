@@ -248,11 +248,48 @@ final class WallpaperManagerTests: XCTestCase {
         // Toggle estado
         await wallpaperManager.toggleVideoRandomPlayEnabled(video)
         
-         // Verificar que cambió
-         XCTAssertFalse(wallpaperManager.videoFiles.first?.isEnabledForRandomPlay ?? true)
-     }
-     
-     // MARK: - Fase 1: Non-Blocking Static Frame Generation Tests
+           // Verificar que cambió
+           XCTAssertFalse(wallpaperManager.videoFiles.first?.isEnabledForRandomPlay ?? true)
+       }
+       
+       // MARK: - Fase 2: Batch Cleanup Delay Tests
+       
+       /// Test que archivos NO se eliminan antes de 30s
+       /// Fase 2: Verificar que el delay de cleanup es de 30s
+       func testBatchCleanupDelayExtended() async {
+           // Given - crear un archivo temporal con el patrón wallpaper_frame_
+           let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+           let livewallsDir = appSupportURL.appendingPathComponent("LiveWalls")
+           try? FileManager.default.createDirectory(at: livewallsDir, withIntermediateDirectories: true, attributes: nil)
+           
+           let testFileURL = livewallsDir.appendingPathComponent("wallpaper_frame_test_\(Date().timeIntervalSince1970).png")
+           let testData = "test png data".data(using: .utf8)!
+           FileManager.default.createFile(atPath: testFileURL.path, contents: testData)
+           
+           // Verify file exists
+           XCTAssertTrue(FileManager.default.fileExists(atPath: testFileURL.path), "Test file should exist before cleanup")
+           
+           // When - schedule cleanup
+           let startTime = Date()
+           wallpaperManager.scheduleFileForCleanup(fileURL: testFileURL)
+           
+           // Give it 5 seconds
+           try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+           let elapsed5s = Date().timeIntervalSince(startTime)
+           
+           // Then - file should still exist after 5 seconds (since cleanup is scheduled for 30s)
+           XCTAssertTrue(FileManager.default.fileExists(atPath: testFileURL.path),
+                        "File should still exist after \(String(format: "%.1f", elapsed5s))s (cleanup scheduled for 30s)")
+        }
+        
+        // NOTE: No automated test for "file deleted after 30s" due to impracticality (31s wait)
+        // Manual verification:
+        // 1. Run app, change wallpaper
+        // 2. Check Application Support/LiveWalls directory after 30s
+        // 3. Confirm PNG files (wallpaper_frame_*) are deleted
+        // The test `testBatchCleanupDelayExtended()` validates files are NOT deleted prematurely (<5s)
+        
+        // MARK: - Fase 1: Non-Blocking Static Frame Generation Tests
      
      /// Test que startWallpaperSafe() retorna rápidamente sin bloquear en generación de frame estático
      /// Fase 1: Eliminar bloqueo de frame estático

@@ -635,28 +635,44 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private func cleanupPreviousStaticWallpaper() {
         guard let previousURL = currentStaticWallpaperURL else { return }
         
-        // Delay la limpieza para dar tiempo a NSWorkspace a procesar la imagen
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+        // Solo eliminar archivos antiguos, no los que están en Application Support actualmente activos
+        let shouldDelete = previousURL.path.contains("TemporaryItems") || 
+                          previousURL.path.contains("/tmp/") ||
+                          (previousURL.path.contains("LiveWalls") && 
+                           previousURL.lastPathComponent.starts(with: "wallpaper_frame_"))
+        
+        if shouldDelete {
+            // Use 30-second delay to give NSWorkspace time to apply wallpaper to all Spaces
+            scheduleFileForCleanup(fileURL: previousURL)
+        } else {
+            appLogger.info("💾 Keeping file in Application Support: \(previousURL.lastPathComponent)")
+        }
+    }
+    
+    /// Schedules a file for cleanup after 30 seconds
+    /// - Parameter fileURL: URL of the file to clean up
+    func scheduleFileForCleanup(fileURL: URL) {
+        appLogger.info("📅 Scheduling file for cleanup in 30s: \(fileURL.lastPathComponent)")
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30.0) { [weak self] in
             guard let self = self else { return }
-            
-            // Solo eliminar archivos antiguos, no los que están en Application Support actualmente activos
-            let shouldDelete = previousURL.path.contains("TemporaryItems") || 
-                              previousURL.path.contains("/tmp/") ||
-                              (previousURL.path.contains("LiveWalls") && 
-                               previousURL.lastPathComponent.starts(with: "wallpaper_frame_"))
-            
-            if shouldDelete {
-                do {
-                    if FileManager.default.fileExists(atPath: previousURL.path) {
-                        try FileManager.default.removeItem(at: previousURL)
-                        self.appLogger.info("🧹 Previous file deleted: \(previousURL.lastPathComponent)")
-                    }
-                } catch {
-                    self.appLogger.warning("⚠️ Could not delete previous file: \(error.localizedDescription)")
-                }
-            } else {
-                self.appLogger.info("💾 Keeping file in Application Support: \(previousURL.lastPathComponent)")
-            }
+            self.performBatchCleanup(fileURL: fileURL)
+        }
+    }
+    
+    /// Performs the actual cleanup of the scheduled file
+    /// - Parameter fileURL: URL of the file to delete
+    private func performBatchCleanup(fileURL: URL) {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            appLogger.info("✓ File already deleted: \(fileURL.lastPathComponent)")
+            return
+        }
+        
+        do {
+            try FileManager.default.removeItem(at: fileURL)
+            appLogger.info("🧹 File deleted after 30s cleanup: \(fileURL.lastPathComponent)")
+        } catch {
+            appLogger.warning("⚠️ Could not delete file after cleanup: \(error.localizedDescription)")
         }
     }
     
