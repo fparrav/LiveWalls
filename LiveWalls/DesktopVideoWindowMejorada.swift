@@ -371,7 +371,8 @@ private var videoURL: URL
             }
             
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard self != nil else { return }
+                guard let contentView = self?.contentView else { return }
                 
                 // Crear y configurar image view
                 let imageView = NSImageView(frame: contentView.bounds)

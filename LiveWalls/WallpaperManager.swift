@@ -97,22 +97,27 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         pendingStaticApplyWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            if isApplyingStaticWallpaper {
-                return
-            }
-            isApplyingStaticWallpaper = true
-            Task.detached { [weak self] in
-                guard let self else { return }
-                if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
-                    DispatchQueue.main.async {
-                        let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                        if success {
-                            self.appLogger.info("🖼️ Frame estático generado y aplicado (debounced)")
+            Task { @MainActor in
+                if self.isApplyingStaticWallpaper {
+                    return
+                }
+                self.isApplyingStaticWallpaper = true
+                
+                Task.detached { [weak self] in
+                    guard let self else { return }
+                    if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
+                        DispatchQueue.main.async {
+                            let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                            if success {
+                                self.appLogger.info("🖼️ Frame estático generado y aplicado (debounced)")
+                            }
+                            // No deletion to avoid races; keep cached
                         }
-                        // No deletion to avoid races; keep cached
+                    }
+                    await MainActor.run {
+                        self.isApplyingStaticWallpaper = false
                     }
                 }
-                self.isApplyingStaticWallpaper = false
             }
         }
         pendingStaticApplyWorkItem = workItem
@@ -898,7 +903,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let startTime = Date()
         
         // Verificar si el filesystem está "caliente" por precarga
-        let isWarmedUp = await videoPreloader.isWarmedUp(for: accessibleURL)
+        let isWarmedUp = videoPreloader.isWarmedUp(for: accessibleURL)
         if isWarmedUp {
             appLogger.info("🔥 Filesystem precalentado - creación acelerada esperada")
         }
@@ -1252,10 +1257,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             for (window, url) in instances {
                 group.enter()
                 window.close { [weak self] in
-                    Task.detached { [weak self] in
+                    Task { [weak self] in
+                        guard let self else {
+                            group.leave()
+                            return
+                        }
                         // Release bookmark off-main to avoid stalling UI
-                        await self?.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
-                        await MainActor.run {
+                        await self.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
+                        _ = await MainActor.run { [weak self] in
                             self?.activeSecurityScopedURLs.remove(url.path)
                         }
                         group.leave()
@@ -1853,7 +1862,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private func cleanupAllResources() {
         appLogger.info("🧹 Cleaning up all resources")
         stopAutoChangeTimer()
-        cleanupPreviousStaticWallpaper()
         cleanupBackgroundColorWindows()
         
         // Close all windows and release resources
