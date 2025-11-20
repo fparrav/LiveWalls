@@ -33,6 +33,26 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
 - **LaunchManager**: Gestiona comportamiento de inicio y auto-lanzamiento
 
 ## Project Structure & Module Organization
+
+- `LiveWalls/`: Código fuente Swift/SwiftUI (App, managers, views).
+- `LiveWallsTests/`, `LiveWallsUITests/`: Pruebas unitarias y de UI con XCTest.
+- `LiveWalls/Assets.xcassets/`: Iconos e imágenes. `LiveWalls/Resources/Localizations/`: cadenas localizadas.
+- Scripts: `build.sh`, `scripts/` (release y utilidades), `homebrew/` (fórmula).
+
+
+### CLI & Build commands (copied from GEMINI.md)
+- **Build Debug:** `./build.sh build` o `xcodebuild build -project LiveWalls.xcodeproj -scheme LiveWalls`
+- **Run app:** `./build.sh run` (streams logs to terminal)
+- **Clean build:** `./build.sh clean`
+- **Archive release:** `./build.sh archive`
+- **Open in Xcode:** `open LiveWalls.xcodeproj`
+
+### Release Automation
+- **CI:** Uses GitHub Actions workflow defined at `.github/workflows/release.yml`
+- On tagging `v*.*.*` the workflow builds the app, creates a `.dmg`, generates a changelog with `git-cliff`, and creates a GitHub release.
+
+
+## Build, Test, and Development Commands
 - `LiveWalls/`: Código fuente Swift/SwiftUI (App, managers, views).
 - `LiveWallsTests/`, `LiveWallsUITests/`: Pruebas unitarias y de UI con XCTest.
 - `LiveWalls/Assets.xcassets/`: Iconos e imágenes. `LiveWalls/Resources/Localizations/`: cadenas localizadas.
