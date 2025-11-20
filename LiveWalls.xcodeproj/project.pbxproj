@@ -49,6 +49,7 @@
 		F2227C492E1F40488BAD0026 /* WallpaperTimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */; };
 		72BF47E36CA54AACAFD3EFEC /* VideoPreloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412CE12ADD8B4EED8D0A5283 /* VideoPreloader.swift */; };
 		32C212366A3246A7A3E339B4 /* VideoPreloaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */; };
+		F64F739D05584ED593932076 /* ThrottleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C6DFC482714BA3BE6324C7 /* ThrottleManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -136,6 +137,7 @@
 		8B0C7D302B1F4A3100123456 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		8B0C7D322B1F4A3100123456 /* LiveWalls.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LiveWalls.entitlements; sourceTree = "<group>"; };
 		8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperManager.swift; sourceTree = "<group>"; };
+		88C6DFC482714BA3BE6324C7 /* ThrottleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThrottleManager.swift; sourceTree = "<group>"; };
 		8B0C7D3D2B1F4A7000123456 /* VideoFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFile.swift; sourceTree = "<group>"; };
 		8B0C7D3F2B1F4A8000123456 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		8B0C7D412B1F4A9000123456 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
@@ -267,6 +269,7 @@
 				542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */,
 				23C9D22B0E404B85A1190DCA93CFE7B8 /* BackgroundColorWindow.swift */,
 				8B0C7D372B1F4A4000123456 /* WallpaperManager.swift */,
+				88C6DFC482714BA3BE6324C7 /* ThrottleManager.swift */,
 				F0F0F0B02E1F4BBB00000001 /* AboutView.swift */,
 				F0F0F0A02E1F4AAA00000001 /* InAppUpdater.swift */,
 				9A1B2C3D4E5F6789ABCDEF19 /* TransitionManager.swift */,
@@ -456,6 +459,7 @@
 				9A1B2C3D4E5F6789ABCDEF01 /* LaunchManager.swift in Sources */,
 				8B0C7D422B1F4A9000123456 /* NotificationManager.swift in Sources */,
 				8B0C7D382B1F4A4000123456 /* WallpaperManager.swift in Sources */,
+				F64F739D05584ED593932076 /* ThrottleManager.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF20 /* TransitionManager.swift in Sources */,
 				9A1B2C3D4E5F6789ABCDEF05 /* VideoOptimizer.swift in Sources */,
 				55846EBA2EBEFA0800E46C3B /* StartupCoordinator.swift in Sources */,

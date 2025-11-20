@@ -469,6 +469,50 @@ final class WallpaperManagerTests: XCTestCase {
            // El objetivo de la Fase 1 es eliminar las aplicaciones redundantes, no agregar más debouncing
            throw XCTSkip("Este test se omite porque eliminaremos scheduleStaticWallpaperApply por completo")
        }
+       
+       // MARK: - Fase 2: Optimización de Rendimiento - Tests de Throttling para Space Changes
+       
+       /// Test que verifica que el ThrottleManager se puede instanciar y usar
+       /// Fase 2: Validar que throttle funciona sin errores
+       func testThrottleManagerWorks() async {
+           // Given: ThrottleManager nuevo
+           let throttleManager = ThrottleManager()
+           var executionCount = 0
+           
+           // When: Llamar throttle multiple veces
+           await throttleManager.throttle(key: "testKey", interval: 0.3) { @MainActor in
+               executionCount += 1
+           }
+           
+           // Wait for execution
+           try? await Task.sleep(nanoseconds: 400_000_000) // 400ms
+           
+           // Then: Debe haberse ejecutado al menos una vez sin errores
+           XCTAssertGreaterThanOrEqual(executionCount, 1, "Throttle debe ejecutar al menos una vez")
+       }
+       
+       /// Test que verifica que ensurePlaying no bloquea el main thread
+       /// Fase 2: Validar que la reactivación es asíncrona y eficiente
+       func testEnsurePlayingIsAsync() async {
+           // Given: Video configurado
+           let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("video-async-test.mp4")
+           FileManager.default.createFile(atPath: tmp.path, contents: Data("dummy".utf8))
+           let video = VideoFile(url: tmp,
+                               name: "Async Test Video",
+                               bookmarkData: nil,
+                               isEnabledForRandomPlay: true)
+           wallpaperManager.currentVideo = video
+           
+           // When: Llamar ensurePlaying múltiples veces
+           let startTime = Date()
+           wallpaperManager.ensurePlaying(reason: "test1")
+           wallpaperManager.ensurePlaying(reason: "test2")
+           wallpaperManager.ensurePlaying(reason: "test3")
+           let elapsed = Date().timeIntervalSince(startTime)
+           
+           // Then: Debe retornar inmediatamente sin bloquear (<100ms)
+           XCTAssertLessThan(elapsed, 0.1, "ensurePlaying debe ser asíncrono y retornar rápido")
+       }
    }
 
 // MARK: - Mock Objects

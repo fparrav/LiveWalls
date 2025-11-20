@@ -71,6 +71,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let windowCreationCoordinator = WindowCreationCoordinator()
      private let scheduledHealthCheckManager = ScheduledHealthCheckManager()
      private let videoPreloader = VideoPreloader()
+     private let throttleManager = ThrottleManager() // FASE 2: Throttling para eventos frecuentes
      private var activeSecurityScopedURLs: Set<String> = []
      private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -1743,25 +1744,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     @objc private func activeSpaceDidChange(notification: NSNotification) {
-        appLogger.info("🔄 Space activo cambió - reactivando video INMEDIATAMENTE")
+        appLogger.info("🔄 Space activo cambió - usando throttle")
         
-        // CRÍTICO: Reactivar video INMEDIATAMENTE (no esperar 500ms)
-        Task { @MainActor in
-            // Primera reactivación inmediata
-            self.ensurePlaying(reason: "Space change - immediate")
-            
-            // Reintentos para asegurar que el video no se detenga
-            try? await Task.sleep(for: .milliseconds(100))
-            self.ensurePlaying(reason: "Space change - retry 100ms")
-            
-            try? await Task.sleep(for: .milliseconds(300))
-            self.ensurePlaying(reason: "Space change - retry 400ms")
-            
-            try? await Task.sleep(for: .milliseconds(600))
-            self.ensurePlaying(reason: "Space change - retry 1000ms")
-            
-            // Actualizar frame estático en background (no bloquear)
-            await self.updateStaticFrameOnSpaceChange()
+        // FASE 2: Throttle para consolidar notificaciones rápidas
+        // Reducir de 12 reactivaciones (4 llamadas × 3 notificaciones) a 1-2 máximo
+        Task {
+            await throttleManager.throttle(key: "spaceChange", interval: 0.5) { @MainActor in
+                self.appLogger.info("🔄 Ejecutando reactivación tras throttle")
+                
+                // Primera reactivación inmediata
+                self.ensurePlaying(reason: "Space change - throttled")
+                
+                // Un único retry tras 200ms para garantizar reproducción
+                try? await Task.sleep(for: .milliseconds(200))
+                self.ensurePlaying(reason: "Space change - retry")
+                
+                // Actualizar frame estático en background (no bloquear)
+                await self.updateStaticFrameOnSpaceChange()
+            }
         }
     }
     
