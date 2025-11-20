@@ -1142,6 +1142,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
 
         let oldInstances = desktopVideoInstances
+        let startTime = Date()
+        
+        appLogger.info("⏱️ T+0ms: Iniciando transición de \(self.currentVideo?.name ?? "?") → \(nextVideo.name)")
         
         // Create paused windows to prepare the transition
         let screens = NSScreen.screens
@@ -1154,6 +1157,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         )
         let newVideoWindows = newWindows.compactMap { $0 as? DesktopVideoWindowMejorada }
         
+        let t1 = Date().timeIntervalSince(startTime)
+        appLogger.info("⏱️ T+\(Int(t1*1000))ms: \(newVideoWindows.count) ventanas nuevas creadas")
+        
         // Validate creation
         guard !newVideoWindows.isEmpty else {
             appLogger.error("❌ No se pudieron crear ventanas para transición - manteniendo wallpaper actual")
@@ -1162,8 +1168,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }
             return
         }
-        
-        appLogger.info("✅ \(newVideoWindows.count) ventanas nuevas creadas y listas para transición")
         
         // Prepare new windows hidden at start
         await MainActor.run {
@@ -1175,31 +1179,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }
         }
         
-        // Pause previous windows to avoid VRP issues while keeping the last frame visible
-        await MainActor.run {
-            oldInstances.forEach { $0.window.pausePlayback() }
-        }
+        let t2 = Date().timeIntervalSince(startTime)
+        appLogger.info("⏱️ T+\(Int(t2*1000))ms: Nuevas ventanas preparadas (opacidad 0)")
         
-        // Pick reference windows for the transition
-        let firstOldWindow = oldInstances.first?.window
-        let firstNewWindow = newVideoWindows.first
-        
-        // Run transition while keeping old windows visible until new ones are ready
-        if firstNewWindow != nil {
-            transitionManager.startCrossfadeTransition(fromWindow: firstOldWindow, toWindow: firstNewWindow)
-        }
-        
-        // Allow visual transition time
-        try? await Task.sleep(for: .seconds(transitionDuration))
-        
-        // Ensure all new windows are visible (multi-monitor)
-        await MainActor.run {
-            newVideoWindows.forEach { $0.setOpacity(1.0) }
-            oldInstances.forEach { $0.window.setOpacity(0.0) }
-        }
-        
-        // Activate playback in new windows
+        // Activate playback in new windows BEFORE fading out the old ones
         let successCount = await windowCreationCoordinator.activatePlaybackInWindows(newVideoWindows.map { $0 as NSWindow })
+        
+        let t3 = Date().timeIntervalSince(startTime)
+        appLogger.info("⏱️ T+\(Int(t3*1000))ms: Reproducción activada (\(successCount)/\(newVideoWindows.count) ventanas)")
         
         // If nothing played, keep the previous wallpaper and clean up
         guard successCount > 0 else {
@@ -1216,6 +1203,33 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }
             return
         }
+    
+        // Pick reference windows for the transition
+        let firstOldWindow = oldInstances.first?.window
+        let firstNewWindow = newVideoWindows.first
+        
+        // Run transition while keeping old windows visible until new ones are ready
+        if firstNewWindow != nil {
+            transitionManager.startCrossfadeTransition(fromWindow: firstOldWindow, toWindow: firstNewWindow)
+        }
+        
+        let t4 = Date().timeIntervalSince(startTime)
+        appLogger.info("⏱️ T+\(Int(t4*1000))ms: Crossfade iniciado - esperando \(Int(self.transitionDuration*1000))ms")
+        
+        // Allow visual transition time
+        try? await Task.sleep(for: .seconds(transitionDuration))
+        
+        let t5 = Date().timeIntervalSince(startTime)
+        appLogger.info("⏱️ T+\(Int(t5*1000))ms: Crossfade completado - aplicando opacidades finales")
+        
+        // Ensure all new windows are visible (multi-monitor)
+        await MainActor.run {
+            newVideoWindows.forEach { $0.setOpacity(1.0) }
+            oldInstances.forEach { $0.window.setOpacity(0.0) }
+        }
+        
+        let t6 = Date().timeIntervalSince(startTime)
+        appLogger.info("⏱️ T+\(Int(t6*1000))ms: Opacidades finales aplicadas")
         
         if successCount < newVideoWindows.count {
             appLogger.warning("⚠️ Solo \(successCount)/\(newVideoWindows.count) ventanas activaron reproducción")
@@ -1242,8 +1256,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
          
         // OPTIMIZATION: Generate static frame in background after the transition
-        // Clean previous frame immediately to avoid showing the prior video
-        cleanupPreviousStaticWallpaper()
+        // Keep previous static wallpaper until the new one is ready to avoid showing the system wallpaper
         
         // HOTFIX: Use DispatchQueue.main.async instead of await MainActor.run to avoid deadlocks
         Task.detached { [weak self] in

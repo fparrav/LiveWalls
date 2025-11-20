@@ -534,8 +534,17 @@ private var videoURL: URL
     }
     
     /// Pauses playback while keeping the current frame visible
+    /// Uses rate=0 instead of pause() to ensure frame stays rendered
     public func pausePlayback() {
-        player?.pause()
+        guard let player = player else { return }
+        
+        // Use rate = 0 instead of pause() to keep frame visible
+        player.rate = 0.0
+        
+        // Force layer to stay visible and rendered
+        playerLayer?.isHidden = false
+        
+        memoryLogger.debug("⏸️ Playback paused at \(String(format: "%.2f", player.currentTime().seconds))s - frame should remain visible")
     }
     
     private func showErrorInWindow(_ message: String) {
