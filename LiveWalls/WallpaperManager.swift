@@ -887,6 +887,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         let screens = NSScreen.screens
         
+        // Verificar si el filesystem está "caliente" por precarga
+        let isWarmedUp = await videoPreloader.isWarmedUp(for: accessibleURL)
+        if isWarmedUp {
+            appLogger.info("🔥 Filesystem precalentado - creación acelerada esperada")
+        }
+        
         // Usar WindowCreationCoordinator para crear ventanas de forma asíncrona
         let createdWindows = await windowCreationCoordinator.createWindowsAsync(
             screens: screens,
