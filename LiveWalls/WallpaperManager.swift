@@ -78,6 +78,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let wallpaperOperationQueue = DispatchQueue(label: "com.livewalls.wallpaperQueue", attributes: .concurrent)
     private let wallpaperOperationActor = WallpaperOperationActor()
     private var isChangingVideo = false
+    private var isApplyingStaticWallpaper = false
+    private var pendingStaticApplyWorkItem: DispatchWorkItem?
     private var isCleaningUp = false
     private var autoStartScheduled = false
     
@@ -87,6 +89,34 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         func withExclusiveAccess<T>(@_implicitSelfCapture operation: () async throws -> T) async rethrows -> T {
             return try await operation()
         }
+    }
+
+    /// Schedule setting the static wallpaper with debouncing to avoid hammering NSWorkspace
+    private func scheduleStaticWallpaperApply(for nextURL: URL) {
+        // Cancel any pending apply
+        pendingStaticApplyWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if isApplyingStaticWallpaper {
+                return
+            }
+            isApplyingStaticWallpaper = true
+            Task.detached { [weak self] in
+                guard let self else { return }
+                if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
+                    DispatchQueue.main.async {
+                        let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                        if success {
+                            self.appLogger.info("🖼️ Frame estático generado y aplicado (debounced)")
+                        }
+                        // No deletion to avoid races; keep cached
+                    }
+                }
+                self.isApplyingStaticWallpaper = false
+            }
+        }
+        pendingStaticApplyWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
     }
     
     // MARK: - Initialization
@@ -607,24 +637,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         applyWallpaper()
         
         // Apply again after brief delays to ensure it sticks in all Spaces
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            applyWallpaper()
-        }
-        
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             applyWallpaper()
         }
         
         // Final application to capture any Space that changed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             applyWallpaper()
         }
         
         if success {
-            // Clean up previous wallpaper before setting the new one
-            cleanupPreviousStaticWallpaper()
-            
-            // Update reference to new wallpaper
             currentStaticWallpaperURL = imageURL
             appLogger.info("📋 Current static wallpaper updated: \(imageURL.lastPathComponent)")
         }
@@ -632,26 +654,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         return success
     }
     
-    /// Cleans up previous static wallpaper file only when necessary
-     private func cleanupPreviousStaticWallpaper() {
-         guard let previousURL = currentStaticWallpaperURL else { return }
-         
-         // HOTFIX: Los archivos estáticos (wallpaper_frame_*.png) se mantienen indefinidamente 
-         // para evitar race conditions con NSWorkspace que puede estar usando el archivo
-         // en los reintentos posteriores (0.5s, 1s, 2s, 4s). El sistema operativo limpará
-         // Application Support cuando sea necesario.
-         // Solo eliminar archivos en directorios temporales del sistema.
-         let shouldDelete = previousURL.path.contains("TemporaryItems") || 
-                           previousURL.path.contains("/tmp/")
-         
-         if shouldDelete {
-             // Use 30-second delay to give NSWorkspace time to apply wallpaper to all Spaces
-             scheduleFileForCleanup(fileURL: previousURL)
-         } else {
-             appLogger.info("💾 Keeping file in Application Support (no scheduled cleanup): \(previousURL.lastPathComponent)")
-          }
-     }
-     
      /// Gets the next video in the queue (after current video)
      /// - Returns: Next video or nil if no videos available
      private func getNextVideoInQueue() -> VideoFile? {
@@ -817,6 +819,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         Task {
             await wallpaperOperationActor.withExclusiveAccess {
                 await MainActor.run {
+                    // Cancel pending static apply tasks
+                    pendingStaticApplyWorkItem?.cancel()
+                    pendingStaticApplyWorkItem = nil
+                    isApplyingStaticWallpaper = false
+                    
                     self.appLogger.info("⏹️ Deteniendo wallpaper")
                     self.stopAutoChangeTimer()
                     self.stopStaticFrameUpdateTimer()
@@ -1105,7 +1112,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         appLogger.info("🔄 Cambiando automáticamente a: \(nextVideo.name)")
         
-        // Check if we should use transition
+        // Enforce single change at a time
+        guard !isChangingVideo else {
+            appLogger.warning("⚠️ Cambio de video ya en progreso - ignorando")
+            return
+        }
+        isChangingVideo = true
+        defer { isChangingVideo = false }
+        
         if isPlayingWallpaper {
             await changeToNextVideoWithTransition(to: nextVideo)
         } else {
@@ -1212,27 +1226,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
          
-        // OPTIMIZATION: Generate static frame in background after the transition
-        // Keep previous static wallpaper until the new one is ready to avoid showing the system wallpaper
-        
-        // HOTFIX: Use DispatchQueue.main.async instead of await MainActor.run to avoid deadlocks
-        Task.detached { [weak self] in
-            guard let self = self else { return }
-            
-            // Generar frame estático
-            if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
-                DispatchQueue.main.async {
-                    // Aplicar inmediatamente a todos los Spaces
-                    let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                    if success {
-                        self.appLogger.info("🖼️ Frame estático generado y aplicado para Exposé/Lock Screen")
-                    }
-                }
-                
-                // Limpiar archivo temporal después de aplicarlo
-                try? FileManager.default.removeItem(at: staticImageURL)
-            }
-        }
+        // OPTIMIZATION: Generate static frame after playback confirmed, throttled
+        scheduleStaticWallpaperApply(for: nextURL)
     }
     
     /// Closes windows and releases security-scoped access with a safety timeout
@@ -1257,8 +1252,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             for (window, url) in instances {
                 group.enter()
                 window.close { [weak self] in
-                    Task { @MainActor [weak self] in
-                        self?.safeStopSecurityScopedAccess(for: url)
+                    Task.detached { [weak self] in
+                        // Release bookmark off-main to avoid stalling UI
+                        await self?.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
+                        await MainActor.run {
+                            self?.activeSecurityScopedURLs.remove(url.path)
+                        }
                         group.leave()
                     }
                 }
@@ -1287,6 +1286,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         for (idx, video) in enabledVideos.enumerated() {
             appLogger.info("🔍 DEBUG - [\(idx)]: \(video.name) (id: \(video.id.uuidString.prefix(8))...)")
         }
+        
+        guard !isChangingVideo else {
+            appLogger.warning("⚠️ Cambio de wallpaper ya en progreso (manual) - ignorando")
+            return
+        }
+        isChangingVideo = true
+        defer { isChangingVideo = false }
         
         guard enabledVideos.count > 1 else {
             appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio manual (count: \(enabledVideos.count))")
@@ -1478,33 +1484,28 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Saves transition configuration
+    /// Saves transition configuration (transitions disabled)
     func saveTransitionSettings() {
-        // No-op: transitions are disabled
         isTransitionEnabled = false
         transitionDuration = 0.0
     }
     
-    /// Sets whether transitions are enabled
+    /// Sets whether transitions are enabled (no-op; transitions disabled)
     func setTransitionEnabled(_ enabled: Bool) {
-        isTransitionEnabled = false
-        transitionDuration = 0.0
         saveTransitionSettings()
     }
     
-    /// Sets the transition duration
+    /// Sets the transition duration (no-op; transitions disabled)
     func setTransitionDuration(_ duration: TimeInterval) {
-        transitionDuration = 0.0
         saveTransitionSettings()
     }
     
-    /// Sets the transition type
+    /// Sets the transition type (no-op; transitions disabled)
     func setTransitionType(_ type: TransitionManager.TransitionType) {
-        transitionType = .crossfade
         saveTransitionSettings()
     }
     
-    /// Gets the current transition settings
+    /// Gets the current transition settings (transitions disabled)
     func getTransitionSettings() -> (isEnabled: Bool, duration: TimeInterval, type: TransitionManager.TransitionType) {
         return (false, 0.0, .crossfade)
     }
