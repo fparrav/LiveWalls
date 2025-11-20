@@ -66,6 +66,31 @@ class BackgroundColorWindow: NSWindow {
         backgroundLogger.debug("🎨 Updated background color to match system appearance")
     }
     
+    /// Override required initializer to prevent usage
+    override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
+        // Initialize colorView before calling super.init
+        colorView = NSView()
+        colorView.wantsLayer = true
+        colorView.layer?.backgroundColor = BackgroundColorWindow.adaptiveBackgroundColor().cgColor
+        
+        super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
+        
+        // Configure window after super.init
+        self.isReleasedWhenClosed = false
+        self.ignoresMouseEvents = true
+        self.backgroundColor = .clear
+        self.isOpaque = false
+        self.hasShadow = false
+        self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 2)
+        self.contentView = colorView
+    }
+    
+    /// Required initializer for NSCoding (not used, but required by NSWindow)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented - BackgroundColorWindow should be initialized with init(screen:)")
+    }
+    
     /// Cleanup and close window
     func cleanup() {
         backgroundLogger.info("🧹 Cleaning up BackgroundColorWindow")

@@ -728,43 +728,40 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     return
                 }
                 
-                // Generate and set static wallpaper first
-                if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
-                    await MainActor.run {
-                        self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                        self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
-                        
-                        // Programar aplicación para todos los Spaces
-                        self.scheduleWallpaperApplicationForAllSpaces()
-                    }
-                } else {
-                    await MainActor.run {
-                        self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
-                    }
-                }
-                
-                // Crear ventanas de forma asíncrona sin bloquear main thread
-                await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
-                
-                await MainActor.run {
-                    self.isPlayingWallpaper = true
-                    self.startAutoChangeTimerIfNeeded()
-
-                    // Generar frame estático inicial para Mission Control/Exposé
-                    Task {
-                        await self.generateInitialStaticFrame()
-                    }
-                }
-
-                // Programar verificaciones de salud post‑arranque en background (Phase 7)
-                await self.scheduledHealthCheckManager.scheduleHealthChecks(
-                    action: { [weak self] in
-                        await MainActor.run { [weak self] in
-                            self?.ensurePlaying(reason: "post-start scheduled check")
+                // Fase 1: Generar frame estático en background sin bloquear inicio del video
+                Task.detached { [weak self] in
+                    if let staticImageURL = await self?.generateStaticWallpaperFrame(for: accessibleURL) {
+                        await MainActor.run {
+                            self?.setSystemStaticWallpaper(imageURL: staticImageURL)
+                            self?.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
+                            
+                            // Programar aplicación para todos los Spaces
+                            self?.scheduleWallpaperApplicationForAllSpaces()
                         }
-                    },
-                    intervals: [1.0, 3.0]
-                )
+                    } else {
+                        await MainActor.run {
+                            self?.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
+                        }
+                    }
+                }
+                
+                 // Crear ventanas de forma asíncrona sin bloquear en frame estático
+                 await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+                 
+                 await MainActor.run {
+                     self.isPlayingWallpaper = true
+                     self.startAutoChangeTimerIfNeeded()
+                 }
+
+                 // Programar verificaciones de salud post‑arranque en background (Phase 7)
+                 await self.scheduledHealthCheckManager.scheduleHealthChecks(
+                     action: { [weak self] in
+                         await MainActor.run { [weak self] in
+                             self?.ensurePlaying(reason: "post-start scheduled check")
+                         }
+                     },
+                     intervals: [1.0, 3.0]
+                 )
             }
         }
     }
@@ -969,20 +966,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Static Frame Update Timer
     
-    private func generateInitialStaticFrame() async {
-        guard let currentVideo = currentVideo, isPlayingWallpaper else { return }
-        
-        guard let accessibleURL = await resolveBookmark(for: currentVideo) else { return }
-        
-        // Generar frame inicial (sin tiempo específico para obtener frame representativo)
-        if let staticImageURL = await generateStaticWallpaperFrame(for: accessibleURL, timeOffset: nil) {
-            setSystemStaticWallpaper(imageURL: staticImageURL)
-            appLogger.info("🖼️ Frame estático inicial generado para Mission Control")
-        }
-        
-        // Liberar acceso
-        safeStopSecurityScopedAccess(for: accessibleURL)
-    }
+
     
     private func updateStaticFrameOnSpaceChange() async {
         guard let currentVideo = currentVideo, isPlayingWallpaper else { return }
