@@ -632,22 +632,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     /// Cleans up previous static wallpaper file only when necessary
-    private func cleanupPreviousStaticWallpaper() {
-        guard let previousURL = currentStaticWallpaperURL else { return }
-        
-        // Solo eliminar archivos antiguos, no los que están en Application Support actualmente activos
-        let shouldDelete = previousURL.path.contains("TemporaryItems") || 
-                          previousURL.path.contains("/tmp/") ||
-                          (previousURL.path.contains("LiveWalls") && 
-                           previousURL.lastPathComponent.starts(with: "wallpaper_frame_"))
-        
-        if shouldDelete {
-            // Use 30-second delay to give NSWorkspace time to apply wallpaper to all Spaces
-            scheduleFileForCleanup(fileURL: previousURL)
-        } else {
-            appLogger.info("💾 Keeping file in Application Support: \(previousURL.lastPathComponent)")
-        }
-    }
+     private func cleanupPreviousStaticWallpaper() {
+         guard let previousURL = currentStaticWallpaperURL else { return }
+         
+         // HOTFIX: Los archivos estáticos (wallpaper_frame_*.png) se mantienen indefinidamente 
+         // para evitar race conditions con NSWorkspace que puede estar usando el archivo
+         // en los reintentos posteriores (0.5s, 1s, 2s, 4s). El sistema operativo limpará
+         // Application Support cuando sea necesario.
+         // Solo eliminar archivos en directorios temporales del sistema.
+         let shouldDelete = previousURL.path.contains("TemporaryItems") || 
+                           previousURL.path.contains("/tmp/")
+         
+         if shouldDelete {
+             // Use 30-second delay to give NSWorkspace time to apply wallpaper to all Spaces
+             scheduleFileForCleanup(fileURL: previousURL)
+         } else {
+             appLogger.info("💾 Keeping file in Application Support (no scheduled cleanup): \(previousURL.lastPathComponent)")
+         }
+     }
     
     /// Schedules a file for cleanup after 30 seconds
     /// - Parameter fileURL: URL of the file to clean up
@@ -744,22 +746,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     return
                 }
                 
-                // Fase 1: Generar frame estático en background sin bloquear inicio del video
-                Task.detached { [weak self] in
-                    if let staticImageURL = await self?.generateStaticWallpaperFrame(for: accessibleURL) {
-                        await MainActor.run {
-                            self?.setSystemStaticWallpaper(imageURL: staticImageURL)
-                            self?.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
-                            
-                            // Programar aplicación para todos los Spaces
-                            self?.scheduleWallpaperApplicationForAllSpaces()
-                        }
-                    } else {
-                        await MainActor.run {
-                            self?.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
-                        }
-                    }
-                }
+                 // Fase 1: Generar frame estático en background sin bloquear inicio del video
+                 // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
+                 // para evitar deadlocks causados por Task.detached anidado
+                 Task.detached { [weak self] in
+                     guard let self = self else { return }
+                     if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
+                         // Ejecutar en main thread sin await para evitar deadlock
+                         DispatchQueue.main.async {
+                             _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                             self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
+                             self.scheduleWallpaperApplicationForAllSpaces()
+                         }
+                     } else {
+                         DispatchQueue.main.async {
+                             self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
+                         }
+                     }
+                 }
                 
                  // Crear ventanas de forma asíncrona sin bloquear en frame estático
                  await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
@@ -1005,20 +1009,22 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             currentVideoTime = firstInstance.window.getCurrentTime()
         }
         
-        // Generar nuevo frame para el Space actual en background (no bloquear)
-        Task.detached { [weak self] in
-            guard let self = self else { return }
-            
-            if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL, timeOffset: currentVideoTime) {
-                await MainActor.run {
-                    self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                    self.appLogger.info("🔄 Frame estático actualizado por cambio de Space - tiempo: \(currentVideoTime.map { "\(CMTimeGetSeconds($0))s" } ?? "inicial")")
-                }
-                
-                // Limpiar archivo temporal
-                try? FileManager.default.removeItem(at: staticImageURL)
-            }
-        }
+         // Generar nuevo frame para el Space actual en background (no bloquear)
+         // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
+         // para evitar deadlocks
+         Task.detached { [weak self] in
+             guard let self = self else { return }
+             
+             if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL, timeOffset: currentVideoTime) {
+                 DispatchQueue.main.async {
+                     _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                     self.appLogger.info("🔄 Frame estático actualizado por cambio de Space - tiempo: \(currentVideoTime.map { "\(CMTimeGetSeconds($0))s" } ?? "inicial")")
+                 }
+                 
+                 // Limpiar archivo temporal
+                 try? FileManager.default.removeItem(at: staticImageURL)
+             }
+         }
         
         // Liberar acceso
         safeStopSecurityScopedAccess(for: accessibleURL)
@@ -1218,28 +1224,30 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
-        
-        // OPTIMIZACIÓN: Generar frame estático en background DESPUÉS de la transición
-        // Limpiar frame anterior INMEDIATAMENTE para evitar que se vea el video anterior
-        cleanupPreviousStaticWallpaper()
-        
-        Task.detached { [weak self] in
-            guard let self = self else { return }
-            
-            // Generar frame estático
-            if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
-                await MainActor.run {
-                    // Aplicar inmediatamente a todos los Spaces
-                    let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                    if success {
-                        self.appLogger.info("🖼️ Frame estático generado y aplicado para Exposé/Lock Screen")
-                    }
-                }
-                
-                // Limpiar archivo temporal después de aplicarlo
-                try? FileManager.default.removeItem(at: staticImageURL)
-            }
-        }
+         
+         // OPTIMIZACIÓN: Generar frame estático en background DESPUÉS de la transición
+         // Limpiar frame anterior INMEDIATAMENTE para evitar que se vea el video anterior
+         cleanupPreviousStaticWallpaper()
+         
+         // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
+         // para evitar deadlocks
+         Task.detached { [weak self] in
+             guard let self = self else { return }
+             
+             // Generar frame estático
+             if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
+                 DispatchQueue.main.async {
+                     // Aplicar inmediatamente a todos los Spaces
+                     let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                     if success {
+                         self.appLogger.info("🖼️ Frame estático generado y aplicado para Exposé/Lock Screen")
+                     }
+                 }
+                 
+                 // Limpiar archivo temporal después de aplicarlo
+                 try? FileManager.default.removeItem(at: staticImageURL)
+             }
+         }
     }
     
     // MARK: - Manual Next Wallpaper & Random Play Control
@@ -1318,17 +1326,19 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     /// Guarda la lista de videos de forma asíncrona usando PersistenceActor
     func saveVideos() {
-        let videos = videoFiles
-        Task.detached { [weak self] in
-            guard let self else { return }
-            do {
-                try await self.persistenceActor.saveVideos(videos)
-            } catch {
-                await MainActor.run {
-                    self.appLogger.error("❌ Error al guardar videos: \(error.localizedDescription)")
-                }
-            }
-        }
+         let videos = videoFiles
+         Task.detached { [weak self] in
+             guard let self else { return }
+             do {
+                 try await self.persistenceActor.saveVideos(videos)
+             } catch {
+                 // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
+                 // para evitar deadlocks en Task.detached
+                 DispatchQueue.main.async {
+                     self.appLogger.error("❌ Error al guardar videos: \(error.localizedDescription)")
+                 }
+             }
+         }
     }
     
     /// Carga todos los datos de persistencia en background durante init
