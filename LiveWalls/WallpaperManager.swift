@@ -597,6 +597,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Sets a static image as system wallpaper for all screens
     /// - Parameter imageURL: URL of the image to set as wallpaper
     /// - Returns: true if set correctly on at least one screen
+    /// - Note: Fase 1 - Aplicación ÚNICA sin delays redundantes para optimizar rendimiento
     @discardableResult
     private func setSystemStaticWallpaper(imageURL: URL) -> Bool {
         var success = false
@@ -607,48 +608,25 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             return false
         }
         
-        appLogger.info("🖼️ Setting static wallpaper for all Spaces: \(imageURL.lastPathComponent)")
+        appLogger.info("🖼️ Setting static wallpaper (ONCE): \(imageURL.lastPathComponent)")
         
-        // Multiple strategy to ensure it applies to all Spaces
-        let applyWallpaper = { [weak self] in
-            guard let self = self else { return }
-            
-            // Verify again that the file exists
-            guard FileManager.default.fileExists(atPath: imageURL.path) else {
-                self.appLogger.error("❌ File disappeared during application: \(imageURL.path)")
-                return
+        // FASE 1: Aplicar UNA SOLA VEZ - eliminar delays redundantes
+        // Apply to all screens
+        for screen in NSScreen.screens {
+            do {
+                try NSWorkspace.shared.setDesktopImageURL(
+                    imageURL,
+                    for: screen,
+                    options: [
+                        .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
+                        .allowClipping: true
+                    ]
+                )
+                success = true
+                appLogger.info("✅ Static wallpaper set on screen: \(screen.localizedName)")
+            } catch {
+                appLogger.error("❌ Error setting static wallpaper on \(screen.localizedName): \(error.localizedDescription)")
             }
-            
-            // Apply to all screens
-            for screen in NSScreen.screens {
-                do {
-                    try NSWorkspace.shared.setDesktopImageURL(
-                        imageURL,
-                        for: screen,
-                        options: [
-                            .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
-                            .allowClipping: true
-                        ]
-                    )
-                    success = true
-                    self.appLogger.info("✅ Static wallpaper set on screen: \(screen.localizedName)")
-                } catch {
-                    self.appLogger.error("❌ Error setting static wallpaper on \(screen.localizedName): \(error.localizedDescription)")
-                }
-            }
-        }
-        
-        // Apply immediately
-        applyWallpaper()
-        
-        // Apply again after brief delays to ensure it sticks in all Spaces
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            applyWallpaper()
-        }
-        
-        // Final application to capture any Space that changed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            applyWallpaper()
         }
         
         if success {
@@ -775,21 +753,21 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                  // Fase 1: Generar frame estático en background sin bloquear inicio del video
                  // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
                  // para evitar deadlocks causados por Task.detached anidado
-                 Task.detached { [weak self] in
-                     guard let self = self else { return }
-                     if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
-                         // Ejecutar en main thread sin await para evitar deadlock
-                         DispatchQueue.main.async {
-                             _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                             self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
-                             self.scheduleWallpaperApplicationForAllSpaces()
-                         }
-                     } else {
-                         DispatchQueue.main.async {
-                             self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
-                         }
-                     }
-                 }
+                  Task.detached { [weak self] in
+                      guard let self = self else { return }
+                      if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
+                          // Ejecutar en main thread sin await para evitar deadlock
+                          DispatchQueue.main.async {
+                              _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                              self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
+                              // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
+                          }
+                      } else {
+                          DispatchQueue.main.async {
+                              self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
+                          }
+                      }
+                  }
                 
                  // Crear ventanas de forma asíncrona sin bloquear en frame estático
                  await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
@@ -1544,9 +1522,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             let success = setSystemStaticWallpaper(imageURL: staticImageURL)
             if success {
                 appLogger.info("✅ PRUEBA EXITOSA: Wallpaper estático establecido")
-                
-                // También aplicar a todos los Spaces existentes con delay
-                scheduleWallpaperApplicationForAllSpaces()
+                // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
             } else {
                 appLogger.error("❌ PRUEBA FALLIDA: No se pudo establecer wallpaper estático")
             }
@@ -1558,21 +1534,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         safeStopSecurityScopedAccess(for: accessibleURL)
     }
     
-    /// Programa la aplicación del wallpaper a intervalos para capturar todos los Spaces
-    private func scheduleWallpaperApplicationForAllSpaces() {
-        guard let staticURL = currentStaticWallpaperURL else { return }
-        
-        appLogger.info("📅 Programando aplicación de wallpaper para todos los Spaces")
-        
-        // Aplicar en intervalos más cortos para cubrir Spaces activos/inactivos
-        let intervals: [TimeInterval] = [0.5, 1.0, 2.0, 4.0]
-        
-        for interval in intervals {
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval) {
-                self.setSystemStaticWallpaper(imageURL: staticURL)
-            }
-        }
-    }
+    /// FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
+    /// NSWorkspace.shared.setDesktopImageURL ya aplica a todos los Spaces disponibles
     
     /// Establece un video como wallpaper actual y lo inicia inmediatamente
     /// - Parameter video: VideoFile a establecer como wallpaper fijo
