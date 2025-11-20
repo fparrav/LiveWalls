@@ -9,6 +9,7 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
 ## Core Components
 
 ### Componentes Principales
+
 1. **WallpaperManager** (`WallpaperManager.swift`)
    - Gestor central de funcionalidad de fondos de video
    - Maneja archivos de video, bookmarks con alcance de seguridad y creación de ventanas
@@ -25,46 +26,67 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
    - Contiene datos de bookmarks con alcance de seguridad para acceso de archivos
    - Incluye generación de miniaturas y persistencia
 
+4. **BookmarkActor** (`BookmarkActor.swift`)
+   - Actor para gestión segura de bookmarks con alcance de seguridad
+   - Maneja inicio/detención de acceso a recursos con permisos de sandbox
+
+5. **PersistenceActor** (`PersistenceActor.swift`)
+   - Actor para operaciones de persistencia thread-safe
+   - Gestiona guardado/carga de configuración y estado de la app
+
+6. **VideoPreloader** (`VideoPreloader.swift`)
+   - Sistema de precarga de videos para transiciones fluidas
+   - Cachea el siguiente video en la cola para eliminar delays
+
+7. **WindowCreationCoordinator** (`WindowCreationCoordinator.swift`)
+   - Coordina creación asíncrona de ventanas para múltiples pantallas
+   - Optimiza tiempo de inicio y transiciones
+
+8. **TransitionManager** (`TransitionManager.swift`)
+   - Gestiona transiciones visuales entre videos (crossfade)
+   - Controla animaciones y timing de transiciones
+
+9. **StartupCoordinator** (`StartupCoordinator.swift`)
+   - Coordina secuencia de inicio de la aplicación
+   - Maneja dependencias y sincronización al arrancar
+
+10. **PlaybackHealthChecker** (`PlaybackHealthChecker.swift`)
+    - Monitorea salud de reproducción de video
+    - Detecta y reporta problemas de playback
+
 ### Arquitectura de UI
 - Basada en SwiftUI con integración AppKit
 - **ContentView**: Interfaz principal con grid de videos y controles
 - **StatusBarMenuView**: Controles de barra de menú para operación en segundo plano
 - **SettingsView**: Panel de configuración de preferencias
+- **AboutView**: Pantalla de información de la aplicación
 - **LaunchManager**: Gestiona comportamiento de inicio y auto-lanzamiento
 
 ## Project Structure & Module Organization
 
-- `LiveWalls/`: Código fuente Swift/SwiftUI (App, managers, views).
-- `LiveWallsTests/`, `LiveWallsUITests/`: Pruebas unitarias y de UI con XCTest.
-- `LiveWalls/Assets.xcassets/`: Iconos e imágenes. `LiveWalls/Resources/Localizations/`: cadenas localizadas.
-- Scripts: `build.sh`, `scripts/` (release y utilidades), `homebrew/` (fórmula).
+- `LiveWalls/`: Código fuente Swift/SwiftUI (App, managers, views)
+- `LiveWallsTests/`, `LiveWallsUITests/`: Pruebas unitarias y de UI con XCTest
+- `LiveWalls/Assets.xcassets/`: Iconos e imágenes
+- `LiveWalls/Resources/Localizations/`: Cadenas localizadas (10 idiomas soportados)
+- Scripts: `build.sh`, `scripts/` (release y utilidades), `homebrew/` (fórmula)
 
+## Build, Test, and Development Commands
 
-### CLI & Build commands (copied from GEMINI.md)
+### Building
 - **Build Debug:** `./build.sh build` o `xcodebuild build -project LiveWalls.xcodeproj -scheme LiveWalls`
-- **Run app:** `./build.sh run` (streams logs to terminal)
+- **Run app:** `./build.sh run` (compila y lanza mostrando logs en terminal)
 - **Clean build:** `./build.sh clean`
 - **Archive release:** `./build.sh archive`
 - **Open in Xcode:** `open LiveWalls.xcodeproj`
 
+### Testing
+- **Run tests:** `./build.sh test` (ejecuta UI tests)
+- **Unit tests:** Ejecutar scheme en Xcode con Cmd+U
+- **Test coverage:** Disponible en `build/DerivedData/Logs/Test/`
+
 ### Release Automation
-- **CI:** Uses GitHub Actions workflow defined at `.github/workflows/release.yml`
-- On tagging `v*.*.*` the workflow builds the app, creates a `.dmg`, generates a changelog with `git-cliff`, and creates a GitHub release.
-
-
-## Build, Test, and Development Commands
-- `LiveWalls/`: Código fuente Swift/SwiftUI (App, managers, views).
-- `LiveWallsTests/`, `LiveWallsUITests/`: Pruebas unitarias y de UI con XCTest.
-- `LiveWalls/Assets.xcassets/`: Iconos e imágenes. `LiveWalls/Resources/Localizations/`: cadenas localizadas.
-- Scripts: `build.sh`, `scripts/` (release y utilidades), `homebrew/` (fórmula).
-
-## Build, Test, and Development Commands
-- Build debug: `./build.sh build` o `xcodebuild build -project LiveWalls.xcodeproj -scheme LiveWalls`.
-- Run local: `./build.sh run` (compila y lanza la app mostrando logs).
-- Clean: `./build.sh clean`.
-- Tests: `./build.sh test` (ejecuta UI tests; unit tests requieren ejecución de scheme en Xcode con Cmd+U).
-- Archive: `./build.sh archive` (Release `.xcarchive`).
-- Abrir en Xcode: `open LiveWalls.xcodeproj`.
+- **CI/CD:** GitHub Actions workflow en `.github/workflows/release.yml`
+- **Release trigger:** Al crear tag `v*.*.*` se construye la app, genera `.dmg`, changelog con `git-cliff` y crea GitHub release
 
 ## Coding Style & Naming Conventions
 - Lenguaje: Swift. Código y comentarios en inglés; documentación en español.
@@ -108,49 +130,15 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
 - Nunca commitees la clave privada. Usa el secreto `SPARKLE_PRIVATE_KEY` en GitHub Actions.
 - `.gitignore` ignora `private_eddsa.pem`, `ed25519_*.pem`, `public/` y `*.tar.xz`.
 
-## Bug Tracking: Auto‑reproducción tras reinicio no inicia
+## Known Issues
 
-- Estado: abierto (Issue creado: ver GitHub “Bug: Tras reiniciar, la app inicia pero el wallpaper no se reproduce automáticamente”). No cerrar hasta confirmar en build.
-- Síntoma: al iniciar sesión después de reiniciar, la app se lanza pero el wallpaper no comienza; requiere presionar “Reproducir wallpaper”.
-
-### Hipótesis (posibles causas)
-- Arranque temprano tras login: pantallas/Spaces no estabilizados cuando corre `attemptAutoStart()`.
-- Resolución de bookmarks: `startAccessingSecurityScopedResource()` puede fallar muy temprano o sin reintentos.
-- Restauración de estado: no se persiste si el wallpaper estaba activo al salir; sólo depende de `AutoStartWallpaper`.
-- Orden/z‑level de ventana: capa por debajo del escritorio de Finder en el arranque; requiere reordenar/recrear.
-- Orden de inicialización: `WallpaperManager` auto‑arranca antes de que la sesión esté “activa” (Finder/Dock listos).
-
-### Plan de trabajo (tareas atómicas y ordenadas)
-1) Instrumentación de arranque: logs detallados
-   - Añadir logs con causa en `attemptAutoStart()`, `waitForSystemReadiness()`, `startWallpaperSafe()` (marcar: pantallas, Space, bookmark resuelto, nº de ventanas creadas).
-   - Aceptación: logs muestran claramente por qué no se inicia.
-
-2) Gate de “sesión lista” y reintentos
-   - Añadir observadores de `NSApplication.didBecomeActive`, `NSWorkspace.sessionDidBecomeActive` (si aplica) y reintento si `!isPlayingWallpaper`.
-   - Añadir reintento con backoff si tras `startWallpaperSafe()` `desktopVideoInstances.isEmpty` en 1–2s.
-   - Aceptación: tras login, si el primer intento falla, se reintenta y arranca sin intervención.
-
-3) Persistir/usar “estaba reproduciendo”
-   - Guardar `wasPlayingAtShutdown` en `willTerminate` y auto‑reproducir al lanzar si true, incluso si `AutoStartWallpaper` está off (opción separada en ajustes “Reanudar última sesión”).
-   - Aceptación: si estaba reproduciendo antes de reiniciar, arranca solo.
-
-4) Pre‑resolución robusta de bookmark
-   - En `attemptAutoStart()`, pre‑resolver bookmark del `currentVideo` y, si falla, reintentar luego de 1–2s o notificar al usuario.
-   - Aceptación: no hay fallos silenciosos por bookmark temprano.
-
-5) Verificar y ajustar z‑level de ventana
-   - Probar `NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)` en lugar de `.desktopWindow - 1` y reordenar tras login.
-   - Aceptación: las ventanas son visibles por encima del wallpaper del sistema y debajo de los íconos.
-
-6) Reaplicación tardía de wallpaper estático
-   - Si `setSystemStaticWallpaper` falla al primer intento, reintentar a 0.5s y 2s; ya existe lógica similar, verificar cobertura en login.
-   - Aceptación: frame estático se aplica tras login en todos los Spaces.
-
-7) Pruebas y verificación manual
-   - Añadir un “Debug > Forzar verificación de estado” ya existente a menú para recolectar estado después de login.
-   - Escribir test unitario para persistencia de `wasPlayingAtShutdown` y carga de `currentVideo`.
-   - Checklist manual: activar “iniciar al login”, reiniciar y validar auto‑inicio sin intervención.
-
-### Priorización (MVP -> Nice‑to‑have)
-- MVP: (1) Instrumentación, (2) Gate + reintentos, (3) Persistencia estado.
-- Secundario: (4) Bookmarks robustos, (5) z‑level verificación, (6) reintentos wallpaper estático, (7) pruebas.
+### Auto-start tras reinicio no funciona consistentemente
+- **Estado:** Abierto
+- **Síntoma:** Al iniciar sesión después de reiniciar, la app se lanza pero el wallpaper no comienza automáticamente; requiere presionar "Reproducir wallpaper" manualmente.
+- **Métodos relevantes:** `attemptAutoStart()`, `startWallpaperSafe()` en `WallpaperManager.swift`
+- **User defaults:** `AutoStartWallpaper` controla si el auto-inicio está habilitado
+- **Posibles causas:**
+  - Arranque temprano tras login: pantallas/Spaces no estabilizados cuando corre `attemptAutoStart()`
+  - Resolución de bookmarks: `startAccessingSecurityScopedResource()` puede fallar muy temprano
+  - No se persiste estado de reproducción al salir
+  - Orden/z-level de ventana incorrecto al arranque
