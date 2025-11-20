@@ -126,8 +126,7 @@ private var videoURL: URL
     ///   - videoURL: Video URL with active security-scoped access.
     ///   - startPaused: Si es true, el reproductor se configura pero no inicia reproducción automáticamente
     ///   - staticImageURL: URL opcional de imagen estática para mostrar como placeholder durante pre-carga
-    ///   - preloadedAsset: AVAsset precargado para evitar creación desde cero (FASE 4 Optimización)
-    public init(screen: NSScreen, videoURL: URL, startPaused: Bool = false, staticImageURL: URL? = nil, preloadedAsset: AVAsset? = nil) {
+    public init(screen: NSScreen, videoURL: URL, startPaused: Bool = false, staticImageURL: URL? = nil) {
         self.videoURL = videoURL
         self.urlSecurityScoped = nil
         self.startPaused = startPaused
@@ -146,12 +145,7 @@ private var videoURL: URL
         }
         
         Task {
-            // FASE 4: Usar asset precargado si está disponible
-            if let preloadedAsset = preloadedAsset {
-                await setupPlayerWithPreloadedAsset(preloadedAsset)
-            } else {
-                await setupPlayer(with: videoURL)
-            }
+            await setupPlayer(with: videoURL)
         }
     }
 
@@ -178,112 +172,6 @@ private var videoURL: URL
         self.titlebarAppearsTransparent = true
         self.titleVisibility = .hidden
         self.toolbar = nil
-    }
-
-    /// FASE 4: Configurar player usando un AVAsset ya precargado
-    /// Elimina el overhead de crear AVURLAsset y cargar propiedades nuevamente
-    private func setupPlayerWithPreloadedAsset(_ asset: AVAsset) async {
-        await withCheckedContinuation { continuation in
-            setupLock.lock()
-            guard !isPlayerSetupInProgress, !isBeingTornDown else {
-                setupLock.unlock()
-                memoryLogger.warning("⚠️ Player setup cancelled - already in progress or being destroyed")
-                continuation.resume()
-                return
-            }
-            isPlayerSetupInProgress = true
-            setupLock.unlock()
-
-            Task {
-                do {
-                    // FASE 4: Asset ya está precargado, solo verificamos que sea reproducible
-                    let isPlayable = try await asset.load(.isPlayable)
-                    
-                    guard isPlayable else {
-                        throw NSError(domain: "com.livewalls.error", code: -1, userInfo: [NSLocalizedDescriptionKey: "Video is not playable"])
-                    }
-
-                    await MainActor.run {
-                        setupLock.lock()
-                        defer { 
-                            setupLock.unlock()
-                            self.isPlayerSetupInProgress = false
-                        }
-                        
-                        guard !isBeingTornDown else {
-                            memoryLogger.warning("⚠️ Setup cancelled: window being destroyed")
-                            continuation.resume()
-                            return
-                        }
-
-                        // Create components in specific order usando asset precargado
-                        let newPlayerItem = AVPlayerItem(asset: asset)
-                        let newPlayer = AVPlayer(playerItem: newPlayerItem)
-                        
-                        // Optimized configuration for background playback
-                        newPlayer.actionAtItemEnd = .none
-                        newPlayer.volume = 0.0
-                        newPlayer.automaticallyWaitsToMinimizeStalling = false
-                        newPlayer.isMuted = true
-                        newPlayer.rate = 1.0 // Ensure rate is 1.0
-                        
-                        // Configure playerLayer with optimizations
-                        let newPlayerLayer = AVPlayerLayer(player: newPlayer)
-                        newPlayerLayer.videoGravity = .resizeAspectFill
-                        newPlayerLayer.frame = self.contentView?.bounds ?? .zero
-                        newPlayerLayer.isOpaque = true
-                        newPlayerLayer.backgroundColor = CGColor.black
-                        newPlayerLayer.masksToBounds = true
-                        newPlayerLayer.shouldRasterize = true // Optimize rendering
-                        newPlayerLayer.rasterizationScale = NSScreen.main?.backingScaleFactor ?? 1.0
-                        newPlayerLayer.drawsAsynchronously = true // Asynchronous rendering
-
-                        // Add layer to view
-                        if let contentView = self.contentView {
-                            if contentView.layer == nil {
-                                contentView.wantsLayer = true
-                            }
-                            contentView.layer?.addSublayer(newPlayerLayer)
-                        }
-
-                        // Configure observers
-                        setupObservers(player: newPlayer, playerItem: newPlayerItem)
-
-                        // Save references
-                        self.player = newPlayer
-                        self.playerItem = newPlayerItem
-                        self.playerLayer = newPlayerLayer
-
-                        // Marcar como listo antes de reproducir
-                        self.isPlayerReady = true
-                        
-                        // Start playback solo si NO está en modo pausado
-                        if !self.startPaused {
-                            newPlayer.play()
-                            memoryLogger.info("✅ Player configured with preloaded asset and playing")
-                        } else {
-                            // En modo pausado, mantener pausa pero marcar como listo
-                            newPlayer.pause()
-                            memoryLogger.info("✅ Player configured with preloaded asset (paused, ready for activation)")
-                        }
-                        
-                        continuation.resume()
-                    }
-                } catch {
-                    memoryLogger.error("❌ Error configuring player with preloaded asset: \(error.localizedDescription)")
-                    await MainActor.run {
-                        self.setupLock.lock()
-                        self.isPlayerSetupInProgress = false
-                        self.setupLock.unlock()
-                        
-                        self.cleanupPlayer { [weak self] in
-                            self?.showErrorInWindow("Error loading video: \(error.localizedDescription)")
-                        }
-                        continuation.resume()
-                    }
-                }
-            }
-        }
     }
 
     private func setupPlayer(with url: URL) async {

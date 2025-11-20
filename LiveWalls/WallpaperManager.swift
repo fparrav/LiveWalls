@@ -887,18 +887,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         let screens = NSScreen.screens
         
-        // FASE 4: Obtener asset precargado del VideoPreloader si está disponible
-        let preloadedAsset = await videoPreloader.getCachedAsset(for: accessibleURL)
-        if preloadedAsset != nil {
-            appLogger.info("🚀 Usando AVAsset precargado - transición acelerada")
-        }
-        
         // Usar WindowCreationCoordinator para crear ventanas de forma asíncrona
         let createdWindows = await windowCreationCoordinator.createWindowsAsync(
             screens: screens,
             videoFile: video,
-            bookmarkActor: bookmarkActor,
-            preloadedAsset: preloadedAsset
+            bookmarkActor: bookmarkActor
         )
         
         if createdWindows.isEmpty {

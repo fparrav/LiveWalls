@@ -1,6 +1,5 @@
 import Foundation
 import AppKit
-import AVFoundation
 
 /// Coordinador para la creación asíncrona de ventanas de escritorio
 /// Elimina el bloqueo del main thread durante la creación de ventanas múltiples
@@ -13,15 +12,13 @@ actor WindowCreationCoordinator {
     ///   - bookmarkActor: Actor para resolver bookmarks de seguridad
     ///   - startPaused: Si es true, las ventanas se crean pausadas para pre-carga
     ///   - staticImageURL: URL opcional de imagen estática para placeholder
-    ///   - preloadedAsset: AVAsset precargado para acelerar creación de ventanas (FASE 4)
     /// - Returns: Array de NSWindow creadas
     func createWindowsAsync(
         screens: [NSScreen],
         videoFile: VideoFile,
         bookmarkActor: BookmarkActor,
         startPaused: Bool = false,
-        staticImageURL: URL? = nil,
-        preloadedAsset: AVAsset? = nil
+        staticImageURL: URL? = nil
     ) async -> [NSWindow] {
         guard let bookmarkData = videoFile.bookmarkData else {
             print("❌ No hay bookmark data disponible")
@@ -48,14 +45,13 @@ actor WindowCreationCoordinator {
         
         // Crear ventanas para cada pantalla de forma asíncrona
         for screen in screens {
-            // FASE 4: Crear ventana usando asset precargado si está disponible
+            // Crear ventana de video para esta pantalla usando Task.detached en MainActor
             let window = await Task.detached { @MainActor in
                 DesktopVideoWindowMejorada(
                     screen: screen,
                     videoURL: accessibleURL,
                     startPaused: startPaused,
-                    staticImageURL: staticImageURL,
-                    preloadedAsset: preloadedAsset
+                    staticImageURL: staticImageURL
                 )
             }.value
             
