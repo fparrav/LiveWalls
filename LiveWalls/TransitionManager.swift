@@ -26,6 +26,8 @@ class TransitionManager {
         let startTime: Date
         let fromWindow: DesktopVideoWindowMejorada?
         let toWindow: DesktopVideoWindowMejorada?
+        let fromWindows: [DesktopVideoWindowMejorada]
+        let toWindows: [DesktopVideoWindowMejorada]
         
         init(type: TransitionType, duration: TimeInterval, fromWindow: DesktopVideoWindowMejorada?, toWindow: DesktopVideoWindowMejorada?) {
             self.type = type
@@ -33,6 +35,18 @@ class TransitionManager {
             self.startTime = Date()
             self.fromWindow = fromWindow
             self.toWindow = toWindow
+            self.fromWindows = []
+            self.toWindows = []
+        }
+        
+        init(type: TransitionType, duration: TimeInterval, fromWindows: [DesktopVideoWindowMejorada], toWindows: [DesktopVideoWindowMejorada]) {
+            self.type = type
+            self.duration = duration
+            self.startTime = Date()
+            self.fromWindow = fromWindows.first
+            self.toWindow = toWindows.first
+            self.fromWindows = fromWindows
+            self.toWindows = toWindows
         }
     }
     
@@ -52,6 +66,20 @@ class TransitionManager {
             duration: transitionDuration,
             fromWindow: fromWindow,
             toWindow: toWindow
+        )
+        startAnimationTask()
+    }
+    
+    /// Starts a crossfade transition between multiple video window pairs (for multi-monitor setups)
+    /// - Parameters:
+    ///   - fromWindows: Current video windows (will fade out)
+    ///   - toWindows: Next video windows (will fade in)
+    func startCrossfadeTransition(fromWindows: [DesktopVideoWindowMejorada], toWindows: [DesktopVideoWindowMejorada]) {
+        currentTransition = Transition(
+            type: .crossfade,
+            duration: transitionDuration,
+            fromWindows: fromWindows,
+            toWindows: toWindows
         )
         startAnimationTask()
     }
@@ -98,14 +126,23 @@ class TransitionManager {
         let fromAlpha = 1.0 - progress
         let toAlpha = progress
         
-        // Update opacity of fromWindow (fade out)
-        if let fromWindow = transition.fromWindow {
-            fromWindow.setOpacity(fromAlpha)
-        }
-        
-        // Update opacity of toWindow (fade in)
-        if let toWindow = transition.toWindow {
-            toWindow.setOpacity(toAlpha)
+        // Si hay múltiples ventanas, actualizar todas
+        if !transition.fromWindows.isEmpty || !transition.toWindows.isEmpty {
+            // Multi-monitor: actualizar todas las ventanas
+            for window in transition.fromWindows {
+                window.setOpacity(fromAlpha)
+            }
+            for window in transition.toWindows {
+                window.setOpacity(toAlpha)
+            }
+        } else {
+            // Single window: retrocompatibilidad
+            if let fromWindow = transition.fromWindow {
+                fromWindow.setOpacity(fromAlpha)
+            }
+            if let toWindow = transition.toWindow {
+                toWindow.setOpacity(toAlpha)
+            }
         }
     }
     

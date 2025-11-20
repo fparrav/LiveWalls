@@ -1131,12 +1131,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }
         }
         
-        // Obtener primera ventana para crossfade
-        let currentWindow = currentWindows.first
-        let firstNewWindow = newWindows.first as? DesktopVideoWindowMejorada
+        // Preparar ventanas para crossfade multi-monitor
+        let newVideoWindows = newWindows.compactMap { $0 as? DesktopVideoWindowMejorada }
         
         // Realizar transición visual usando TransitionManager (siempre crossfade)
-        transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: firstNewWindow)
+        // Usar la versión multi-ventana para mejor soporte de multi-monitor
+        transitionManager.startCrossfadeTransition(fromWindows: currentWindows, toWindows: newVideoWindows)
         
         // Esperar que la transición visual complete
         try? await Task.sleep(for: .seconds(transitionDuration))
