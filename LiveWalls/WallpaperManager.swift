@@ -698,6 +698,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         currentVideo = video
         saveCurrentVideo()
         
+        // FASE 3: Invalidar cache de bookmarks al cambiar video
+        Task {
+            await bookmarkActor.invalidateCache()
+        }
+        
         appLogger.info("✅ Active video set: \(video.name)")
     }
     

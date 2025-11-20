@@ -170,4 +170,96 @@ final class BookmarkActorTests: XCTestCase {
         // Cleanup: Detener acceso
         await bookmarkActor.stopAccessingSecurityScopedResource(url: resolvedURL)
     }
+    
+    // MARK: - Fase 3: Tests de Bookmark Caching
+    
+    /// Test que verifica cache hit - segunda resolución usa cache
+    /// Fase 3: Reducir resoluciones redundantes (3→1)
+    func testBookmarkCacheHit() async throws {
+        // Given: Crear bookmark data de prueba
+        let testURL = URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")
+        
+        guard FileManager.default.fileExists(atPath: testURL.path) else {
+            throw XCTSkip("Archivo de prueba no existe")
+        }
+        
+        let bookmarkData = try testURL.bookmarkData(
+            options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        
+        // When: Resolver el mismo bookmark dos veces
+        let firstResolve = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
+        
+        // Segunda resolución debe usar cache
+        let startTime = Date()
+        let secondResolve = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
+        let elapsed = Date().timeIntervalSince(startTime)
+        
+        // Then: Ambas URLs deben ser iguales
+        XCTAssertEqual(firstResolve.path, secondResolve.path, "Cache debe retornar misma URL")
+        
+        // Cache hit debe ser mucho más rápido (<10ms vs ~50ms+ para resolución real)
+        XCTAssertLessThan(elapsed, 0.01, "Cache hit debe ser rápido (<10ms), fue \(elapsed)s")
+    }
+    
+    /// Test que verifica cache miss - primera resolución accede filesystem
+    /// Fase 3: Validar que primera resolución no usa cache
+    func testBookmarkCacheMiss() async throws {
+        // Given: BookmarkActor nuevo con cache vacío
+        let freshActor = BookmarkActor()
+        let testURL = URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")
+        
+        guard FileManager.default.fileExists(atPath: testURL.path) else {
+            throw XCTSkip("Archivo de prueba no existe")
+        }
+        
+        let bookmarkData = try testURL.bookmarkData(
+            options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        
+        // When: Primera resolución (cache miss)
+        let startTime = Date()
+        let resolvedURL = try await freshActor.resolveBookmark(bookmarkData: bookmarkData)
+        let elapsed = Date().timeIntervalSince(startTime)
+        
+        // Then: Debe resolver correctamente
+        XCTAssertEqual(resolvedURL.path, testURL.path, "Primera resolución debe funcionar")
+        
+        // Primera resolución toma más tiempo (acceso a filesystem)
+        // No validamos tiempo específico porque puede variar, solo que funciona
+        XCTAssertNotNil(resolvedURL, "Primera resolución debe retornar URL válida")
+    }
+    
+    /// Test que verifica invalidación de cache al cambiar video
+    /// Fase 3: Validar limpieza de cache
+    func testCacheInvalidation() async throws {
+        // Given: Cache con bookmark resuelto
+        let testURL = URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")
+        
+        guard FileManager.default.fileExists(atPath: testURL.path) else {
+            throw XCTSkip("Archivo de prueba no existe")
+        }
+        
+        let bookmarkData = try testURL.bookmarkData(
+            options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        
+        // Primera resolución (puebla cache)
+        _ = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
+        
+        // When: Invalidar cache
+        await bookmarkActor.invalidateCache()
+        
+        // Then: Siguiente resolución debe ser cache miss (tomar tiempo real)
+        // No podemos medir tiempo fácilmente, pero verificamos que no falla
+        let resolvedAfterInvalidation = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
+        
+        XCTAssertEqual(resolvedAfterInvalidation.path, testURL.path, "Resolución post-invalidación debe funcionar")
+    }
 }

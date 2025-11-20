@@ -12,6 +12,10 @@ actor BookmarkActor {
     /// Set thread-safe de URLs con acceso security-scoped activo
     private var activeSecurityScopedURLs: Set<String> = []
     
+    /// FASE 3: Cache de bookmarks resueltos para evitar resoluciones redundantes
+    /// Key: bookmark data hash, Value: resolved URL
+    private var resolvedBookmarkCache: [String: URL] = [:]
+    
     // MARK: - Initialization
     
     init() {
@@ -29,7 +33,15 @@ actor BookmarkActor {
     /// - Returns: URL accesible resuelta desde el bookmark
     /// - Throws: Error si la resolución falla
     func resolveBookmark(bookmarkData: Data) async throws -> URL {
-        logger.debug("🔍 Resolviendo bookmark de forma asíncrona...")
+        // FASE 3: Consultar cache primero
+        let cacheKey = bookmarkData.base64EncodedString()
+        
+        if let cachedURL = resolvedBookmarkCache[cacheKey] {
+            logger.debug("⚡ Cache HIT para bookmark: \(cachedURL.lastPathComponent)")
+            return cachedURL
+        }
+        
+        logger.debug("🔍 Cache MISS - Resolviendo bookmark de forma asíncrona...")
         
         var isStale = false
         let url = try URL(
@@ -43,7 +55,10 @@ actor BookmarkActor {
             logger.warning("⚠️ Bookmark obsoleto detectado para: \(url.lastPathComponent)")
         }
         
-        logger.info("✅ Bookmark resuelto: \(url.lastPathComponent)")
+        // FASE 3: Almacenar en cache para futuras resoluciones
+        resolvedBookmarkCache[cacheKey] = url
+        
+        logger.info("✅ Bookmark resuelto y cacheado: \(url.lastPathComponent)")
         return url
     }
     
@@ -93,6 +108,21 @@ actor BookmarkActor {
         
         self.activeSecurityScopedURLs.removeAll()
         logger.info("✅ Todos los accesos security-scoped detenidos")
+    }
+    
+    // MARK: - Cache Management (Fase 3)
+    
+    /// Invalida el cache de bookmarks resueltos
+    /// Se debe llamar cuando se cambia de video para forzar nueva resolución
+    func invalidateCache() {
+        let cacheSize = resolvedBookmarkCache.count
+        resolvedBookmarkCache.removeAll()
+        logger.info("🗑️ Cache de bookmarks invalidado (\(cacheSize) entradas eliminadas)")
+    }
+    
+    /// Retorna el tamaño actual del cache (para debugging/testing)
+    func getCacheSize() -> Int {
+        return resolvedBookmarkCache.count
     }
     
     // MARK: - Debug & Monitoring
