@@ -1114,6 +1114,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // FASE 5.1: Esperar a que TODAS las ventanas estén ready (ya implementado en coordinator)
         appLogger.info("✅ \(newWindows.count) ventanas listas para transición")
         
+        // MEJORA: Pausar ventanas antiguas antes de la transición para evitar consumo innecesario de CPU
+        let currentWindows = desktopVideoInstances.map { $0.window }
+        for window in currentWindows {
+            window.forcePause()
+        }
+        appLogger.info("⏸️ Ventanas antiguas pausadas para transición")
+        
         // Configurar ventanas para transición
         for window in newWindows {
             if let videoWindow = window as? DesktopVideoWindowMejorada {
@@ -1124,8 +1131,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }
         }
         
-        // Obtener ventanas actuales para la transición
-        let currentWindows = desktopVideoInstances.map { $0.window }
+        // Obtener primera ventana para crossfade
         let currentWindow = currentWindows.first
         let firstNewWindow = newWindows.first as? DesktopVideoWindowMejorada
         

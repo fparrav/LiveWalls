@@ -532,6 +532,11 @@ private var videoURL: URL
         player?.play()
     }
     
+    /// Pauses playback on the underlying player if available
+    public func forcePause() {
+        player?.pause()
+    }
+    
     private func showErrorInWindow(_ message: String) {
         guard let contentView = self.contentView else { return }
         for subview in contentView.subviews {
