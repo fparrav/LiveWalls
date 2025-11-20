@@ -69,9 +69,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private let startupCoordinator = StartupCoordinator()
     private let playbackHealthChecker = PlaybackHealthChecker()
     private let windowCreationCoordinator = WindowCreationCoordinator()
-    private let scheduledHealthCheckManager = ScheduledHealthCheckManager()
-    private var activeSecurityScopedURLs: Set<String> = []
-    private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
+     private let scheduledHealthCheckManager = ScheduledHealthCheckManager()
+     private let videoPreloader = VideoPreloader()
+     private var activeSecurityScopedURLs: Set<String> = []
+     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
     // MARK: - Synchronization to prevent crashes
     private let wallpaperOperationQueue = DispatchQueue(label: "com.livewalls.wallpaperQueue", attributes: .concurrent)
@@ -648,9 +649,27 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
              scheduleFileForCleanup(fileURL: previousURL)
          } else {
              appLogger.info("💾 Keeping file in Application Support (no scheduled cleanup): \(previousURL.lastPathComponent)")
-         }
+          }
      }
-    
+     
+     /// Gets the next video in the queue (after current video)
+     /// - Returns: Next video or nil if no videos available
+     private func getNextVideoInQueue() -> VideoFile? {
+         let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
+         
+         guard !enabledVideos.isEmpty, let currentVideo = currentVideo else {
+             return nil
+         }
+         
+         guard let currentIndex = enabledVideos.firstIndex(where: { $0.id == currentVideo.id }) else {
+             return enabledVideos.first
+         }
+         
+         let nextIndex = (currentIndex + 1) % enabledVideos.count
+         return enabledVideos[nextIndex]
+     }
+     
+
     /// Schedules a file for cleanup after 30 seconds
     /// - Parameter fileURL: URL of the file to clean up
     func scheduleFileForCleanup(fileURL: URL) {
@@ -774,17 +793,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                  }
 
                  // Programar verificaciones de salud post‑arranque en background (Phase 7)
-                 await self.scheduledHealthCheckManager.scheduleHealthChecks(
-                     action: { [weak self] in
-                         await MainActor.run { [weak self] in
-                             self?.ensurePlaying(reason: "post-start scheduled check")
-                         }
-                     },
-                     intervals: [1.0, 3.0]
-                 )
-            }
-        }
-    }
+                  await self.scheduledHealthCheckManager.scheduleHealthChecks(
+                      action: { [weak self] in
+                          await MainActor.run { [weak self] in
+                              self?.ensurePlaying(reason: "post-start scheduled check")
+                          }
+                      },
+                      intervals: [1.0, 3.0]
+                  )
+                  
+                  // Precargar el siguiente video para transiciones instantáneas
+                  if let nextVideo = self.getNextVideoInQueue() {
+                      if let nextURL = await self.resolveBookmark(for: nextVideo) {
+                          await self.videoPreloader.preload(videoURL: nextURL)
+                      }
+                  }
+             }
+         }
+     }
     
     /// Stops wallpaper playback
     func stopWallpaper() {
@@ -1216,9 +1242,18 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         // Actualizar video activo
-        await setActiveVideo(nextVideo)
-        
-        // NUEVO: Limpiar ventanas de color de fondo ahora que la transición terminó
+         await setActiveVideo(nextVideo)
+         
+         // Precargar el siguiente video en la cola para transiciones instantáneas
+         Task {
+             if let nextVideo = self.getNextVideoInQueue() {
+                 if let nextURL = await self.resolveBookmark(for: nextVideo) {
+                     await self.videoPreloader.preload(videoURL: nextURL)
+                 }
+             }
+         }
+         
+         // NUEVO: Limpiar ventanas de color de fondo ahora que la transición terminó
         await MainActor.run {
             self.cleanupBackgroundColorWindows()
         }
