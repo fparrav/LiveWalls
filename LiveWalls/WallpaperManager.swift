@@ -887,6 +887,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         
         let screens = NSScreen.screens
         
+        // FASE 5: Métricas de rendimiento - timestamp inicio
+        let startTime = Date()
+        
         // Verificar si el filesystem está "caliente" por precarga
         let isWarmedUp = await videoPreloader.isWarmedUp(for: accessibleURL)
         if isWarmedUp {
@@ -899,6 +902,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             videoFile: video,
             bookmarkActor: bookmarkActor
         )
+        
+        // FASE 5: Métricas de rendimiento - calcular tiempo transcurrido
+        let elapsedTime = Date().timeIntervalSince(startTime)
+        let warmStatus = isWarmedUp ? "WARM" : "COLD"
+        appLogger.info("⏱️ Creación de ventanas completada en \(String(format: "%.2f", elapsedTime * 1000))ms [Cache: \(warmStatus)]")
         
         if createdWindows.isEmpty {
             appLogger.error("❌ No se pudo crear ninguna ventana de escritorio")
