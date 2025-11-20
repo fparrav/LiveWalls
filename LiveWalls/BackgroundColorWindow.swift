@@ -36,8 +36,8 @@ class BackgroundColorWindow: NSWindow {
         self.hasShadow = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         
-        // Set window level just below desktop icons (above system wallpaper)
-        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 2)
+        // Keep just under desktop icons so we reliably cover the system wallpaper
+        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
         
         // Set content view
         self.contentView = colorView
@@ -82,7 +82,7 @@ class BackgroundColorWindow: NSWindow {
         self.isOpaque = false
         self.hasShadow = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 2)
+        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
         self.contentView = colorView
     }
     

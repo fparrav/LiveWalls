@@ -1140,163 +1140,169 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             await setActiveVideo(nextVideo)
             return
         }
+
+        let oldInstances = desktopVideoInstances
         
-        // OPTIMIZACIÓN: NO esperar frame estático - generarlo en background después
-        // Esto hace las transiciones instantáneas (~300ms vs ~2000ms)
-        
-        // NUEVO: Crear ventanas de color de fondo para evitar ver wallpaper del sistema
-        await MainActor.run {
-            self.createBackgroundColorWindows()
-        }
-        
-        // Pequeño delay para asegurar que las ventanas de color se muestren
-        try? await Task.sleep(for: .milliseconds(50))
-        
-        // FASE 5.1: Crear ventanas con startPaused=true SIN placeholder estático
+        // Create paused windows to prepare the transition
         let screens = NSScreen.screens
         let newWindows = await windowCreationCoordinator.createWindowsAsync(
             screens: screens,
             videoFile: nextVideo,
             bookmarkActor: bookmarkActor,
             startPaused: true,
-            staticImageURL: nil  // Sin placeholder - transición inmediata
+            staticImageURL: nil  // No placeholder for faster transition
         )
+        let newVideoWindows = newWindows.compactMap { $0 as? DesktopVideoWindowMejorada }
         
-        // Verificar que todas las ventanas fueron creadas
-        guard !newWindows.isEmpty else {
-            appLogger.error("❌ No se pudieron crear ventanas para transición")
+        // Validate creation
+        guard !newVideoWindows.isEmpty else {
+            appLogger.error("❌ No se pudieron crear ventanas para transición - manteniendo wallpaper actual")
+            await MainActor.run {
+                self.safeStopSecurityScopedAccess(for: nextURL)
+            }
             return
         }
         
-        // FASE 5.1: Esperar a que TODAS las ventanas estén ready (ya implementado en coordinator)
-        appLogger.info("✅ \(newWindows.count) ventanas listas para transición")
+        appLogger.info("✅ \(newVideoWindows.count) ventanas nuevas creadas y listas para transición")
         
-        // Configurar ventanas para transición
-        for window in newWindows {
-            if let videoWindow = window as? DesktopVideoWindowMejorada {
-                videoWindow.delegate = self
-                videoWindow.orderFront(nil)
-                videoWindow.orderBack(nil)
-                videoWindow.setOpacity(0.0) // Iniciar invisible
+        // Prepare new windows hidden at start
+        await MainActor.run {
+            newVideoWindows.forEach { window in
+                window.delegate = self
+                window.orderFront(nil)
+                window.orderBack(nil)
+                window.setOpacity(0.0)
             }
         }
         
-        // Obtener ventanas actuales para la transición
-        let currentWindows = desktopVideoInstances.map { $0.window }
-        let currentWindow = currentWindows.first
-        let firstNewWindow = newWindows.first as? DesktopVideoWindowMejorada
+        // Pause previous windows to avoid VRP issues while keeping the last frame visible
+        await MainActor.run {
+            oldInstances.forEach { $0.window.pausePlayback() }
+        }
         
-        // Realizar transición visual usando TransitionManager (siempre crossfade)
-        transitionManager.startCrossfadeTransition(fromWindow: currentWindow, toWindow: firstNewWindow)
+        // Pick reference windows for the transition
+        let firstOldWindow = oldInstances.first?.window
+        let firstNewWindow = newVideoWindows.first
         
-        // Esperar que la transición visual complete
+        // Run transition while keeping old windows visible until new ones are ready
+        if firstNewWindow != nil {
+            transitionManager.startCrossfadeTransition(fromWindow: firstOldWindow, toWindow: firstNewWindow)
+        }
+        
+        // Allow visual transition time
         try? await Task.sleep(for: .seconds(transitionDuration))
         
-        // FASE 5.1: DESPUÉS de la transición visual, activar reproducción
-        let successCount = await windowCreationCoordinator.activatePlaybackInWindows(newWindows)
-        
-        // Verificar que al menos algunas ventanas activaron reproducción
-        if successCount == 0 {
-            appLogger.warning("⚠️ Ninguna ventana pudo activar reproducción - posible problema de timing")
-        } else if successCount < newWindows.count {
-            appLogger.warning("⚠️ Solo \(successCount)/\(newWindows.count) ventanas activaron reproducción")
+        // Ensure all new windows are visible (multi-monitor)
+        await MainActor.run {
+            newVideoWindows.forEach { $0.setOpacity(1.0) }
+            oldInstances.forEach { $0.window.setOpacity(0.0) }
         }
         
-        // FASE 5.3: Guardar referencias de ventanas antiguas y limpiar
-        let oldInstances = desktopVideoInstances
+        // Activate playback in new windows
+        let successCount = await windowCreationCoordinator.activatePlaybackInWindows(newVideoWindows.map { $0 as NSWindow })
         
-        // Actualizar desktopVideoInstances con las nuevas ventanas
-        desktopVideoInstances = newWindows.compactMap { window in
-            if let videoWindow = window as? DesktopVideoWindowMejorada {
-                return (window: videoWindow, accessibleURL: nextURL)
+        // If nothing played, keep the previous wallpaper and clean up
+        guard successCount > 0 else {
+            appLogger.error("❌ Ninguna ventana pudo activar reproducción - conservando wallpaper previo")
+            await MainActor.run {
+                oldInstances.forEach {
+                    $0.window.setOpacity(1.0)
+                    $0.window.forcePlay()
+                }
             }
-            return nil
+            await teardownWindows(newVideoWindows.map { ($0, nextURL) }, reason: "fallo al activar nuevas ventanas")
+            await MainActor.run {
+                self.safeStopSecurityScopedAccess(for: nextURL)
+            }
+            return
         }
         
-        // FASE 5.3: Destruir ventanas antiguas de forma garantizada usando DispatchGroup
+        if successCount < newVideoWindows.count {
+            appLogger.warning("⚠️ Solo \(successCount)/\(newVideoWindows.count) ventanas activaron reproducción")
+        } else {
+            appLogger.info("✅ Todas las ventanas activaron reproducción exitosamente")
+        }
+        
+        // Update active instances and selected video
+        desktopVideoInstances = newVideoWindows.map { (window: $0, accessibleURL: nextURL) }
+        await setActiveVideo(nextVideo)
+        
+        // Preload the next video in the queue for fast transitions
+        Task {
+            if let nextVideo = self.getNextVideoInQueue() {
+                if let nextURL = await self.resolveBookmark(for: nextVideo) {
+                    await self.videoPreloader.preload(videoURL: nextURL)
+                }
+            }
+        }
+        
+        // Close previous windows once the new ones are playing
+        await teardownWindows(oldInstances, reason: "transición completada")
+        
+        appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
+         
+        // OPTIMIZATION: Generate static frame in background after the transition
+        // Clean previous frame immediately to avoid showing the prior video
+        cleanupPreviousStaticWallpaper()
+        
+        // HOTFIX: Use DispatchQueue.main.async instead of await MainActor.run to avoid deadlocks
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            
+            // Generar frame estático
+            if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
+                DispatchQueue.main.async {
+                    // Aplicar inmediatamente a todos los Spaces
+                    let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                    if success {
+                        self.appLogger.info("🖼️ Frame estático generado y aplicado para Exposé/Lock Screen")
+                    }
+                }
+                
+                // Limpiar archivo temporal después de aplicarlo
+                try? FileManager.default.removeItem(at: staticImageURL)
+            }
+        }
+    }
+    
+    /// Closes windows and releases security-scoped access with a safety timeout
+    private func teardownWindows(_ instances: [(DesktopVideoWindowMejorada, URL)], reason: String) async {
+        guard !instances.isEmpty else { return }
+        
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let group = DispatchGroup()
             var hasResumed = false
             let resumeLock = NSLock()
             
-            // Helper para resumir solo una vez
-            let resumeOnce = { (reason: String) in
+            let resumeOnce = { (why: String) in
                 resumeLock.lock()
                 defer { resumeLock.unlock() }
                 if !hasResumed {
                     hasResumed = true
-                    self.appLogger.info("📍 Continuando ejecución: \(reason)")
+                    self.appLogger.info("📍 Ventanas cerradas (\(reason)): \(why)")
                     continuation.resume()
                 }
             }
             
-            for (window, url) in oldInstances {
+            for (window, url) in instances {
                 group.enter()
                 window.close { [weak self] in
-                    guard let self else {
-                        group.leave()
-                        return
-                    }
-                    Task { @MainActor in
-                        self.safeStopSecurityScopedAccess(for: url)
+                    Task { @MainActor [weak self] in
+                        self?.safeStopSecurityScopedAccess(for: url)
                         group.leave()
                     }
                 }
             }
             
-            // Esperar con timeout de 5 segundos
             group.notify(queue: .main) {
-                resumeOnce("Todas las ventanas antiguas fueron destruidas")
+                resumeOnce("Todas las ventanas notificaron cierre")
             }
             
             // Timeout de seguridad
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                resumeOnce("Timeout de 5s alcanzado esperando destrucción")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                resumeOnce("Timeout de 3s cerrando ventanas")
             }
         }
-        
-        // Actualizar video activo
-         await setActiveVideo(nextVideo)
-         
-         // Precargar el siguiente video en la cola para transiciones instantáneas
-         Task {
-             if let nextVideo = self.getNextVideoInQueue() {
-                 if let nextURL = await self.resolveBookmark(for: nextVideo) {
-                     await self.videoPreloader.preload(videoURL: nextURL)
-                 }
-             }
-         }
-         
-         // NUEVO: Limpiar ventanas de color de fondo ahora que la transición terminó
-        await MainActor.run {
-            self.cleanupBackgroundColorWindows()
-        }
-        
-        appLogger.info("✅ Cambio de video con transición completado: \(nextVideo.name)")
-         
-         // OPTIMIZACIÓN: Generar frame estático en background DESPUÉS de la transición
-         // Limpiar frame anterior INMEDIATAMENTE para evitar que se vea el video anterior
-         cleanupPreviousStaticWallpaper()
-         
-         // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
-         // para evitar deadlocks
-         Task.detached { [weak self] in
-             guard let self = self else { return }
-             
-             // Generar frame estático
-             if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
-                 DispatchQueue.main.async {
-                     // Aplicar inmediatamente a todos los Spaces
-                     let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                     if success {
-                         self.appLogger.info("🖼️ Frame estático generado y aplicado para Exposé/Lock Screen")
-                     }
-                 }
-                 
-                 // Limpiar archivo temporal después de aplicarlo
-                 try? FileManager.default.removeItem(at: staticImageURL)
-             }
-         }
     }
     
     // MARK: - Manual Next Wallpaper & Random Play Control
@@ -1305,8 +1311,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     func nextWallpaper() async {
         let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
         
+        // DEBUG: Log detallado de videos disponibles
+        appLogger.info("🔍 DEBUG nextWallpaper() - Videos habilitados: \(enabledVideos.count)")
+        appLogger.info("🔍 DEBUG - Current video: \(self.currentVideo?.name ?? "nil")")
+        for (idx, video) in enabledVideos.enumerated() {
+            appLogger.info("🔍 DEBUG - [\(idx)]: \(video.name) (id: \(video.id.uuidString.prefix(8))...)")
+        }
+        
         guard enabledVideos.count > 1 else {
-            appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio manual")
+            appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio manual (count: \(enabledVideos.count))")
             return
         }
         
@@ -1332,7 +1345,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let nextIndex = (currentIndex + 1) % enabledVideos.count
         let nextVideo = enabledVideos[nextIndex]
         
-        appLogger.info("🔄 Cambiando manualmente a: \(nextVideo.name)")
+        appLogger.info("🔄 Cambiando manualmente de [\(currentIndex)] \(currentVideo.name) → [\(nextIndex)] \(nextVideo.name)")
+        
+        // VERIFICACIÓN: Asegurar que realmente es un video diferente
+        if nextVideo.id == currentVideo.id {
+            appLogger.error("❌ BUG DETECTADO: nextVideo es el mismo que currentVideo!")
+            appLogger.error("   Current: \(currentVideo.name) (\(currentVideo.id.uuidString))")
+            appLogger.error("   Next: \(nextVideo.name) (\(nextVideo.id.uuidString))")
+            appLogger.error("   CurrentIndex: \(currentIndex), NextIndex: \(nextIndex), Count: \(enabledVideos.count)")
+            return
+        }
         
         if isPlayingWallpaper {
             await changeToNextVideoWithTransition(to: nextVideo)
@@ -1845,12 +1867,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let screens = NSScreen.screens
         for screen in screens {
             let colorWindow = BackgroundColorWindow(screen: screen)
-            colorWindow.orderFront(self)
-            colorWindow.orderBack(self)
+            // Ordenar al frente primero para asegurar visibilidad
+            colorWindow.makeKeyAndOrderFront(nil)
+            // Luego ordenar atrás pero manteniendo visible
+            colorWindow.orderBack(nil)
+            // Forzar renderizado inmediato
+            colorWindow.display()
+            colorWindow.displayIfNeeded()
             self.backgroundColorWindows.append(colorWindow)
         }
         
-        self.appLogger.info("✅ Created \(self.backgroundColorWindows.count) background color windows")
+        self.appLogger.info("✅ Created \(self.backgroundColorWindows.count) background color windows with forced display")
     }
     
     /// Clean up background color windows

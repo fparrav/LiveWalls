@@ -151,7 +151,8 @@ private var videoURL: URL
 
     private func setupWindow(for screen: NSScreen) {
         memoryLogger.info("🖥️ Configuring window for screen: \(screen.localizedName)")
-        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
+        // Keep above the system wallpaper but below desktop icons
+        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         self.isOpaque = false
         self.hasShadow = false
@@ -530,6 +531,11 @@ private var videoURL: URL
     /// Forces playback on the underlying player if available
     public func forcePlay() {
         player?.play()
+    }
+    
+    /// Pauses playback while keeping the current frame visible
+    public func pausePlayback() {
+        player?.pause()
     }
     
     private func showErrorInWindow(_ message: String) {
