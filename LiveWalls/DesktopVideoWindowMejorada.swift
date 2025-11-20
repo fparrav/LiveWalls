@@ -533,6 +533,11 @@ private var videoURL: URL
         player?.play()
     }
     
+    /// Pauses playback and keeps the current frame visible (alias)
+    public func forcePause() {
+        pausePlayback()
+    }
+    
     /// Pauses playback while keeping the current frame visible
     /// Uses rate=0 instead of pause() to ensure frame stays rendered
     public func pausePlayback() {

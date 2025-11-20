@@ -1203,15 +1203,18 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }
             return
         }
-    
-        // Pick reference windows for the transition
-        let firstOldWindow = oldInstances.first?.window
-        let firstNewWindow = newVideoWindows.first
         
-        // Run transition while keeping old windows visible until new ones are ready
-        if firstNewWindow != nil {
-            transitionManager.startCrossfadeTransition(fromWindow: firstOldWindow, toWindow: firstNewWindow)
+        // Pause old windows to freeze their last frame while new ones fade in
+        await MainActor.run {
+            oldInstances.forEach { $0.window.forcePause() }
         }
+        
+        let t3a = Date().timeIntervalSince(startTime)
+        appLogger.info("⏱️ T+\(Int(t3a*1000))ms: Ventanas antiguas pausadas para crossfade")
+        
+        // Run transition across all monitors
+        let currentWindows = oldInstances.map { $0.window }
+        transitionManager.startCrossfadeTransition(fromWindows: currentWindows, toWindows: newVideoWindows)
         
         let t4 = Date().timeIntervalSince(startTime)
         appLogger.info("⏱️ T+\(Int(t4*1000))ms: Crossfade iniciado - esperando \(Int(self.transitionDuration*1000))ms")
