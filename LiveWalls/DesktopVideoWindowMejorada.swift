@@ -126,7 +126,8 @@ private var videoURL: URL
     ///   - videoURL: Video URL with active security-scoped access.
     ///   - startPaused: Si es true, el reproductor se configura pero no inicia reproducción automáticamente
     ///   - staticImageURL: URL opcional de imagen estática para mostrar como placeholder durante pre-carga
-    public init(screen: NSScreen, videoURL: URL, startPaused: Bool = false, staticImageURL: URL? = nil) {
+    ///   - preloadedAsset: Optional preloaded AVAsset to skip asset loading (for fast window creation)
+    public init(screen: NSScreen, videoURL: URL, startPaused: Bool = false, staticImageURL: URL? = nil, preloadedAsset: AVURLAsset? = nil) {
         self.videoURL = videoURL
         self.urlSecurityScoped = nil
         self.startPaused = startPaused
@@ -145,7 +146,7 @@ private var videoURL: URL
         }
         
         Task {
-            await setupPlayer(with: videoURL)
+            await setupPlayer(with: videoURL, preloadedAsset: preloadedAsset)
         }
     }
 
@@ -175,7 +176,7 @@ private var videoURL: URL
         self.toolbar = nil
     }
 
-    private func setupPlayer(with url: URL) async {
+    private func setupPlayer(with url: URL, preloadedAsset: AVURLAsset? = nil) async {
         await withCheckedContinuation { continuation in
             setupLock.lock()
             guard !isPlayerSetupInProgress, !isBeingTornDown else {
@@ -187,7 +188,12 @@ private var videoURL: URL
             isPlayerSetupInProgress = true
             setupLock.unlock()
 
-            let asset = AVURLAsset(url: url)
+            // Use preloaded asset if available, otherwise create new one
+            let asset = preloadedAsset ?? AVURLAsset(url: url)
+            if preloadedAsset != nil {
+                memoryLogger.info("🚀 Using PRELOADED AVAsset - fast path")
+            }
+            
             Task {
                 do {
                     let (isPlayable, _) = try await asset.load(.isPlayable, .tracks)

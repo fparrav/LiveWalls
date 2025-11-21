@@ -12,13 +12,15 @@ actor WindowCreationCoordinator {
     ///   - bookmarkActor: Actor para resolver bookmarks de seguridad
     ///   - startPaused: Si es true, las ventanas se crean pausadas para pre-carga
     ///   - staticImageURL: URL opcional de imagen estática para placeholder
+    ///   - videoPreloader: Preloader opcional para usar assets cacheados
     /// - Returns: Array de NSWindow creadas
     func createWindowsAsync(
         screens: [NSScreen],
         videoFile: VideoFile,
         bookmarkActor: BookmarkActor,
         startPaused: Bool = false,
-        staticImageURL: URL? = nil
+        staticImageURL: URL? = nil,
+        videoPreloader: VideoPreloader? = nil
     ) async -> [NSWindow] {
         guard let bookmarkData = videoFile.bookmarkData else {
             print("❌ No hay bookmark data disponible")
@@ -41,6 +43,17 @@ actor WindowCreationCoordinator {
             return []
         }
         
+        // Intentar obtener asset precargado si hay videoPreloader disponible
+        let preloadedAsset = await MainActor.run {
+            videoPreloader?.getPreloadedAsset(for: accessibleURL)
+        }
+        
+        if preloadedAsset != nil {
+            print("🚀 Usando AVAsset precargado - creación RÁPIDA esperada")
+        } else {
+            print("⚠️ Sin asset precargado - creación estándar")
+        }
+        
         var createdWindows: [DesktopVideoWindowMejorada] = []
         
         // Crear ventanas para cada pantalla de forma asíncrona
@@ -51,7 +64,8 @@ actor WindowCreationCoordinator {
                     screen: screen,
                     videoURL: accessibleURL,
                     startPaused: startPaused,
-                    staticImageURL: staticImageURL
+                    staticImageURL: staticImageURL,
+                    preloadedAsset: preloadedAsset
                 )
             }.value
             

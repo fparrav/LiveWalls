@@ -3,34 +3,35 @@ import AVFoundation
 import os.log
 
 /// Manages preloading of video assets for smooth transitions
-/// ARQUITECTURA CORREGIDA: Cachea metadata y "calienta" el archivo en lugar de compartir AVAsset
+/// Caches fully-loaded AVAssets to eliminate window creation delays
 @MainActor
 class VideoPreloader {
     
     private let logger = Logger(subsystem: "com.livewalls.app", category: "VideoPreloader")
     
-    // Cache de metadata precargada (NO el AVAsset, que no puede compartirse)
-    private struct PreloadedMetadata {
+    // Cache de AVAsset precargado (AVAssets PUEDEN compartirse entre múltiples AVPlayerItems)
+    private struct PreloadedAsset {
         let url: URL
+        let asset: AVURLAsset
         let isPlayable: Bool
         let duration: CMTime
         let naturalSize: CGSize
         let loadTimestamp: Date
     }
     
-    private var cachedMetadata: PreloadedMetadata?
+    private var cachedAsset: PreloadedAsset?
     
-    /// Preloads a video by "warming up" filesystem cache and loading metadata
-    /// NOTA: NO cachea AVAsset porque no puede compartirse entre múltiples AVPlayerItems
+    /// Preloads a video by fully loading the AVAsset and caching it
+    /// The cached AVAsset can be safely shared between multiple AVPlayerItems
     /// - Parameter videoURL: URL of the video to preload
     func preload(videoURL: URL) async {
-        logger.info("🔄 Precargando metadata de video: \(videoURL.lastPathComponent)")
+        logger.info("🔄 Precargando AVAsset completo: \(videoURL.lastPathComponent)")
         
-        // Crear asset temporal SOLO para calentar el filesystem y cargar metadata
+        // Crear AVAsset que será cacheado
         let asset = AVURLAsset(url: videoURL)
         
         do {
-            // Cargar propiedades esenciales (esto "calienta" el filesystem cache del OS)
+            // Cargar TODAS las propiedades para asegurar asset completamente listo
             let (isPlayable, tracks, duration) = try await asset.load(.isPlayable, .tracks, .duration)
             
             guard isPlayable, !tracks.isEmpty else {
@@ -45,50 +46,58 @@ class VideoPreloader {
                 break
             }
             
-            // Cachear SOLO la metadata, no el asset
-            cachedMetadata = PreloadedMetadata(
+            // Cachear el AVAsset COMPLETO para reuso
+            cachedAsset = PreloadedAsset(
                 url: videoURL,
+                asset: asset,
                 isPlayable: isPlayable,
                 duration: duration,
                 naturalSize: naturalSize,
                 loadTimestamp: Date()
             )
             
-            logger.info("✅ Metadata precargada: \(videoURL.lastPathComponent) - \(String(format: "%.1fs", duration.seconds))")
+            logger.info("✅ AVAsset precargado y cacheado: \(videoURL.lastPathComponent) - \(String(format: "%.1fs", duration.seconds))")
         } catch {
             logger.error("❌ Falló precarga: \(error.localizedDescription)")
         }
     }
     
-    /// Checks if metadata is cached for given URL (indicates warm filesystem cache)
+    /// Returns the preloaded AVAsset if available and not expired
     /// - Parameter videoURL: URL of the video
-    /// - Returns: true if metadata is cached (filesystem likely warm)
-    func isWarmedUp(for videoURL: URL) -> Bool {
-        guard let metadata = cachedMetadata, metadata.url == videoURL else {
-            return false
+    /// - Returns: Cached AVAsset if available, nil otherwise
+    func getPreloadedAsset(for videoURL: URL) -> AVURLAsset? {
+        guard let preloaded = cachedAsset, preloaded.url == videoURL else {
+            return nil
         }
         
         // Invalidar cache después de 5 minutos
-        let cacheAge = Date().timeIntervalSince(metadata.loadTimestamp)
+        let cacheAge = Date().timeIntervalSince(preloaded.loadTimestamp)
         if cacheAge > 300 {
             logger.debug("🕒 Cache expirado (> 5min), invalidando")
             clearCache()
-            return false
+            return nil
         }
         
-        return true
+        logger.info("🎯 Cache HIT - retornando AVAsset precargado para \(videoURL.lastPathComponent)")
+        return preloaded.asset
     }
     
-    /// Legacy method - DEPRECATED: No longer returns AVAsset to prevent sharing
-    /// Use isWarmedUp() instead to check if filesystem is warm
-    @available(*, deprecated, message: "Use isWarmedUp() instead - AVAssets cannot be shared")
+    /// Checks if an asset is cached for given URL
+    /// - Parameter videoURL: URL of the video
+    /// - Returns: true if asset is cached and not expired
+    func isWarmedUp(for videoURL: URL) -> Bool {
+        return getPreloadedAsset(for: videoURL) != nil
+    }
+    
+    /// Legacy method - DEPRECATED: Use getPreloadedAsset() instead
+    @available(*, deprecated, message: "Use getPreloadedAsset() instead", renamed: "getPreloadedAsset")
     func getCachedAsset(for videoURL: URL) -> AVAsset? {
-        return nil  // Siempre retorna nil para forzar creación de asset fresco
+        return getPreloadedAsset(for: videoURL)
     }
     
     /// Clears the preload cache
     func clearCache() {
-        cachedMetadata = nil
+        cachedAsset = nil
         logger.debug("🧹 Cache de precarga limpiado")
     }
 }

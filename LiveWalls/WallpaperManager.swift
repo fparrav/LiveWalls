@@ -896,7 +896,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let createdWindows = await windowCreationCoordinator.createWindowsAsync(
             screens: screens,
             videoFile: video,
-            bookmarkActor: bookmarkActor
+            bookmarkActor: bookmarkActor,
+            videoPreloader: videoPreloader
         )
         
         // FASE 5: Métricas de rendimiento - calcular tiempo transcurrido

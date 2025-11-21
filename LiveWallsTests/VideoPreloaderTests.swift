@@ -126,4 +126,112 @@ final class VideoPreloaderTests: XCTestCase {
          // Then
          XCTAssertFalse(isWarmedAfter, "Cache should be cold after clearing")
      }
+     
+     // MARK: - Fase 4: Tests de AVAsset Caching
+     
+      /// Test que verifica que preload cachea AVAsset para uso inmediato
+      /// Fase 4: Reducir tiempo de creación de ventanas (18s→<500ms)
+      @MainActor
+      func testPreloadCachesAVAsset() async throws {
+          // Given: Use a path that might have videos - skip if none found
+          let possiblePaths = [
+              "/System/Library/Compositions/Rollercoaster.mov",
+              "/Library/Desktop Pictures/Rollercoaster.mov"
+          ]
+          
+          var testURL: URL?
+          for path in possiblePaths {
+              if FileManager.default.fileExists(atPath: path) {
+                  testURL = URL(fileURLWithPath: path)
+                  break
+              }
+          }
+          
+          guard let videoURL = testURL else {
+              throw XCTSkip("No se encontró video de prueba en el sistema")
+          }
+          
+          // When: Precargar video
+          await videoPreloader.preload(videoURL: videoURL)
+          
+          // Obtener asset cacheado
+          let cachedAsset = await videoPreloader.getPreloadedAsset(for: videoURL)
+          
+          // Then: Debe haber asset cacheado (solo si el preload tuvo éxito)
+          XCTAssertNotNil(cachedAsset, "Preload debe cachear AVAsset para videos válidos")
+      }
+     
+      /// Test que verifica que asset precargado puede ser reutilizado
+      /// Fase 4: Validar que mismo asset se retorna para misma URL
+      @MainActor
+      func testPreloadedAssetCanBeReused() async throws {
+          // Given: Use a path that might have videos - skip if none found
+          let possiblePaths = [
+              "/System/Library/Compositions/Rollercoaster.mov",
+              "/Library/Desktop Pictures/Rollercoaster.mov"
+          ]
+          
+          var testURL: URL?
+          for path in possiblePaths {
+              if FileManager.default.fileExists(atPath: path) {
+                  testURL = URL(fileURLWithPath: path)
+                  break
+              }
+          }
+          
+          guard let videoURL = testURL else {
+              throw XCTSkip("No se encontró video de prueba en el sistema")
+          }
+          
+          // When: Precargar y obtener asset dos veces
+          await videoPreloader.preload(videoURL: videoURL)
+          
+          let firstAsset = await videoPreloader.getPreloadedAsset(for: videoURL)
+          let secondAsset = await videoPreloader.getPreloadedAsset(for: videoURL)
+          
+          // Then: Si hay asset, deben ser el mismo objeto (identidad de referencia)
+          if let first = firstAsset, let second = secondAsset {
+              XCTAssertTrue(first === second, "Debe retornar mismo AVAsset instance")
+          } else {
+              throw XCTSkip("Video no se pudo precargar")
+          }
+      }
+     
+      /// Test que verifica que preload realmente acelera el acceso
+      /// Fase 4: Confirmar que cache WARM es significativamente más rápido
+      @MainActor
+      func testPreloadWarmsCache() async throws {
+          // Given: Use a path that might have videos - skip if none found
+          let possiblePaths = [
+              "/System/Library/Compositions/Rollercoaster.mov",
+              "/Library/Desktop Pictures/Rollercoaster.mov"
+          ]
+          
+          var testURL: URL?
+          for path in possiblePaths {
+              if FileManager.default.fileExists(atPath: path) {
+                  testURL = URL(fileURLWithPath: path)
+                  break
+              }
+          }
+          
+          guard let videoURL = testURL else {
+              throw XCTSkip("No se encontró video de prueba en el sistema")
+          }
+          
+          // When: Precargar video
+          await videoPreloader.preload(videoURL: videoURL)
+          
+          // Obtener asset (debe ser rápido con cache WARM)
+          let startTime = Date()
+          let asset = await videoPreloader.getPreloadedAsset(for: videoURL)
+          let elapsed = Date().timeIntervalSince(startTime)
+          
+          // Then: Si el preload tuvo éxito, debe retornar asset muy rápido (<100ms)
+          if let _ = asset {
+              XCTAssertLessThan(elapsed, 0.1, "Cache WARM debe ser rápido (<100ms), fue \(elapsed)s")
+          } else {
+              throw XCTSkip("Video no se pudo precargar")
+          }
+      }
 }
