@@ -50,6 +50,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // FASE 5.3: Flag para prevenir transiciones concurrentes
     private var isTransitioning = false
     
+    // FASE 5: Concurrency gate para ensurePlaying()
+    private var isEnsurePlayingRunning = false
+    private var lastEnsurePlayingTime: Date?
+    private let ensurePlayingMinInterval: TimeInterval = 0.5 // 500ms mínimo entre ejecuciones
+    
     // MARK: - Background color windows for transitions
     private var backgroundColorWindows: [NSWindow] = []
     
@@ -1874,13 +1879,33 @@ extension WallpaperManager {
     }
 
     /// Verifica y re‑inicia reproducción si no se aplicó correctamente
-    /// Refactorizado para usar verificaciones asíncronas no bloqueantes con PlaybackHealthChecker
+    /// FASE 5: Optimizado con concurrency gate y rate limiting
     func ensurePlaying(reason: String) {
         appLogger.info("🩺 ensurePlaying() invocado: \(reason)")
-
+        
+        // FASE 5: Concurrency gate - prevenir ejecuciones concurrentes
+        guard !isEnsurePlayingRunning else {
+            appLogger.debug("⏭️ ensurePlaying: ya ejecutándose, saltando invocación (\(reason))")
+            return
+        }
+        
+        // FASE 5: Rate limiting - prevenir ejecuciones demasiado frecuentes
+        if let lastTime = lastEnsurePlayingTime {
+            let elapsed = Date().timeIntervalSince(lastTime)
+            if elapsed < self.ensurePlayingMinInterval {
+                appLogger.debug("🚦 ensurePlaying: rate limit - última ejecución hace \(String(format: "%.0fms", elapsed * 1000)), mínimo \(String(format: "%.0fms", self.ensurePlayingMinInterval * 1000))")
+                return
+            }
+        }
+        
+        // Marcar timestamp y flag
+        lastEnsurePlayingTime = Date()
+        isEnsurePlayingRunning = true
+        
         // Necesitamos datos mínimos
         guard currentVideo != nil else {
             appLogger.debug("ℹ️ No currentVideo disponible")
+            isEnsurePlayingRunning = false
             return
         }
 
@@ -1889,6 +1914,7 @@ extension WallpaperManager {
         if !isPlayingWallpaper && shouldAutoStart {
             appLogger.info("▶️ ensurePlaying: no isPlaying, auto‑inicio activo → startWallpaperSafe()")
             startWallpaperSafe()
+            isEnsurePlayingRunning = false
             return
         }
 
@@ -1911,9 +1937,13 @@ extension WallpaperManager {
                 } else {
                     self.appLogger.debug("✅ ensurePlaying: reproducción verificada como saludable")
                 }
+                
+                // FASE 5: Liberar gate al finalizar
+                self.isEnsurePlayingRunning = false
             }
         } else {
             appLogger.debug("ℹ️ ensurePlaying: isPlayingWallpaper=false y auto‑inicio desactivado")
+            isEnsurePlayingRunning = false
         }
     }
     
