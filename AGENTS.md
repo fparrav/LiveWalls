@@ -54,6 +54,51 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
     - Monitorea salud de reproducción de video
     - Detecta y reporta problemas de playback
 
+11. **ThrottleManager** (`ThrottleManager.swift`)
+    - Actor para throttling y debouncing de eventos frecuentes
+    - Previene ejecuciones excesivas de handlers en eventos repetidos
+    - Usado para optimizar Space changes y notificaciones del sistema
+
+12. **BackgroundColorWindow** (`BackgroundColorWindow.swift`)
+    - NSWindow para mostrar fondo de color durante transiciones
+    - Crea efecto crossfade suave entre videos
+    - Maneja z-ordering para transiciones visuales
+
+13. **NotificationManager** (`NotificationManager.swift`)
+    - Gestiona notificaciones del sistema (NSWorkspace, NSScreen)
+    - Coordina respuesta a cambios de Space, pantallas y fullscreen
+    - Centraliza observers de eventos del sistema
+
+14. **WallpaperTimerManager** (`WallpaperTimerManager.swift`)
+    - Gestiona timer para cambio automático de videos
+    - Maneja scheduling y cancelación de cambios programados
+    - Integra con sistema de auto-change de wallpapers
+
+15. **ScheduledHealthCheckManager** (`ScheduledHealthCheckManager.swift`)
+    - Programa verificaciones periódicas de salud de reproducción
+    - Ejecuta health checks en intervalos configurables
+    - Detecta y recupera de estados de reproducción degradados
+
+16. **SystemReadinessObserver** (`SystemReadinessObserver.swift`)
+    - Observa disponibilidad de pantallas y Spaces del sistema
+    - Detecta cuando el sistema está listo para operaciones de wallpaper
+    - Previene operaciones prematuras durante arranque
+
+17. **FullscreenDetector** (`FullscreenDetector.swift`)
+    - Detecta cuando hay aplicaciones en modo fullscreen
+    - Permite ajustar comportamiento según contexto de pantalla completa
+    - Optimiza recursos cuando fullscreen apps están activas
+
+18. **VideoOptimizer** (`VideoOptimizer.swift`)
+    - Optimiza configuración de video playback
+    - Gestiona ajustes de rendimiento para AVPlayer
+    - Balancea calidad vs. uso de recursos
+
+19. **AppDelegate** (`AppDelegate.swift`)
+    - Maneja eventos del ciclo de vida de la aplicación
+    - Coordina terminación limpia y cleanup de recursos
+    - Integra con sistema de notificaciones y eventos macOS
+
 ### Arquitectura de UI
 - Basada en SwiftUI con integración AppKit
 - **ContentView**: Interfaz principal con grid de videos y controles
@@ -123,6 +168,15 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
 - Las actualizaciones de UI deben ocurrir en la cola principal
 - El rastreo de recursos usa una cola concurrente con barriers
 - Las operaciones de wallpaper se ejecutan en colas dedicadas fuera del main thread
+- Usa concurrency gates (`isEnsurePlayingRunning`) para prevenir ejecuciones concurrentes
+- Implementa rate limiting con timestamps para funciones frecuentemente llamadas
+
+### Performance Optimizations (Optimizaciones de Rendimiento)
+- **Throttling/Debouncing**: ThrottleManager maneja eventos frecuentes (Space changes, notificaciones)
+- **Caching**: BookmarkActor cachea resoluciones de bookmarks; VideoPreloader cachea AVAssets
+- **Lazy Loading**: WindowCreationCoordinator crea ventanas asíncronamente sin bloquear main thread
+- **Resource Pooling**: Reutiliza assets precargados para transiciones instantáneas
+- **Concurrency Control**: Gates y rate limiting en funciones críticas como `ensurePlaying()`
 
 ### Actualizador (Sparkle)
 - Sparkle se integra vía SPM; el wrapper `InAppUpdater` usa `SPUStandardUpdaterController`.
@@ -142,3 +196,32 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
   - Resolución de bookmarks: `startAccessingSecurityScopedResource()` puede fallar muy temprano
   - No se persiste estado de reproducción al salir
   - Orden/z-level de ventana incorrecto al arranque
+- **Mitigaciones implementadas:**
+  - SystemReadinessObserver detecta cuando sistema está listo
+  - BookmarkActor cachea resoluciones para reducir fallos
+  - StartupCoordinator coordina secuencia de inicio con dependencias
+
+## Recent Performance Improvements
+
+### Phases 1-5 Optimizations (Nov 2025)
+Completadas optimizaciones significativas que eliminan operaciones redundantes y mejoran responsividad:
+
+1. **Phase 1** (Commit 23f37b5): Eliminadas aplicaciones redundantes de wallpaper estático
+   - Reducción 85% (7→1 aplicaciones por cambio de Space)
+
+2. **Phase 2** (Commit 37da42b): Throttling para cambios de Space
+   - Reducción 83% (12→2 reactivaciones por cambio)
+   - Implementado ThrottleManager para eventos frecuentes
+
+3. **Phase 3** (Commit 263c296): Caching de resoluciones de bookmarks
+   - Reducción 67% (3→1 resoluciones, 2 cache hits)
+
+4. **Phase 4** (Commit 0ed7b5d): Caching de AVAssets para creación rápida de ventanas
+   - Reducción 97% esperada (18s→<500ms cuando precargado)
+   - VideoPreloader retorna assets completamente cargados
+
+5. **Phase 5** (Commit 80bc47b): Concurrency gate y rate limiting en ensurePlaying()
+   - Elimina race conditions causando "0 playing windows"
+   - 500ms rate limiting entre llamadas
+
+**Impacto general:** Reducción significativa en CPU usage, memory churn y bloqueos de UI durante cambios de Space y transiciones de video.
