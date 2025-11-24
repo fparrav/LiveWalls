@@ -77,13 +77,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     let persistenceActor = PersistenceActor()
     private let systemReadinessObserver = SystemReadinessObserver()
     private let startupCoordinator = StartupCoordinator()
-    private let playbackHealthChecker = PlaybackHealthChecker()
-    private let windowCreationCoordinator = WindowCreationCoordinator()
-     private let scheduledHealthCheckManager = ScheduledHealthCheckManager()
-     private let videoPreloader = VideoPreloader()
-     private let throttleManager = ThrottleManager() // FASE 2: Throttling para eventos frecuentes
-     private var activeSecurityScopedURLs: Set<String> = []
-     private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
+     private let playbackHealthChecker = PlaybackHealthChecker()
+     private let windowCreationCoordinator = WindowCreationCoordinator()
+      private let scheduledHealthCheckManager = ScheduledHealthCheckManager()
+      private let videoPreloader = VideoPreloader()
+      private let throttleManager = ThrottleManager() // FASE 2: Throttling para eventos frecuentes
+      // NOTE: PlaybackTelemetry integration pending - add to Xcode project target first
+      // private let playbackTelemetry = PlaybackTelemetry() // PHASE 7: Production telemetry
+      private var activeSecurityScopedURLs: Set<String> = []
+      private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
     // MARK: - Synchronization to prevent crashes
     private let wallpaperOperationQueue = DispatchQueue(label: "com.livewalls.wallpaperQueue", attributes: .concurrent)
