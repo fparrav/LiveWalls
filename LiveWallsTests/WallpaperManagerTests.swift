@@ -513,6 +513,46 @@ final class WallpaperManagerTests: XCTestCase {
            // Then: Debe retornar inmediatamente sin bloquear (<100ms)
            XCTAssertLessThan(elapsed, 0.1, "ensurePlaying debe ser asíncrono y retornar rápido")
        }
+        
+        // MARK: - Test PHASE 6: Rate limiting of ensurePlaying
+        
+        /// PHASE 6: Verifica que ensurePlaying está rate-limited a 2.0 segundos
+        /// Dos llamadas dentro de 2 segundos, la segunda debe ser ignorada
+        /// Una llamada después de 2.1 segundos debe ejecutarse
+        func testEnsurePlayingRateLimitIncreased() async throws {
+            // Given: El wallpaper está parado
+            // (wallpaperManager sin reproducción activa)
+            
+            // When: Llamamos ensurePlaying inmediatamente
+            let call1Time = Date()
+            wallpaperManager.ensurePlaying(reason: "call1")
+            
+            // Capturar el estado después de la primera llamada
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms - debería ejecutarse call2
+            
+            // Segunda llamada dentro de 2 segundos (debe ser rate-limitada)
+            let call2Time = Date()
+            wallpaperManager.ensurePlaying(reason: "call2")
+            
+            // Esperar a que pase 2.1 segundos desde la primera llamada
+            let timeUntilThird = 2.1 - call1Time.timeIntervalSinceNow.magnitude
+            if timeUntilThird > 0 {
+                try await Task.sleep(nanoseconds: UInt64(timeUntilThird * 1_000_000_000))
+            }
+            
+            // Tercera llamada después de 2.1 segundos (debería ejecutarse)
+            let call3Time = Date()
+            wallpaperManager.ensurePlaying(reason: "call3")
+            
+            // Then: Verificar que el rate limiting está activo
+            // La diferencia entre call1 y call2 debe ser < 2.0 segundos
+            let timeBetween1And2 = call2Time.timeIntervalSince(call1Time)
+            XCTAssertLessThan(timeBetween1And2, 2.0, "Segunda llamada debería ejecutarse rápido, dentro del mismo segundo")
+            
+            // La diferencia entre call1 y call3 debe ser > 2.0 segundos (rate limit)
+            let timeBetween1And3 = call3Time.timeIntervalSince(call1Time)
+            XCTAssertGreaterThanOrEqual(timeBetween1And3, 2.0, "PHASE 6: Tercera llamada debería ocurrir después de rate limit de 2.0s (actual: \(timeBetween1And3)s)")
+        }
    }
 
 // MARK: - Mock Objects

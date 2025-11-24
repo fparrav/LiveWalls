@@ -50,10 +50,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // FASE 5.3: Flag para prevenir transiciones concurrentes
     private var isTransitioning = false
     
-    // FASE 5: Concurrency gate para ensurePlaying()
-    private var isEnsurePlayingRunning = false
-    private var lastEnsurePlayingTime: Date?
-    private let ensurePlayingMinInterval: TimeInterval = 0.5 // 500ms mínimo entre ejecuciones
+     // FASE 5: Concurrency gate para ensurePlaying()
+     private var isEnsurePlayingRunning = false
+     private var lastEnsurePlayingTime: Date?
+     private let ensurePlayingMinInterval: TimeInterval = 2.0 // PHASE 6: Increased from 500ms to 2.0s for reduced CPU usage
     
     // MARK: - Background color windows for transitions
     private var backgroundColorWindows: [NSWindow] = []
@@ -793,15 +793,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                      self.startAutoChangeTimerIfNeeded()
                  }
 
-                 // Programar verificaciones de salud post‑arranque en background (Phase 7)
-                  await self.scheduledHealthCheckManager.scheduleHealthChecks(
-                      action: { [weak self] in
-                          await MainActor.run { [weak self] in
-                              self?.ensurePlaying(reason: "post-start scheduled check")
-                          }
-                      },
-                      intervals: [1.0, 3.0]
-                  )
+                  // PHASE 6: Programar verificaciones de salud post-arranque con intervalos optimizados
+                   // Intervals: 1.0s, 5.0s, 15.0s, 120.0s (120s para estado estable)
+                   await self.scheduledHealthCheckManager.scheduleHealthChecks(
+                       action: { [weak self] in
+                           await MainActor.run { [weak self] in
+                               self?.ensurePlaying(reason: "post-start scheduled check")
+                           }
+                       },
+                       intervals: [1.0, 5.0, 15.0, 120.0]
+                   )
                   
                   // Precargar el siguiente video para transiciones instantáneas
                   if let nextVideo = self.getNextVideoInQueue() {

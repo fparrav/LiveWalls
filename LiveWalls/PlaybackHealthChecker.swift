@@ -57,20 +57,40 @@ actor PlaybackHealthChecker {
             return false
         }
         
-        // 5. Verificar estado de reproducción de las ventanas (en main thread)
-        let windowStates = await MainActor.run {
-            return windows.map { window, url in
-                let rate = window.getPlaybackRate() ?? 0.0
-                let isVisible = window.isVisible
-                return (isPlaying: rate > 0.0, isVisible: isVisible, url: url.lastPathComponent)
-            }
-        }
-        
-        // Analizar estados
-        let playingCount = windowStates.filter { $0.isPlaying }.count
-        let visibleCount = windowStates.filter { $0.isVisible }.count
-        
-        logger.info("📊 Estado ventanas: \(windows.count) total, \(playingCount) reproduciendo, \(visibleCount) visibles")
+         // 5. Verificar estado de reproducción de las ventanas (en main thread)
+         let windowStates = await MainActor.run {
+             return windows.map { window, url in
+                 // PHASE 6: Check timeControlStatus FIRST for accurate stall detection
+                 let timeControlStatus = window.getTimeControlStatus()
+                 let rate = window.getPlaybackRate() ?? 0.0
+                 let isVisible = window.isVisible
+                 
+                 // Determine if playing based on timeControlStatus (more reliable)
+                 let isPlaying: Bool
+                 if let status = timeControlStatus {
+                     // Use timeControlStatus as primary indicator
+                     isPlaying = (status == .playing)
+                 } else {
+                     // Fallback to rate if timeControlStatus unavailable
+                     isPlaying = (rate > 0.0)
+                 }
+                 
+                 return (
+                     isPlaying: isPlaying,
+                     timeControlStatus: timeControlStatus,
+                     rate: rate,
+                     isVisible: isVisible,
+                     url: url.lastPathComponent
+                 )
+             }
+         }
+         
+         // Analizar estados
+         let playingCount = windowStates.filter { $0.isPlaying }.count
+         let visibleCount = windowStates.filter { $0.isVisible }.count
+         let waitingCount = windowStates.filter { $0.timeControlStatus == .waitingToPlayAtSpecifiedRate }.count
+         
+         logger.info("📊 Estado ventanas: \(windows.count) total, \(playingCount) reproduciendo, \(visibleCount) visibles, \(waitingCount) esperando")
         
         // Si ninguna ventana está reproduciendo, la salud es negativa
         if playingCount == 0 {

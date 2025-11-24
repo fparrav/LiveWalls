@@ -500,17 +500,24 @@ public class DesktopVideoWindowMejorada: NSWindow {
         return player?.currentTime()
     }
     
-    /// Gets the current player state
-    /// - Returns: Current playback rate (0.0 = paused, 1.0 = normal playback)
-    public func getPlaybackRate() -> Float? {
-        return player?.rate
-    }
-    
-    /// Gets the total duration of the current video
-    /// - Returns: CMTime with total duration or nil if not available
-    public func getTotalDuration() -> CMTime? {
-        return player?.currentItem?.duration
-    }
+     /// Gets the current player state
+     /// - Returns: Current playback rate (0.0 = paused, 1.0 = normal playback)
+     public func getPlaybackRate() -> Float? {
+         return player?.rate
+     }
+     
+     /// PHASE 6: Gets the current time control status of the player
+     /// Used for accurate stall detection (paused, waitingToPlayAtSpecifiedRate, playing)
+     /// - Returns: Current timeControlStatus or nil if player doesn't exist
+     public func getTimeControlStatus() -> AVPlayer.TimeControlStatus? {
+         return player?.timeControlStatus
+     }
+     
+     /// Gets the total duration of the current video
+     /// - Returns: CMTime with total duration or nil if not available
+     public func getTotalDuration() -> CMTime? {
+         return player?.currentItem?.duration
+     }
 
     /// Forces playback on the underlying player if available
     public func forcePlay() {
