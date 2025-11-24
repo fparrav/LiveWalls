@@ -70,7 +70,8 @@ extension AVAssetTrack {
 
 /// Enhanced and unified desktop video window
 public class DesktopVideoWindowMejorada: NSWindow {
-    private var player: AVPlayer?
+    private var player: AVQueuePlayer?  // Changed from AVPlayer to AVQueuePlayer
+    private var looper: AVPlayerLooper?  // NEW: For automatic looping
     public var playerLayer: AVPlayerLayer?
     
     /// Access to player layer for external control
@@ -78,25 +79,24 @@ public class DesktopVideoWindowMejorada: NSWindow {
         return playerLayer
     }
     
-/// Sets the opacity of the window and its video layer
-func setOpacity(_ opacity: Double) {
-    // Update the layer's opacity
-    playerLayer?.opacity = Float(opacity)
-    
-    // If we need to also update the window's opacity
-    self.alphaValue = opacity
-    
-    // Ensure the layer is updated properly
-    if let layer = self.contentView?.layer {
-        layer.opacity = Float(opacity)
+    /// Sets the opacity of the window and its video layer
+    func setOpacity(_ opacity: Double) {
+        // Update the layer's opacity
+        playerLayer?.opacity = Float(opacity)
+        
+        // If we need to also update the window's opacity
+        self.alphaValue = opacity
+        
+        // Ensure the layer is updated properly
+        if let layer = self.contentView?.layer {
+            layer.opacity = Float(opacity)
+        }
     }
-}
 
-private var videoURL: URL
+    private var videoURL: URL
     private var urlSecurityScoped: URL?
-    private var playerItemStatusObserver: NSKeyValueObservation?
-    private var playerRateObserver: NSKeyValueObservation?
-    private var playerItemDidPlayToEndObserver: NSObjectProtocol?
+    private var playerItemStatusObserver: NSKeyValueObservation?  // PHASE 2: Only status observer kept (for error detection)
+    // PHASE 2: REMOVED playerRateObserver and playerItemDidPlayToEndObserver (handled by AVPlayerLooper)
     private var isClosing: Bool = false
     private var isPlayerSetupInProgress: Bool = false
     private var isBeingTornDown: Bool = false
@@ -215,19 +215,20 @@ private var videoURL: URL
                             return
                         }
 
-                        // Create components in specific order
+                        // PHASE 2: Create AVQueuePlayer with AVPlayerLooper for automatic looping
                         let newPlayerItem = AVPlayerItem(asset: asset)
-                        let newPlayer = AVPlayer(playerItem: newPlayerItem)
+                        let newQueuePlayer = AVQueuePlayer(playerItem: newPlayerItem)
                         
                         // Optimized configuration for background playback
-                        newPlayer.actionAtItemEnd = .none
-                        newPlayer.volume = 0.0
-                        newPlayer.automaticallyWaitsToMinimizeStalling = false
-                        newPlayer.isMuted = true
-                        newPlayer.rate = 1.0 // Ensure rate is 1.0
+                        newQueuePlayer.volume = 0.0
+                        newQueuePlayer.automaticallyWaitsToMinimizeStalling = false
+                        newQueuePlayer.isMuted = true
+                        
+                        // PHASE 2: Set up AVPlayerLooper for seamless looping (replaces manual seek)
+                        let newLooper = AVPlayerLooper(player: newQueuePlayer, templateItem: newPlayerItem)
                         
                         // Configure playerLayer with optimizations
-                        let newPlayerLayer = AVPlayerLayer(player: newPlayer)
+                        let newPlayerLayer = AVPlayerLayer(player: newQueuePlayer)
                         newPlayerLayer.videoGravity = .resizeAspectFill
                         newPlayerLayer.frame = self.contentView?.bounds ?? .zero
                         newPlayerLayer.isOpaque = true
@@ -245,11 +246,31 @@ private var videoURL: URL
                             contentView.layer?.addSublayer(newPlayerLayer)
                         }
 
-                        // Configure observers
-                        setupObservers(player: newPlayer, playerItem: newPlayerItem)
+                        // PHASE 2: Only keep status observer for error detection (no manual looping observers)
+                        // Capture strategy: newQueuePlayer captured strongly to keep player alive until observer removed.
+                        // Weak self ensures observer is cleaned when window deallocates.
+                        self.playerItemStatusObserver = newPlayerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
+                            guard let self = self else { return }
+                            switch item.status {
+                            case .readyToPlay:
+                                memoryLogger.info("✅ PlayerItem ready to play")
+                                // Solo auto-play si NO está en modo pausado
+                                if !self.startPaused {
+                                    newQueuePlayer.play()
+                                }
+                            case .failed:
+                                memoryLogger.error("❌ PlayerItem failed: \(item.error?.localizedDescription ?? "Unknown error")")
+                                self.cleanupPlayer()
+                            case .unknown:
+                                memoryLogger.warning("⚠️ PlayerItem in unknown state")
+                            @unknown default:
+                                memoryLogger.warning("⚠️ PlayerItem in unhandled state")
+                            }
+                        }
 
                         // Save references
-                        self.player = newPlayer
+                        self.player = newQueuePlayer
+                        self.looper = newLooper  // PHASE 2: Save looper reference
                         self.playerItem = newPlayerItem
                         self.playerLayer = newPlayerLayer
 
@@ -258,12 +279,12 @@ private var videoURL: URL
                         
                         // Start playback solo si NO está en modo pausado
                         if !self.startPaused {
-                            newPlayer.play()
-                            memoryLogger.info("✅ Player configured and playing: \(url.lastPathComponent)")
+                            newQueuePlayer.play()
+                            memoryLogger.info("✅ AVQueuePlayer configured with AVPlayerLooper and playing: \(url.lastPathComponent)")
                         } else {
                             // En modo pausado, mantener pausa pero marcar como listo
-                            newPlayer.pause()
-                            memoryLogger.info("✅ Player configured (paused, ready for activation): \(url.lastPathComponent)")
+                            newQueuePlayer.pause()
+                            memoryLogger.info("✅ AVQueuePlayer configured with AVPlayerLooper (paused, ready for activation): \(url.lastPathComponent)")
                         }
                         
                         continuation.resume()
@@ -285,52 +306,8 @@ private var videoURL: URL
         }
     }
 
-    private func setupObservers(player: AVPlayer, playerItem: AVPlayerItem) {
-        // Observe playerItem status
-        playerItemStatusObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
-            guard let self = self else { return }
-            switch item.status {
-            case .readyToPlay:
-                memoryLogger.info("✅ PlayerItem ready to play")
-                // Solo auto-play si NO está en modo pausado
-                if !self.startPaused {
-                    player.play()
-                }
-            case .failed:
-                memoryLogger.error("❌ PlayerItem failed: \(item.error?.localizedDescription ?? "Unknown error")")
-                self.cleanupPlayer()
-            case .unknown:
-                memoryLogger.warning("⚠️ PlayerItem in unknown state")
-            @unknown default:
-                memoryLogger.warning("⚠️ PlayerItem in unhandled state")
-            }
-        }
-
-        // Observe playback rate
-        playerRateObserver = player.observe(\.rate, options: [.new]) { [weak self] player, _ in
-            guard let self = self else { return }
-            // Solo reiniciar si no está cerrando, no está pausado intencionalmente, y no hay activación pendiente
-            if player.rate == 0 && !self.isClosing && !self.startPaused && !self.activationPending {
-                memoryLogger.warning("⚠️ Player stopped unexpectedly")
-                player.play()
-            }
-        }
-
-        // Observe end of playback
-        playerItemDidPlayToEndObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self = self else { return }
-            // Solo reiniciar si no está cerrando y no está en modo pausado
-            if !self.isClosing && !self.startPaused {
-                memoryLogger.info("🔄 Video reached end, restarting...")
-                player.seek(to: .zero)
-                player.play()
-            }
-        }
-    }
+    // PHASE 2: setupObservers() removed - AVPlayerLooper handles automatic looping
+    // Manual observers (.didPlayToEndTime, rate observer, periodic observer) are no longer needed
     
     // MARK: - FASE 5.1: Activación de Reproducción
     
@@ -418,14 +395,16 @@ private var videoURL: URL
         }
         isBeingTornDown = true
         
+        // PHASE 2: Capture looper reference for cleanup
+        let looperToCleanup = self.looper
+        
         // Capture references BEFORE cleanup for thread safety
         let components = (
             player: self.player,
             playerLayer: self.playerLayer,
             playerItem: self.playerItem,
-            statusObserver: self.playerItemStatusObserver,
-            rateObserver: self.playerRateObserver,
-            endObserver: self.playerItemDidPlayToEndObserver
+            statusObserver: self.playerItemStatusObserver
+            // PHASE 2: Removed rateObserver and endObserver (handled by AVPlayerLooper)
         )
         
         // Clean references atomically
@@ -433,18 +412,16 @@ private var videoURL: URL
         self.playerItem = nil
         self.playerLayer = nil
         self.playerItemStatusObserver = nil
-        self.playerRateObserver = nil
-        self.playerItemDidPlayToEndObserver = nil
+        self.looper = nil  // PHASE 2: Clean looper reference
         
         // Perform asynchronous cleanup to avoid deadlocks
         let performCleanupAsync = {
+            // PHASE 2: Disable looper before cleanup
+            looperToCleanup?.disableLooping()
+            
             // Clean observers FIRST
             components.statusObserver?.invalidate()
-            components.rateObserver?.invalidate()
-            
-            if let observer = components.endObserver {
-                NotificationCenter.default.removeObserver(observer)
-            }
+            // PHASE 2: Removed manual observer cleanup (no rate or end observers)
             
             // Stop player BEFORE removing layer
             components.player?.pause()
@@ -453,7 +430,7 @@ private var videoURL: URL
             // Remove layer from superlayer
             components.playerLayer?.removeFromSuperlayer()
             
-            memoryLogger.info("🧹 Player cleaned successfully")
+            memoryLogger.info("🧹 Player cleaned successfully (AVQueuePlayer + AVPlayerLooper)")
             
             // Execute completion on main thread
             DispatchQueue.main.async {
