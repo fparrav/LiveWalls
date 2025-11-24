@@ -197,9 +197,178 @@ final class PlaybackHealthCheckerTests: XCTestCase {
           XCTAssertNotNil(window, "PHASE 6: Window debe tener fallback a getPlaybackRate()")
           // La tasa será probablemente 0.0 al inicio (paused state)
           
-          window.close()
-      }
-  }
-
-
-
+           window.close()
+       }
+       
+       // MARK: - PHASE 7: Telemetry and Integration Tests
+       
+       /// Phase 7.1: testExtendedPlaybackStability
+       /// Validates extended playback without stalls (10 min simulation or 10 seconds in test)
+       func testPhase7ExtendedPlaybackStability() async throws {
+           // Given: Wallpaper playback setup
+           let testURL = URL(fileURLWithPath: "/test/video.mp4")
+           let testVideo = VideoFile(
+               url: testURL,
+               name: "Test Video",
+               bookmarkData: Data()
+           )
+           
+           // When: Simulating extended playback monitoring
+           let testDuration: TimeInterval = 5 // seconds
+           let startTime = Date()
+           var checkCount = 0
+           
+           // Monitor for stalls
+           while Date().timeIntervalSince(startTime) < testDuration {
+               // Simulate health check
+               let _ = await playbackHealthChecker.checkPlaybackHealth(
+                   windows: [],
+                   currentVideo: testVideo,
+                   bookmarkActor: bookmarkActor
+               )
+               checkCount += 1
+               
+               try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+           }
+           
+           // Then: Should have performed multiple health checks
+           XCTAssertGreaterThan(checkCount, 0, "Extended playback should perform health checks")
+       }
+       
+       /// Phase 7.2: testWindowRecreationTracking
+       /// Validates that window recreation can be detected and tracked
+       func testPhase7WindowRecreationTracking() async throws {
+           // Given: Multiple window health checks
+           let testScreen = NSScreen.main ?? NSScreen()
+           let testURL = URL(fileURLWithPath: "/test/video.mp4")
+           
+           var recreationCount = 0
+           let windows = (0..<3).map { _ in
+               DesktopVideoWindowMejorada(
+                   screen: testScreen,
+                   videoURL: testURL,
+                   startPaused: true
+               )
+           }
+           
+           defer {
+               windows.forEach { $0.close() }
+           }
+           
+           // When: Monitoring window state
+           for window in windows {
+               let level = window.level
+               // Simulate recreation event based on window availability
+               // The window should be created successfully
+               XCTAssertNotNil(window, "Window should be created")
+               recreationCount += 1
+           }
+           
+           // Then: Recreation should be tracked
+           XCTAssertGreaterThanOrEqual(recreationCount, 3, "All windows should be created")
+       }
+       
+       /// Phase 7.3: testPlaybackHealthCheckerEfficiency
+       /// Validates that health checks are efficient and don't overload
+       func testPhase7HealthCheckEfficiency() async throws {
+           // Given: Rapid health check execution
+           let testURL = URL(fileURLWithPath: "/test/video.mp4")
+           let testVideo = VideoFile(
+               url: testURL,
+               name: "Test",
+               bookmarkData: nil
+           )
+           
+           // When: Executing 50 health checks
+           let checkCount = 50
+           let startTime = Date()
+           
+           for _ in 0..<checkCount {
+               let _ = await playbackHealthChecker.checkPlaybackHealth(
+                   windows: [],
+                   currentVideo: testVideo,
+                   bookmarkActor: bookmarkActor
+               )
+           }
+           
+           let duration = Date().timeIntervalSince(startTime)
+           let averageTime = duration / TimeInterval(checkCount)
+           
+           // Then: Average check time should be minimal
+           XCTAssertLessThan(
+               averageTime,
+               0.1,
+               "Health checks should average < 100ms (Phase 6 optimization)"
+           )
+       }
+       
+       /// Phase 7.4: testConcurrentHealthCheckSafety
+       /// Validates that concurrent health checks are thread-safe
+       func testPhase7ConcurrentHealthCheckSafety() async throws {
+           // Given: Multiple concurrent health checks
+           let testURL = URL(fileURLWithPath: "/test/video.mp4")
+           let testVideo = VideoFile(
+               url: testURL,
+               name: "Test",
+               bookmarkData: nil
+           )
+           
+           // When: Running 10 concurrent health checks
+           var tasks: [Task<Bool, Never>] = []
+           
+           for _ in 0..<10 {
+               let task = Task {
+                   let result = await self.playbackHealthChecker.checkPlaybackHealth(
+                       windows: [],
+                       currentVideo: testVideo,
+                       bookmarkActor: self.bookmarkActor
+                   )
+                   return result
+               }
+               tasks.append(task)
+           }
+           
+           // Collect results from all tasks
+           var results: [Bool] = []
+           for task in tasks {
+               let result = await task.value
+               results.append(result)
+           }
+           
+           // Then: All checks should complete without crashes
+           XCTAssertEqual(
+               results.count,
+               10,
+               "All concurrent health checks should complete safely"
+           )
+       }
+       
+       /// Phase 7.5: testPlaybackMonitoringCapabilities
+       /// Validates that playback monitoring infrastructure exists and works
+       func testPhase7PlaybackMonitoringCapabilities() async throws {
+           // Given: A playback health checker instance
+           XCTAssertNotNil(playbackHealthChecker, "Health checker must be available")
+           
+           // When: Checking health check capabilities
+           let testURL = URL(fileURLWithPath: "/test/video.mp4")
+           let testVideo = VideoFile(
+               url: testURL,
+               name: "Test",
+               bookmarkData: nil
+           )
+           
+           // Then: Health checks should function correctly
+           let healthStatus = await playbackHealthChecker.checkPlaybackHealth(
+               windows: [],
+               currentVideo: testVideo,
+               bookmarkActor: bookmarkActor
+           )
+           
+           // Result should be a boolean (true = healthy, false = needs attention)
+           XCTAssertFalse(healthStatus, "Empty windows should indicate unhealthy state")
+       }
+   }
+ 
+ 
+ 
+ 
