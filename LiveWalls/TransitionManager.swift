@@ -10,7 +10,13 @@ class TransitionManager {
     
     private var currentTransition: Transition? = nil
     private var animationTask: Task<Void, Never>? = nil
+    // PHASE 4: Transition duration must match WallpaperManager.resourceReleaseDelay
+    // This constant is used to coordinate cleanup timing with animation
+    // If changed, must also update WallpaperManager.resourceReleaseDelay
     private let transitionDuration: TimeInterval = 2.0 // Default 2 seconds
+    
+    // PHASE 4: Completion callback for coordinated cleanup
+    var onTransitionComplete: (() -> Void)?
     
     // MARK: - Types
     
@@ -168,7 +174,10 @@ class TransitionManager {
             // 2. Update references to point to the new window
             // 3. Perform any final cleanup
             
-            print("Transition completed")
+            print("✅ Transition completed at \(Date())")
+            
+            // PHASE 4: Notify completion for coordinated cleanup
+            onTransitionComplete?()
         }
     }
 }

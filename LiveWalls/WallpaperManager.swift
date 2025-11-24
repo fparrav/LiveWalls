@@ -64,7 +64,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     var closedWindowsCount: Int = 0
     
     // MARK: - UserDefaults and configuration
-    private let resourceReleaseDelay: TimeInterval = 0.1
+    // PHASE 4: Deferred resource cleanup during transitions
+    // Changed from 0.1s to 2.5s to prevent cleanup during 2.0s transition
+    // TransitionManager.transitionDuration = 2.0s
+    // resourceReleaseDelay = 2.5s (transition + 0.5s grace period)
+    // This ensures cleanup happens AFTER transition completes, preventing frame drops
+    private let resourceReleaseDelay: TimeInterval = 2.5
     private let userDefaults = UserDefaults.standard
     
     // MARK: - Security-Scoped Resource Tracking
