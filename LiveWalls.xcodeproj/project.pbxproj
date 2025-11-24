@@ -19,6 +19,7 @@
 		55846EBE2EBF778A00E46C3B /* WindowCreationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBD2EBF778A00E46C3B /* WindowCreationCoordinator.swift */; };
 		55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */; };
 		55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */; };
+		C9A533CDFF124A9D9B22434B /* WindowLevelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D886888FCE46E6BF5230FB /* WindowLevelTests.swift */; };
 		55846EC62EBF883100E46C3B /* ScheduledHealthCheckManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC52EBF883100E46C3B /* ScheduledHealthCheckManager.swift */; };
 		55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */; };
 		55846ECB2EBF8D6B00E46C3B /* MainThreadBlockingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55846EC92EBF8D6B00E46C3B /* MainThreadBlockingTests.swift */; };
@@ -84,6 +85,7 @@
 		55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemReadinessObserverTests.swift; sourceTree = "<group>"; };
 		55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoOptimizerTests.swift; sourceTree = "<group>"; };
 		55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCreationCoordinatorTests.swift; sourceTree = "<group>"; };
+		31D886888FCE46E6BF5230FB /* WindowLevelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowLevelTests.swift; sourceTree = "<group>"; };
 		55846EC52EBF883100E46C3B /* ScheduledHealthCheckManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledHealthCheckManager.swift; sourceTree = "<group>"; };
 		55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledHealthCheckManagerTests.swift; sourceTree = "<group>"; };
 		55846EC92EBF8D6B00E46C3B /* MainThreadBlockingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadBlockingTests.swift; sourceTree = "<group>"; };
@@ -306,6 +308,7 @@
 				55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */,
 				55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */,
 				55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */,
+				31D886888FCE46E6BF5230FB /* WindowLevelTests.swift */,
 				55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */,
 				CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */,
 				2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
@@ -489,6 +492,7 @@
 				55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */,
 				55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */,
 				55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */,
+				C9A533CDFF124A9D9B22434B /* WindowLevelTests.swift in Sources */,
 				55846ECB2EBF8D6B00E46C3B /* MainThreadBlockingTests.swift in Sources */,
 				55846ECC2EBF8D6B00E46C3B /* StartupPerformanceTests.swift in Sources */,
 				32C212366A3246A7A3E339B4 /* VideoPreloaderTests.swift in Sources */,

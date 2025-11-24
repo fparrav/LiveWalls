@@ -607,8 +607,10 @@ public class DesktopVideoWindowMejorada: NSWindow {
          // Ensure window is on correct Space
          self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
          
-         // Refresh z-order to ensure visibility
-         self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+         // PHASE 5: Use consistent window level
+         // Keep same level as setupWindow() - never change window level
+         // Use kCGDesktopIconWindowLevel - 1 (same as initial setup)
+         self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
          self.orderBack(nil)
          
          // Resume playback if paused (and not paused by user)
