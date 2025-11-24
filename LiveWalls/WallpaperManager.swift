@@ -1763,17 +1763,75 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             await throttleManager.throttle(key: "spaceChange", interval: 0.5) { @MainActor in
                 self.appLogger.info("🔄 Ejecutando reactivación tras throttle")
                 
-                // Primera reactivación inmediata
-                self.ensurePlaying(reason: "Space change - throttled")
-                
-                // Un único retry tras 200ms para garantizar reproducción
-                try? await Task.sleep(for: .milliseconds(200))
-                self.ensurePlaying(reason: "Space change - retry")
-                
-                // Actualizar frame estático en background (no bloquear)
-                await self.updateStaticFrameOnSpaceChange()
+                // PHASE 3: Try window reuse first, fallback to recreation
+                if self.areCurrentWindowsHealthy() {
+                    self.appLogger.info("✅ Windows healthy - updating for Space without recreation")
+                    await self.updateWindowVisibilityForSpaces()
+                } else {
+                    self.appLogger.info("⚠️ Windows unhealthy - triggering recreation")
+                    // Primera reactivación inmediata
+                    self.ensurePlaying(reason: "Space change - throttled")
+                    
+                    // Un único retry tras 200ms para garantizar reproducción
+                    try? await Task.sleep(for: .milliseconds(200))
+                    self.ensurePlaying(reason: "Space change - retry")
+                    
+                    // Actualizar frame estático en background (no bloquear)
+                    await self.updateStaticFrameOnSpaceChange()
+                }
             }
         }
+    }
+    
+    // MARK: - Phase 3: Window Reuse and Visibility Management
+    
+    /// Updates window visibility for space changes without recreating windows
+    /// This method improves Space change performance by only updating visibility
+    /// instead of doing a full window recreation
+    @MainActor
+    func updateWindowVisibilityForSpaces() async {
+        appLogger.info("🔄 Updating window visibility for Space change (no recreation)")
+        
+        // Collect current window instances safely
+        var windowsToUpdate: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)] = []
+        wallpaperOperationQueue.sync {
+            windowsToUpdate = desktopVideoInstances
+        }
+        
+        // Update each window's visibility without recreation
+        for (window, _) in windowsToUpdate {
+            // Update window for Space on main thread
+            await MainActor.run {
+                window.updateForSpace()
+            }
+        }
+        
+        appLogger.info("✅ Window visibility updated for all \(windowsToUpdate.count) window(s)")
+    }
+    
+    // PHASE 3: Check if all current windows are healthy
+    /// Validates that all currently running windows are in a healthy state
+    /// This method checks if windows can be reused for Space changes without recreation
+    /// - Returns: true if all windows are healthy and ready for reuse, false if recreation is needed
+    @MainActor
+    private func areCurrentWindowsHealthy() -> Bool {
+        var windows: [DesktopVideoWindowMejorada] = []
+        wallpaperOperationQueue.sync {
+            windows = desktopVideoInstances.map { $0.window }
+        }
+        
+        if windows.isEmpty {
+            appLogger.info("⚠️ No windows exist")
+            return false
+        }
+        
+        let allHealthy = windows.allSatisfy { $0.isHealthy() }
+        if allHealthy {
+            appLogger.info("✅ All windows healthy")
+        } else {
+            appLogger.info("⚠️ Some windows unhealthy")
+        }
+        return allHealthy
     }
     
     private func setupTerminationHandling() {

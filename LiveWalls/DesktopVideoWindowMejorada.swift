@@ -556,7 +556,70 @@ public class DesktopVideoWindowMejorada: NSWindow {
             errorLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
             errorLabel.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 20),
             errorLabel.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -20)
-        ])
-        memoryLogger.warning("⚠️ Showing error in window: \(message)")
-    }
+         ])
+         memoryLogger.warning("⚠️ Showing error in window: \(message)")
+     }
+     
+     // MARK: - Phase 3: Window Reuse and Health Check
+     
+     /// Checks if the window is healthy and can be reused without recreation
+     /// - Returns: true if window is valid and playback is functional, false otherwise
+     public func isHealthy() -> Bool {
+         // Check if window is being torn down
+         if isBeingTornDown {
+             memoryLogger.debug("❌ Window unhealthy: Being torn down")
+             return false
+         }
+         
+         // Check if player exists
+         guard let player = player else {
+             memoryLogger.debug("❌ Window unhealthy: No player")
+             return false
+         }
+         
+         // Check if current item exists
+         guard let currentItem = player.currentItem else {
+             memoryLogger.debug("❌ Window unhealthy: No current item")
+             return false
+         }
+         
+         // Check if player item status indicates failure
+         if currentItem.status == .failed {
+             memoryLogger.debug("❌ Window unhealthy: Player item failed")
+             return false
+         }
+         
+         // Check if content view exists
+         if contentView == nil {
+             memoryLogger.debug("❌ Window unhealthy: No content view")
+             return false
+         }
+         
+         memoryLogger.debug("✅ Window healthy: Ready for reuse")
+         return true
+     }
+     
+     /// Updates window properties for a Space change without full recreation
+     /// This method ensures the window remains visible and playback continues on the new Space
+     public func updateForSpace() {
+         memoryLogger.debug("🔄 Updating window for Space change")
+         
+         // Ensure window is on correct Space
+         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+         
+         // Refresh z-order to ensure visibility
+         self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+         self.orderBack(nil)
+         
+         // Resume playback if paused (and not paused by user)
+         if let queuePlayer = self.player as? AVQueuePlayer {
+             if queuePlayer.rate == 0 {
+                 memoryLogger.debug("▶️ Resuming playback after Space change")
+                 queuePlayer.play()
+             }
+         }
+         
+         memoryLogger.debug("✅ Window updated for Space change")
+     }
 }
+

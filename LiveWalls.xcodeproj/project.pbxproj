@@ -49,6 +49,7 @@
 		F2227C492E1F40488BAD0026 /* WallpaperTimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */; };
 		72BF47E36CA54AACAFD3EFEC /* VideoPreloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412CE12ADD8B4EED8D0A5283 /* VideoPreloader.swift */; };
 		32C212366A3246A7A3E339B4 /* VideoPreloaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */; };
+		0000000000000000CA7AADFF /* WindowRecreationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000A5D2599A /* WindowRecreationTests.swift */; };
 		F64F739D05584ED593932076 /* ThrottleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C6DFC482714BA3BE6324C7 /* ThrottleManager.swift */; };
 /* End PBXBuildFile section */
 
@@ -155,6 +156,7 @@
 		F0F0F0B02E1F4BBB00000001 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		412CE12ADD8B4EED8D0A5283 /* VideoPreloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPreloader.swift; sourceTree = "<group>"; };
 		BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPreloaderTests.swift; sourceTree = "<group>"; };
+		0000000000000000A5D2599A /* WindowRecreationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRecreationTests.swift; sourceTree = "<group>"; };
 		F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperTimerManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -310,6 +312,7 @@
 				AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
 				30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */,
 				BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */,
+			0000000000000000A5D2599A /* WindowRecreationTests.swift */,
 			);
 			path = LiveWallsTests;
 			sourceTree = "<group>";
@@ -489,6 +492,7 @@
 				55846ECB2EBF8D6B00E46C3B /* MainThreadBlockingTests.swift in Sources */,
 				55846ECC2EBF8D6B00E46C3B /* StartupPerformanceTests.swift in Sources */,
 				32C212366A3246A7A3E339B4 /* VideoPreloaderTests.swift in Sources */,
+				0000000000000000CA7AADFF /* WindowRecreationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
