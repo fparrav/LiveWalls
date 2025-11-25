@@ -44,6 +44,11 @@ struct ContentView: View {
             
             Divider()
             
+            // Playback Controls Section
+            playbackControlsView
+            
+            Divider()
+            
             // Contenido principal
             mainContentView
             
@@ -206,6 +211,53 @@ struct ContentView: View {
             
             Spacer()
         }
+    }
+    
+    /// Playback controls section (auto-change and mute)
+    @ViewBuilder
+    private var playbackControlsView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Auto-change controls
+            HStack {
+                Toggle("Auto-change", isOn: Binding(
+                    get: { wallpaperManager.isAutoChangeEnabled },
+                    set: { newValue in wallpaperManager.isAutoChangeEnabled = newValue }
+                ))
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("autoChangeToggle")
+                
+                if wallpaperManager.isAutoChangeEnabled {
+                    Spacer()
+                    Text("Every")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Picker("", selection: Binding(
+                        get: { Int(wallpaperManager.autoChangeInterval / 60) },
+                        set: { newValue in wallpaperManager.autoChangeInterval = TimeInterval(newValue * 60) }
+                    )) {
+                        ForEach([1, 2, 5, 10, 15, 30, 60], id: \.self) { minutes in
+                            Text("\(minutes) min").tag(minutes)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 100)
+                    .accessibilityIdentifier("autoChangeIntervalPicker")
+                }
+            }
+            
+            // Mute toggle
+            Toggle("Mute videos", isOn: Binding(
+                get: { UserDefaults.standard.bool(forKey: "MuteVideo") },
+                set: { newValue in 
+                    UserDefaults.standard.set(newValue, forKey: "MuteVideo")
+                }
+            ))
+            .toggleStyle(.switch)
+            .accessibilityIdentifier("muteToggle")
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
     
     /// Controles inferiores con acciones para el video seleccionado

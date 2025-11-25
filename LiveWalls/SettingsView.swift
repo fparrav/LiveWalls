@@ -98,7 +98,8 @@ struct SettingsView: View {
                 titleView
                 generalPlaybackSection
                 systemSection
-                autoChangeSection
+                // NOTE: Auto-change section moved to main window (ContentView) - PHASE 3
+                // autoChangeSection
                 videoManagementSection
                 Spacer(minLength: 20)
             }
@@ -119,8 +120,9 @@ struct SettingsView: View {
                 Toggle(NSLocalizedString("auto_start_wallpaper", comment: "Auto start wallpaper"), isOn: $autoStartWallpaper)
                     .toggleStyle(SwitchToggleStyle())
                 
-                Toggle(NSLocalizedString("mute_videos", comment: "Mute videos"), isOn: $muteVideo)
-                    .toggleStyle(SwitchToggleStyle())
+                // NOTE: Mute videos toggle moved to main window (ContentView) - PHASE 3
+                // Toggle(NSLocalizedString("mute_videos", comment: "Mute videos"), isOn: $muteVideo)
+                //     .toggleStyle(SwitchToggleStyle())
             }
             .padding(12)
         }
