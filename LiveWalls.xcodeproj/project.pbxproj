@@ -53,7 +53,8 @@
 		0000000000000000CA7AADFF /* WindowRecreationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000A5D2599A /* WindowRecreationTests.swift */; };
 		886A1BD1C43A4286898AC196 /* TimerSpaceChangeAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CCC0FAFF3CC4A249190F23A /* TimerSpaceChangeAuditTests.swift */; };
 		F64F739D05584ED593932076 /* ThrottleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C6DFC482714BA3BE6324C7 /* ThrottleManager.swift */; };
-/* End PBXBuildFile section */
+		CCCC11112222333344441111 /* ShuffleModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBB11112222333344441111 /* ShuffleModeTests.swift */; };
+	/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		AAAA11112222333344440017 /* PBXContainerItemProxy */ = {
@@ -162,7 +163,8 @@
 		0000000000000000A5D2599A /* WindowRecreationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRecreationTests.swift; sourceTree = "<group>"; };
 		0CCC0FAFF3CC4A249190F23A /* TimerSpaceChangeAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSpaceChangeAuditTests.swift; sourceTree = "<group>"; };
 		F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperTimerManager.swift; sourceTree = "<group>"; };
-/* End PBXFileReference section */
+		BBBB11112222333344441111 /* ShuffleModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShuffleModeTests.swift; sourceTree = "<group>"; };
+	/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		8B0C7D232B1F4A3000123456 /* Frameworks */ = {
@@ -301,28 +303,29 @@
 			path = "Preview Content";
 			sourceTree = "<group>";
 		};
-		AAAA11112222333344440011 /* LiveWallsTests */ = {
-			isa = PBXGroup;
-			children = (
-				55846EC92EBF8D6B00E46C3B /* MainThreadBlockingTests.swift */,
-				55846ECA2EBF8D6B00E46C3B /* StartupPerformanceTests.swift */,
-				55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */,
-				55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */,
-				55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */,
-				55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */,
-				31D886888FCE46E6BF5230FB /* WindowLevelTests.swift */,
-				55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */,
-				CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */,
-				2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
-				AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
-				30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */,
+	AAAA11112222333344440011 /* LiveWallsTests */ = {
+		isa = PBXGroup;
+		children = (
+			55846EC92EBF8D6B00E46C3B /* MainThreadBlockingTests.swift */,
+			55846ECA2EBF8D6B00E46C3B /* StartupPerformanceTests.swift */,
+			55846EC72EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift */,
+			55846EBF2EBF77A900E46C3B /* SystemReadinessObserverTests.swift */,
+			55846EC02EBF77A900E46C3B /* VideoOptimizerTests.swift */,
+			55846EC12EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift */,
+			31D886888FCE46E6BF5230FB /* WindowLevelTests.swift */,
+			55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */,
+			CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */,
+			2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
+			AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
+			30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */,
 			BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */,
 			0000000000000000A5D2599A /* WindowRecreationTests.swift */,
 			0CCC0FAFF3CC4A249190F23A /* TimerSpaceChangeAuditTests.swift */,
+			BBBB11112222333344441111 /* ShuffleModeTests.swift */,
 		);
-			path = LiveWallsTests;
-			sourceTree = "<group>";
-		};
+		path = LiveWallsTests;
+		sourceTree = "<group>";
+	};
 		AAAA11112222333344440012 /* LiveWallsUITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -483,27 +486,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		AAAA11112222333344440005 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				BB3C5F9A7D8E4B2C91A6E3F0 /* BookmarkActorTests.swift in Sources */,
-				2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */,
-				55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */,
-				AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */,
-				E6827EA47D70ACDD0E819BAE /* PlaybackHealthCheckerTests.swift in Sources */,
-				55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */,
-				55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */,
-				55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */,
-				C9A533CDFF124A9D9B22434B /* WindowLevelTests.swift in Sources */,
-				55846ECB2EBF8D6B00E46C3B /* MainThreadBlockingTests.swift in Sources */,
-				55846ECC2EBF8D6B00E46C3B /* StartupPerformanceTests.swift in Sources */,
-				32C212366A3246A7A3E339B4 /* VideoPreloaderTests.swift in Sources */,
-				0000000000000000CA7AADFF /* WindowRecreationTests.swift in Sources */,
-				886A1BD1C43A4286898AC196 /* TimerSpaceChangeAuditTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+	AAAA11112222333344440005 /* Sources */ = {
+		isa = PBXSourcesBuildPhase;
+		buildActionMask = 2147483647;
+		files = (
+			BB3C5F9A7D8E4B2C91A6E3F0 /* BookmarkActorTests.swift in Sources */,
+			2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */,
+			55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */,
+			AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */,
+			E6827EA47D70ACDD0E819BAE /* PlaybackHealthCheckerTests.swift in Sources */,
+			55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */,
+			55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */,
+			55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */,
+			C9A533CDFF124A9D9B22434B /* WindowLevelTests.swift in Sources */,
+			55846ECB2EBF8D6B00E46C3B /* MainThreadBlockingTests.swift in Sources */,
+			55846ECC2EBF8D6B00E46C3B /* StartupPerformanceTests.swift in Sources */,
+			32C212366A3246A7A3E339B4 /* VideoPreloaderTests.swift in Sources */,
+			0000000000000000CA7AADFF /* WindowRecreationTests.swift in Sources */,
+			886A1BD1C43A4286898AC196 /* TimerSpaceChangeAuditTests.swift in Sources */,
+			CCCC11112222333344441111 /* ShuffleModeTests.swift in Sources */,
+		);
+		runOnlyForDeploymentPostprocessing = 0;
+	};
 		AAAA11112222333344440006 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;

@@ -25,6 +25,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     @Published var isPlayingWallpaper = false
     @Published var isAutoChangeEnabled = false
     @Published var autoChangeInterval: TimeInterval = 10 * 60 // 10 minutes default
+    @Published var isShuffleMode: Bool = false {
+        didSet {
+            // Persist shuffle mode to UserDefaults
+            userDefaults.set(isShuffleMode, forKey: shuffleModeKey)
+        }
+    }
     
     // MARK: - Private Properties
     private let appLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManager")
@@ -98,11 +104,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private var isChangingVideo = false
     private var isApplyingStaticWallpaper = false
     private var pendingStaticApplyWorkItem: DispatchWorkItem?
-    private var isCleaningUp = false
-    private var autoStartScheduled = false
-    
-    
-    // Actor to serialize wallpaper operations
+     private var isCleaningUp = false
+     private var autoStartScheduled = false
+     
+     // MARK: - Shuffle Mode Properties
+     private var shuffleHistory: [UUID] = []
+     private let shuffleHistoryMaxSize = 5
+     private let shuffleModeKey = "ShuffleModeEnabled"
+     
+     // Actor to serialize wallpaper operations
     private actor WallpaperOperationActor {
         func withExclusiveAccess<T>(@_implicitSelfCapture operation: () async throws -> T) async rethrows -> T {
             return try await operation()
@@ -143,30 +153,33 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     // MARK: - Initialization
-    override init() {
-        self.notificationManager = NotificationManager.shared
-        super.init()
-        
-        appLogger.info("\(NSLocalizedString("initializing_wallpaper_manager", comment: "Initializing WallpaperManager"), privacy: .public)")
-        
-        // Cargar configuración en background usando PersistenceActor (NO bloquear init)
-        Task.detached { [weak self] in
-            guard let self else { return }
-            await self.loadDataInBackground()
-        }
-        
-        loadTransitionSettings()
-        setupScreenChangeNotifications()
-        setupWorkspaceNotifications()
-        setupTerminationHandling()
-        setupFullscreenDetection()
-        setupAppActivationNotifications()
-        
-        // Intentar auto‑inicio cuando el estado esté listo (sin depender de delays fijos)
-        attemptAutoStart()
-        
-        appLogger.info("\(NSLocalizedString("wallpaper_manager_initialized", comment: "WallpaperManager initialized"), privacy: .public)")
-    }
+     override init() {
+         self.notificationManager = NotificationManager.shared
+         super.init()
+         
+         appLogger.info("\(NSLocalizedString("initializing_wallpaper_manager", comment: "Initializing WallpaperManager"), privacy: .public)")
+         
+         // Load shuffle mode from UserDefaults
+         self.isShuffleMode = userDefaults.bool(forKey: shuffleModeKey)
+         
+         // Cargar configuración en background usando PersistenceActor (NO bloquear init)
+         Task.detached { [weak self] in
+             guard let self else { return }
+             await self.loadDataInBackground()
+         }
+         
+         loadTransitionSettings()
+         setupScreenChangeNotifications()
+         setupWorkspaceNotifications()
+         setupTerminationHandling()
+         setupFullscreenDetection()
+         setupAppActivationNotifications()
+         
+         // Intentar auto‑inicio cuando el estado esté listo (sin depender de delays fijos)
+         attemptAutoStart()
+         
+         appLogger.info("\(NSLocalizedString("wallpaper_manager_initialized", comment: "WallpaperManager initialized"), privacy: .public)")
+     }
     
     deinit {
         MainActor.assumeIsolated { [self] in
@@ -657,6 +670,73 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
      /// Gets the next video in the queue (after current video)
      /// - Returns: Next video or nil if no videos available
+    
+    /// Asynchronously returns the next video in shuffle mode
+    /// Selects random videos from those enabled for random play, avoiding recent selections
+    /// Falls back to circular playlist when insufficient enabled videos
+    func getNextVideoInShuffleMode() async -> VideoFile? {
+        let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
+        
+        guard !enabledVideos.isEmpty else {
+            appLogger.debug("📋 No videos enabled for shuffle mode")
+            return nil
+        }
+        
+        // If only 1 video, return it
+        guard enabledVideos.count > 1 else {
+            return enabledVideos.first
+        }
+        
+        // If we have at least 6 enabled videos, use history to avoid repeating recent videos
+        if enabledVideos.count >= 6 {
+            // Filter out videos in shuffle history
+            let availableVideos = enabledVideos.filter { video in !self.shuffleHistory.contains(video.id) }
+            
+            if let randomVideo = availableVideos.randomElement() {
+                // Update shuffle history
+                shuffleHistory.append(randomVideo.id)
+                if shuffleHistory.count > shuffleHistoryMaxSize {
+                    shuffleHistory.removeFirst()
+                }
+                appLogger.debug("🎲 Shuffled to: \(randomVideo.name) (history size: \(self.shuffleHistory.count))")
+                return randomVideo
+            } else {
+                // All available videos are in history, clear history and try again
+                appLogger.debug("🔄 Shuffle history full, clearing and retrying")
+                shuffleHistory.removeAll()
+                if let randomVideo = enabledVideos.randomElement() {
+                    shuffleHistory.append(randomVideo.id)
+                    appLogger.debug("🎲 Shuffled to: \(randomVideo.name) (history cleared)")
+                    return randomVideo
+                }
+            }
+        } else {
+            // Fewer than 6 videos: use circular fallback to avoid immediate repeats
+            // Get videos not in recent history (if any)
+            let availableVideos = enabledVideos.filter { video in !self.shuffleHistory.contains(video.id) }
+            if !availableVideos.isEmpty, let randomVideo = availableVideos.randomElement() {
+                shuffleHistory.append(randomVideo.id)
+                if shuffleHistory.count > shuffleHistoryMaxSize {
+                    shuffleHistory.removeFirst()
+                }
+                appLogger.debug("🎲 Shuffled to: \(randomVideo.name) (small pool, history: \(self.shuffleHistory.count))")
+                return randomVideo
+            } else {
+                // All in history, fall back to random
+                if let randomVideo = enabledVideos.randomElement() {
+                    shuffleHistory.append(randomVideo.id)
+                    if shuffleHistory.count > shuffleHistoryMaxSize {
+                        shuffleHistory.removeFirst()
+                    }
+                    appLogger.debug("🎲 Shuffled to: \(randomVideo.name) (fallback)")
+                    return randomVideo
+                }
+            }
+        }
+        
+        return nil
+    }
+    
      private func getNextVideoInQueue() -> VideoFile? {
          let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
          
@@ -1094,47 +1174,43 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     
     
-    private func changeToNextVideo() async {
-        let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
-        
-        guard enabledVideos.count > 1 else {
-            appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio automático")
-            return
-        }
-        
-        guard let currentVideo = currentVideo,
-              let currentIndex = enabledVideos.firstIndex(where: { $0.id == currentVideo.id }) else {
-            // Si el video actual no está en la lista habilitada, ir al primer habilitado
-            if let firstEnabled = enabledVideos.first {
-                appLogger.info("🔄 Cambiando automáticamente al primer wallpaper habilitado: \(firstEnabled.name)")
-                await setActiveVideo(firstEnabled)
-                
-                if isPlayingWallpaper {
-                    startWallpaperSafe()
-                }
-            }
-            return
-        }
-        
-        let nextIndex = (currentIndex + 1) % enabledVideos.count
-        let nextVideo = enabledVideos[nextIndex]
-        
-        appLogger.info("🔄 Cambiando automáticamente a: \(nextVideo.name)")
-        
-        // Enforce single change at a time
-        guard !isChangingVideo else {
-            appLogger.warning("⚠️ Cambio de video ya en progreso - ignorando")
-            return
-        }
-        isChangingVideo = true
-        defer { isChangingVideo = false }
-        
-        if isPlayingWallpaper {
-            await changeToNextVideoWithTransition(to: nextVideo)
-        } else {
-            await setActiveVideo(nextVideo)
-        }
-    }
+     private func changeToNextVideo() async {
+         let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
+         
+         guard enabledVideos.count > 1 else {
+             appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio automático")
+             return
+         }
+         
+         // Use shuffle mode if enabled, otherwise use circular queue
+         let nextVideo: VideoFile?
+         if isShuffleMode {
+             nextVideo = await getNextVideoInShuffleMode()
+         } else {
+             nextVideo = getNextVideoInQueue()
+         }
+         
+         guard let nextVideo = nextVideo else {
+             appLogger.warning("⚠️ No se pudo obtener el siguiente video")
+             return
+         }
+         
+         appLogger.info("🔄 Cambiando automáticamente a: \(nextVideo.name)")
+         
+         // Enforce single change at a time
+         guard !isChangingVideo else {
+             appLogger.warning("⚠️ Cambio de video ya en progreso - ignorando")
+             return
+         }
+         isChangingVideo = true
+         defer { isChangingVideo = false }
+         
+         if isPlayingWallpaper {
+             await changeToNextVideoWithTransition(to: nextVideo)
+         } else {
+             await setActiveVideo(nextVideo)
+         }
+     }
     
     /// Changes to the next video without crossfade (instant switch)
     private func changeToNextVideoWithTransition(to nextVideo: VideoFile) async {
