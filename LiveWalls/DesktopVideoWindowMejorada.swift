@@ -606,29 +606,46 @@ public class DesktopVideoWindowMejorada: NSWindow {
          return true
      }
      
-     /// Updates window properties for a Space change without full recreation
-     /// This method ensures the window remains visible and playback continues on the new Space
-     public func updateForSpace() {
-         memoryLogger.debug("🔄 Updating window for Space change")
-         
-         // Ensure window is on correct Space
-         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-         
-         // PHASE 5: Use consistent window level
-         // Keep same level as setupWindow() - never change window level
-         // Use kCGDesktopIconWindowLevel - 1 (same as initial setup)
-         self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
-         self.orderBack(nil)
-         
-         // Resume playback if paused (and not paused by user)
-         if let queuePlayer = self.player as? AVQueuePlayer {
-             if queuePlayer.rate == 0 {
-                 memoryLogger.debug("▶️ Resuming playback after Space change")
-                 queuePlayer.play()
-             }
-         }
-         
-         memoryLogger.debug("✅ Window updated for Space change")
-     }
+      /// Updates window properties for a Space change without full recreation
+      /// This method ensures the window remains visible and playback continues on the new Space
+      public func updateForSpace() {
+          memoryLogger.debug("🔄 Updating window for Space change")
+          
+          // PHASE 3: Validate resource access before operations
+          // Check that player and layer are still accessible
+          guard let player = player else {
+              memoryLogger.warning("⚠️ Player is nil - may indicate resource cleanup issue")
+              // Window state is corrupted, recovery would require WallpaperManager intervention
+              return
+          }
+          
+          if playerLayer == nil {
+              memoryLogger.warning("⚠️ Player layer is nil - may indicate render resource issue")
+          }
+          
+          // Ensure window is on correct Space
+          self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+          
+          // PHASE 5: Use consistent window level
+          // Keep same level as setupWindow() - never change window level
+          // Use kCGDesktopIconWindowLevel - 1 (same as initial setup)
+          self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
+          self.orderBack(nil)
+          
+          // PHASE 3: Resume playback with validation
+          // Resume playback if paused (and not paused by user)
+          if let queuePlayer = player as? AVQueuePlayer {
+              if queuePlayer.rate == 0 {
+                  memoryLogger.debug("▶️ Resuming playback after Space change")
+                  queuePlayer.play()
+              } else {
+                  memoryLogger.debug("✅ Playback already running after Space change")
+              }
+          } else {
+              memoryLogger.warning("⚠️ Player not available as AVQueuePlayer for resume")
+          }
+          
+          memoryLogger.debug("✅ Window updated for Space change")
+      }
 }
 

@@ -70,6 +70,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // resourceReleaseDelay = 2.5s (transition + 0.5s grace period)
     // This ensures cleanup happens AFTER transition completes, preventing frame drops
     private let resourceReleaseDelay: TimeInterval = 2.5
+    
+    // PHASE 3: Extended delay for Space changes (includes throttle + operations + safety margin)
+    // Space changes: throttle (0.5s) + operations (0.5-1.0s) + cleanup (5.0s) = total delay needed
+    private let resourceReleaseDelayForSpaceChange: TimeInterval = 5.0
+    
     private let userDefaults = UserDefaults.standard
     
     // MARK: - Security-Scoped Resource Tracking
@@ -948,21 +953,22 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let group = DispatchGroup()
         
         for (window, accessibleURL) in instancesToDestroy {
-            group.enter()
-            
-            // Usar el nuevo método close con completion
-            window.close { [weak self] in
-                // Liberar acceso security-scoped después de que la ventana esté completamente cerrada
-                let delay = self?.resourceReleaseDelay ?? 0.1
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                    if let self {
-                        Task { @MainActor in
-                            self.safeStopSecurityScopedAccess(for: accessibleURL)
-                        }
-                    }
-                    group.leave()
-                }
-            }
+             group.enter()
+             
+              // Usar el nuevo método close con completion
+              window.close { [weak self] in
+                  // PHASE 3: Use context-aware delay (extended for Space changes)
+                  // Liberar acceso security-scoped después de que la ventana esté completamente cerrada
+                  let delay = self?.getResourceReleaseDelay(forSpaceChange: true) ?? 0.1
+                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                     if let self {
+                         Task { @MainActor in
+                             self.safeStopSecurityScopedAccess(for: accessibleURL)
+                         }
+                     }
+                     group.leave()
+                 }
+             }
         }
         
         // Ejecutar completion cuando todas las ventanas estén cerradas
@@ -1771,6 +1777,21 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             await throttleManager.throttle(key: "spaceChange", interval: 0.5) { @MainActor in
                 self.appLogger.info("🔄 Ejecutando reactivación tras throttle")
                 
+                // PHASE 3: Validate bookmark freshness before Space operations
+                if let videoFile = self.currentVideo, let bookmarkData = videoFile.bookmarkData {
+                    let isStale = await self.bookmarkActor.isBookmarkStale(for: bookmarkData)
+                    if isStale {
+                        self.appLogger.warning("⚠️ Bookmark stale before Space change, refreshing...")
+                        do {
+                            let freshURL = try await self.bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
+                            self.appLogger.info("✅ Bookmark refreshed: \(freshURL.lastPathComponent)")
+                            // Cache is now fresh with new timestamp
+                        } catch {
+                            self.appLogger.error("❌ Failed to refresh stale bookmark: \(error.localizedDescription)")
+                        }
+                    }
+                }
+                
                 // PHASE 3: Try window reuse first, fallback to recreation
                 if self.areCurrentWindowsHealthy() {
                     self.appLogger.info("✅ Windows healthy - updating for Space without recreation")
@@ -1840,6 +1861,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             appLogger.info("⚠️ Some windows unhealthy")
         }
         return allHealthy
+    }
+    
+    // PHASE 3: Helper method to get appropriate resource release delay
+    /// Returns the appropriate resource release delay based on context
+    /// - Parameter isSpaceChange: true if delay is for Space change operation
+    /// - Returns: The delay interval (5.0s for Space changes, 2.5s for transitions)
+    @MainActor
+    private func getResourceReleaseDelay(forSpaceChange isSpaceChange: Bool) -> TimeInterval {
+        // Space changes need longer delay to allow:
+        // - Throttle settling (0.5s)
+        // - Window operations completion (0.5-1.0s)
+        // - AVFoundation resource cleanup (1.0-2.0s)
+        // - FigFilePlayer error prevention (1.0-2.0s grace period)
+        return isSpaceChange ? resourceReleaseDelayForSpaceChange : resourceReleaseDelay
     }
     
     private func setupTerminationHandling() {
