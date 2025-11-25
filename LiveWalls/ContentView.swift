@@ -153,17 +153,19 @@ struct ContentView: View {
                         // PHASE 4: Drag & Drop reordering (only in playlist mode)
                         .onDrag {
                             // Only enable drag in playlist mode
-                            guard !wallpaperManager.isShuffleMode else {
+                            guard !localIsShuffleMode else {
+                                print("🚫 Drag blocked: shuffle mode active")
                                 return NSItemProvider()
                             }
-                            // Store the dragged video's index as text
+                            
+                            print("📦 Drag started: index=\(index), video=\(video.name)")
                             let data = "\(index)".data(using: .utf8)!
                             return NSItemProvider(item: data as NSData, typeIdentifier: "public.text")
                         }
                         .onDrop(of: [.text], delegate: VideoDropDelegate(
                             wallpaperManager: wallpaperManager,
                             currentIndex: index,
-                            isShuffleMode: wallpaperManager.isShuffleMode
+                            isShuffleMode: localIsShuffleMode  // Use local state instead of manager state
                         ))
                     }
                 }
@@ -533,12 +535,16 @@ struct VideoDropDelegate: DropDelegate {
     }
     
     func performDrop(info: DropInfo) -> Bool {
+        print("🎯 Drop triggered: currentIndex=\(currentIndex), isShuffleMode=\(isShuffleMode)")
+        
         // Only allow drops in playlist mode
         guard !isShuffleMode else {
+            print("🚫 Drop rejected: shuffle mode active")
             return false
         }
         
         guard let item = info.itemProviders(for: [.text]).first else {
+            print("⚠️ Drop failed: no text item provider found")
             return false
         }
         
@@ -549,12 +555,16 @@ struct VideoDropDelegate: DropDelegate {
             guard let data = data as? Data,
                   let sourceIndexString = String(data: data, encoding: .utf8),
                   let sourceIndex = Int(sourceIndexString) else {
+                print("❌ Drop failed: could not decode index from data")
                 return
             }
             
+            print("✅ Drop data received: sourceIndex=\(sourceIndex) → currentIndex=\(self.currentIndex)")
+            
             // Perform reordering on main thread
             DispatchQueue.main.async {
-                wallpaperManager.reorderVideos(from: sourceIndex, to: currentIndex)
+                wallpaperManager.reorderVideos(from: sourceIndex, to: self.currentIndex)
+                print("✅ Reordering completed: moved video from \(sourceIndex) to \(self.currentIndex)")
             }
         }
         
