@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var isImporting = false
     @State private var selectedVideo: VideoFile?
     @State private var showSettings = false
+    @State private var localIsShuffleMode: Bool = false
 
     // Grid columns para la vista de miniaturas
     private let gridColumns = [
@@ -21,7 +22,7 @@ struct ContentView: View {
             Divider()
             
             // Playback Mode Picker
-            Picker("Playback Mode", selection: $wallpaperManager.isShuffleMode) {
+            Picker("Playback Mode", selection: $localIsShuffleMode) {
                 Label("Playlist", systemImage: "list.number")
                     .tag(false)
                 Label("Shuffle", systemImage: "shuffle")
@@ -32,6 +33,14 @@ struct ContentView: View {
             .padding(.horizontal)
             .padding(.top, 8)
             .accessibilityIdentifier("playbackModePicker")
+            .onChange(of: localIsShuffleMode) { newValue in
+                wallpaperManager.isShuffleMode = newValue
+            }
+            .onChange(of: wallpaperManager.isShuffleMode) { newValue in
+                if localIsShuffleMode != newValue {
+                    localIsShuffleMode = newValue
+                }
+            }
             
             Divider()
             
@@ -62,6 +71,9 @@ struct ContentView: View {
             SettingsView()
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
+        }
+        .onAppear {
+            localIsShuffleMode = wallpaperManager.isShuffleMode
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowMainWindow"))) { _ in
             // Si la ventana está oculta, traerla al frente
