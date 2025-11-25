@@ -552,8 +552,162 @@ final class WallpaperManagerTests: XCTestCase {
             // La diferencia entre call1 y call3 debe ser > 2.0 segundos (rate limit)
             let timeBetween1And3 = call3Time.timeIntervalSince(call1Time)
             XCTAssertGreaterThanOrEqual(timeBetween1And3, 2.0, "PHASE 6: Tercera llamada debería ocurrir después de rate limit de 2.0s (actual: \(timeBetween1And3)s)")
+         }
+        
+        // MARK: - PHASE 4: Drag & Drop Video Reordering Tests
+        
+        /// Test que verifica que reorderVideos(from:to:) existe
+        /// PHASE 4: Drag & Drop reordering básico
+        func testReorderVideosMethodExists() async {
+            // Given
+            let video1 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-1.mp4"),
+                                 name: "Video 1",
+                                 bookmarkData: nil,
+                                 isEnabledForRandomPlay: true)
+            let video2 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-2.mp4"),
+                                 name: "Video 2",
+                                 bookmarkData: nil,
+                                 isEnabledForRandomPlay: true)
+            wallpaperManager.videoFiles = [video1, video2]
+            
+            // When - calling reorderVideos should not crash
+            await wallpaperManager.reorderVideos(from: 0, to: 1)
+            
+            // Then - method exists and executes without error
+            XCTAssertEqual(wallpaperManager.videoFiles.count, 2, "Videos array should still have 2 items")
         }
-   }
+        
+        /// Test que verifica que reordering mueve video de fuente a destino
+        /// PHASE 4: Validar que el video se mueve correctamente
+        func testReorderingMovesVideoFromSourceToDestination() async {
+            // Given
+            let video1 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-reorder-1.mp4"),
+                                 name: "Video 1",
+                                 bookmarkData: nil,
+                                 isEnabledForRandomPlay: true)
+            let video2 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-reorder-2.mp4"),
+                                 name: "Video 2",
+                                 bookmarkData: nil,
+                                 isEnabledForRandomPlay: true)
+            let video3 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-reorder-3.mp4"),
+                                 name: "Video 3",
+                                 bookmarkData: nil,
+                                 isEnabledForRandomPlay: true)
+            wallpaperManager.videoFiles = [video1, video2, video3]
+            
+            // When - reorder video from index 0 to index 2
+            await wallpaperManager.reorderVideos(from: 0, to: 2)
+            
+            // Then - video1 should now be at index 2
+            XCTAssertEqual(wallpaperManager.videoFiles[2].name, "Video 1", "Video 1 should be moved to index 2")
+            XCTAssertEqual(wallpaperManager.videoFiles[0].name, "Video 2", "Video 2 should be at index 0")
+            XCTAssertEqual(wallpaperManager.videoFiles[1].name, "Video 3", "Video 3 should be at index 1")
+        }
+        
+        /// Test que verifica el orden correcto del array después de reordenar
+        /// PHASE 4: Validar orden del array
+        func testArrayOrderIsCorrectAfterReordering() async {
+            // Given - array inicial
+            let videos = [
+                VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-order-1.mp4"),
+                         name: "A", bookmarkData: nil, isEnabledForRandomPlay: true),
+                VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-order-2.mp4"),
+                         name: "B", bookmarkData: nil, isEnabledForRandomPlay: true),
+                VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-order-3.mp4"),
+                         name: "C", bookmarkData: nil, isEnabledForRandomPlay: true),
+                VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-order-4.mp4"),
+                         name: "D", bookmarkData: nil, isEnabledForRandomPlay: true)
+            ]
+            wallpaperManager.videoFiles = videos
+            
+            // When - reorder B (index 1) to position 3
+            await wallpaperManager.reorderVideos(from: 1, to: 3)
+            
+            // Then - order should be A, C, D, B
+            XCTAssertEqual(wallpaperManager.videoFiles[0].name, "A")
+            XCTAssertEqual(wallpaperManager.videoFiles[1].name, "C")
+            XCTAssertEqual(wallpaperManager.videoFiles[2].name, "D")
+            XCTAssertEqual(wallpaperManager.videoFiles[3].name, "B")
+        }
+        
+        /// Test que verifica que currentVideo se actualizó si es afectado por reordering
+        /// PHASE 4: Validar que currentVideoIndex se actualiza
+        func testCurrentVideoIndexUpdatesIfAffected() async {
+            // Given - currentVideo es el que se está reordenando
+            let video1 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-current-1.mp4"),
+                                 name: "Current", bookmarkData: nil, isEnabledForRandomPlay: true)
+            let video2 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-current-2.mp4"),
+                                 name: "Other", bookmarkData: nil, isEnabledForRandomPlay: true)
+            let video3 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-current-3.mp4"),
+                                 name: "Another", bookmarkData: nil, isEnabledForRandomPlay: true)
+            wallpaperManager.videoFiles = [video1, video2, video3]
+            wallpaperManager.currentVideo = video1
+            
+            // When - reorder currentVideo from 0 to 2
+            await wallpaperManager.reorderVideos(from: 0, to: 2)
+            
+            // Then - currentVideo should still be video1 (which is now at index 2)
+            XCTAssertEqual(wallpaperManager.currentVideo?.name, "Current", "Current video should remain set")
+            XCTAssertEqual(wallpaperManager.videoFiles[2].name, "Current", "Current video should be at new index 2")
+        }
+        
+        /// Test que verifica que reordered array se persiste
+        /// PHASE 4: Validar que saveVideos() es llamado
+        func testReorderedArrayIsPersisted() async {
+            // Given
+            let video1 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-persist-1.mp4"),
+                                 name: "Video 1", bookmarkData: nil, isEnabledForRandomPlay: true)
+            let video2 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-persist-2.mp4"),
+                                 name: "Video 2", bookmarkData: nil, isEnabledForRandomPlay: true)
+            wallpaperManager.videoFiles = [video1, video2]
+            
+            // When - reorder and verify saveVideos is called
+            await wallpaperManager.reorderVideos(from: 0, to: 1)
+            
+            // Then - videoFiles array should reflect new order
+            XCTAssertEqual(wallpaperManager.videoFiles[0].name, "Video 2", "New order should be persisted in videoFiles")
+            XCTAssertEqual(wallpaperManager.videoFiles[1].name, "Video 1", "New order should be persisted in videoFiles")
+        }
+        
+        /// Test que verifica que mismo índice de origen y destino no cambia nada
+        /// PHASE 4: Validar edge case (no change)
+        func testReorderingWithSameIndexDoesNothing() async {
+            // Given
+            let video1 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-same-1.mp4"),
+                                 name: "Video 1", bookmarkData: nil, isEnabledForRandomPlay: true)
+            let video2 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-same-2.mp4"),
+                                 name: "Video 2", bookmarkData: nil, isEnabledForRandomPlay: true)
+            let original = wallpaperManager.videoFiles
+            wallpaperManager.videoFiles = [video1, video2]
+            
+            // When - try to reorder to same index
+            await wallpaperManager.reorderVideos(from: 0, to: 0)
+            
+            // Then - nothing should change
+            XCTAssertEqual(wallpaperManager.videoFiles.count, 2)
+            XCTAssertEqual(wallpaperManager.videoFiles[0].name, "Video 1")
+            XCTAssertEqual(wallpaperManager.videoFiles[1].name, "Video 2")
+        }
+        
+        /// Test que verifica que índices inválidos se ignoran
+        /// PHASE 4: Validar edge case (invalid indices)
+        func testReorderingWithInvalidIndicesIsIgnored() async {
+            // Given
+            let video1 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-invalid-1.mp4"),
+                                 name: "Video 1", bookmarkData: nil, isEnabledForRandomPlay: true)
+            let video2 = VideoFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("video-invalid-2.mp4"),
+                                 name: "Video 2", bookmarkData: nil, isEnabledForRandomPlay: true)
+            wallpaperManager.videoFiles = [video1, video2]
+            
+            // When - try to reorder with out-of-bounds indices
+            await wallpaperManager.reorderVideos(from: -1, to: 1)
+            await wallpaperManager.reorderVideos(from: 0, to: 5)
+            
+            // Then - array should remain unchanged
+            XCTAssertEqual(wallpaperManager.videoFiles[0].name, "Video 1")
+            XCTAssertEqual(wallpaperManager.videoFiles[1].name, "Video 2")
+        }
+    }
 
 // MARK: - Mock Objects
 

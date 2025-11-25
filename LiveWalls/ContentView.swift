@@ -122,7 +122,7 @@ struct ContentView: View {
             // Grid de videos
             ScrollView {
                 LazyVGrid(columns: gridColumns, spacing: 16) {
-                    ForEach(wallpaperManager.videoFiles) { video in
+                    ForEach(Array(wallpaperManager.videoFiles.enumerated()), id: \.element.id) { index, video in
                         VideoThumbnailCard(
                             video: video,
                             isSelected: selectedVideo?.id == video.id,
@@ -133,6 +133,21 @@ struct ContentView: View {
                             },
                             wallpaperManager: wallpaperManager
                         )
+                        // PHASE 4: Drag & Drop reordering (only in playlist mode)
+                        .onDrag {
+                            // Only enable drag in playlist mode
+                            guard !wallpaperManager.isShuffleMode else {
+                                return NSItemProvider()
+                            }
+                            // Store the dragged video's index as text
+                            let data = "\(index)".data(using: .utf8)!
+                            return NSItemProvider(item: data as NSData, typeIdentifier: "public.text")
+                        }
+                        .onDrop(of: [.text], delegate: VideoDropDelegate(
+                            wallpaperManager: wallpaperManager,
+                            currentIndex: index,
+                            isShuffleMode: wallpaperManager.isShuffleMode
+                        ))
                     }
                 }
                 .padding()
@@ -437,6 +452,52 @@ struct VideoRowView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Drag & Drop Support (PHASE 4)
+
+/// Drop delegate for reordering videos via drag and drop
+/// Only active in playlist mode (not shuffle mode)
+struct VideoDropDelegate: DropDelegate {
+    let wallpaperManager: WallpaperManager
+    let currentIndex: Int
+    let isShuffleMode: Bool
+    
+    func dropEntered(info: DropInfo) {
+        // Visual feedback not needed in this simple implementation
+    }
+    
+    func performDrop(info: DropInfo) -> Bool {
+        // Only allow drops in playlist mode
+        guard !isShuffleMode else {
+            return false
+        }
+        
+        guard let item = info.itemProviders(for: [.text]).first else {
+            return false
+        }
+        
+        // Load the dragged video's index asynchronously.
+        // Return true immediately to indicate drop is accepted and being processed.
+        // The actual reordering happens asynchronously in the closure below.
+        item.loadItem(forTypeIdentifier: "public.text", options: nil) { (data, error) in
+            guard let data = data as? Data,
+                  let sourceIndexString = String(data: data, encoding: .utf8),
+                  let sourceIndex = Int(sourceIndexString) else {
+                return
+            }
+            
+            // Perform reordering on main thread
+            DispatchQueue.main.async {
+                wallpaperManager.reorderVideos(from: sourceIndex, to: currentIndex)
+            }
+        }
+        
+        // Return true to indicate drop is accepted and being processed asynchronously.
+        // This fixes the race condition where the method was returning before the
+        // closure could execute, causing the drop to always appear to fail.
+        return true
     }
 }
 

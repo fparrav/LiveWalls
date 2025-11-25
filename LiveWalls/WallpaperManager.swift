@@ -1458,6 +1458,34 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
+    /// Reorders videos in the playlist by moving a video from source index to destination index
+    /// Only works in playlist mode (not shuffle mode)
+    /// PHASE 4: Drag & Drop reordering
+    func reorderVideos(from source: Int, to destination: Int) {
+        // Validate indices
+        guard source != destination,
+              source >= 0, source < videoFiles.count,
+              destination >= 0, destination < videoFiles.count else {
+            return
+        }
+        
+        // Move the video from source to destination
+        let movedVideo = videoFiles[source]
+        videoFiles.remove(at: source)
+        videoFiles.insert(movedVideo, at: destination)
+        
+        // Update currentVideo reference if affected by reordering
+        if currentVideo?.id == movedVideo.id {
+            // Current video was moved, it's now at the destination index
+            currentVideo = videoFiles[destination]
+        }
+        
+        appLogger.info("🔄 Reordered video '\(movedVideo.name)' from index \(source) to \(destination)")
+        
+        // Persist the new order
+        saveVideos()
+    }
+    
     // MARK: - Persistence
     
     /// Guarda la lista de videos de forma asíncrona usando PersistenceActor
