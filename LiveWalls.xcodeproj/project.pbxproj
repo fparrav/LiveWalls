@@ -51,6 +51,7 @@
 		72BF47E36CA54AACAFD3EFEC /* VideoPreloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412CE12ADD8B4EED8D0A5283 /* VideoPreloader.swift */; };
 		32C212366A3246A7A3E339B4 /* VideoPreloaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */; };
 		0000000000000000CA7AADFF /* WindowRecreationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000A5D2599A /* WindowRecreationTests.swift */; };
+		886A1BD1C43A4286898AC196 /* TimerSpaceChangeAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CCC0FAFF3CC4A249190F23A /* TimerSpaceChangeAuditTests.swift */; };
 		F64F739D05584ED593932076 /* ThrottleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88C6DFC482714BA3BE6324C7 /* ThrottleManager.swift */; };
 /* End PBXBuildFile section */
 
@@ -159,6 +160,7 @@
 		412CE12ADD8B4EED8D0A5283 /* VideoPreloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPreloader.swift; sourceTree = "<group>"; };
 		BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPreloaderTests.swift; sourceTree = "<group>"; };
 		0000000000000000A5D2599A /* WindowRecreationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRecreationTests.swift; sourceTree = "<group>"; };
+		0CCC0FAFF3CC4A249190F23A /* TimerSpaceChangeAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSpaceChangeAuditTests.swift; sourceTree = "<group>"; };
 		F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperTimerManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -314,9 +316,10 @@
 				2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
 				AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
 				30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */,
-				BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */,
+			BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */,
 			0000000000000000A5D2599A /* WindowRecreationTests.swift */,
-			);
+			0CCC0FAFF3CC4A249190F23A /* TimerSpaceChangeAuditTests.swift */,
+		);
 			path = LiveWallsTests;
 			sourceTree = "<group>";
 		};
@@ -497,6 +500,7 @@
 				55846ECC2EBF8D6B00E46C3B /* StartupPerformanceTests.swift in Sources */,
 				32C212366A3246A7A3E339B4 /* VideoPreloaderTests.swift in Sources */,
 				0000000000000000CA7AADFF /* WindowRecreationTests.swift in Sources */,
+				886A1BD1C43A4286898AC196 /* TimerSpaceChangeAuditTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
