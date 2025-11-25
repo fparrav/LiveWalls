@@ -130,18 +130,96 @@ final class ContentViewUITests: XCTestCase {
          XCTAssertTrue(settingsButton.waitForExistence(timeout: 2), "El botón 'toolbar_settings_button' debería existir")
      }
      
-     /// Test completo de controles inferiores con identificadores de accesibilidad
-     func testBottomControlsExistByIdentifier() {
-         // Verificar botón de reproducir/detener
-         let playToggleButton = app.buttons["bottom_play_toggle_button"]
-         XCTAssertTrue(playToggleButton.waitForExistence(timeout: 2), "El botón 'bottom_play_toggle_button' debería existir")
-         
-         // Verificar botón de establecer como wallpaper
-         let setWallpaperButton = app.buttons["bottom_set_wallpaper_button"]
-         XCTAssertTrue(setWallpaperButton.waitForExistence(timeout: 2), "El botón 'bottom_set_wallpaper_button' debería existir")
-         
-         // Verificar botón de eliminar
-         let deleteButton = app.buttons["bottom_delete_button"]
-         XCTAssertTrue(deleteButton.waitForExistence(timeout: 2), "El botón 'bottom_delete_button' debería existir")
-     }
-} 
+      /// Test completo de controles inferiores con identificadores de accesibilidad
+      func testBottomControlsExistByIdentifier() {
+          // Verificar botón de reproducir/detener
+          let playToggleButton = app.buttons["bottom_play_toggle_button"]
+          XCTAssertTrue(playToggleButton.waitForExistence(timeout: 2), "El botón 'bottom_play_toggle_button' debería existir")
+          
+          // Verificar botón de establecer como wallpaper
+          let setWallpaperButton = app.buttons["bottom_set_wallpaper_button"]
+          XCTAssertTrue(setWallpaperButton.waitForExistence(timeout: 2), "El botón 'bottom_set_wallpaper_button' debería existir")
+          
+          // Verificar botón de eliminar
+          let deleteButton = app.buttons["bottom_delete_button"]
+          XCTAssertTrue(deleteButton.waitForExistence(timeout: 2), "El botón 'bottom_delete_button' debería existir")
+      }
+      
+      // MARK: - Phase 2: Playback Mode Picker Tests
+      
+      /// Test que el picker de modo de reproducción existe con el accessibility ID correcto
+      func testPlaybackModePickerExists() {
+          let picker = app.segmentedControls["playbackModePicker"]
+          XCTAssertTrue(picker.waitForExistence(timeout: 2), "El picker de modo de reproducción debería existir con ID 'playbackModePicker'")
+      }
+      
+      /// Test que el picker tiene dos segmentos: "Playlist" y "Shuffle"
+      func testPlaybackModePickerHasTwoSegments() {
+          let picker = app.segmentedControls["playbackModePicker"]
+          XCTAssertTrue(picker.waitForExistence(timeout: 2), "El picker debería existir")
+          
+          // Verificar que tiene 2 botones (segmentos)
+          let buttons = picker.buttons
+          XCTAssertEqual(buttons.count, 2, "El picker debería tener exactamente 2 segmentos")
+      }
+      
+      /// Test que tapping en el segmento "Shuffle" establece isShuffleMode en true
+      func testTappingShuffleSegmentEnablesShuffle() {
+          let picker = app.segmentedControls["playbackModePicker"]
+          XCTAssertTrue(picker.waitForExistence(timeout: 2), "El picker debería existir")
+          
+          // Obtener el segundo segmento (Shuffle)
+          let shuffleSegment = picker.buttons.element(boundBy: 1)
+          XCTAssertTrue(shuffleSegment.waitForExistence(timeout: 2), "El segmento Shuffle debería existir")
+          
+          // Tap en el segmento Shuffle
+          shuffleSegment.tap()
+          
+          // Verificar que se seleccionó (el atributo selected se pone a true)
+          XCTAssertTrue(shuffleSegment.isSelected, "El segmento Shuffle debería estar seleccionado después del tap")
+      }
+      
+      /// Test que tapping en el segmento "Playlist" establece isShuffleMode en false
+      func testTappingPlaylistSegmentDisablesShuffle() {
+          let picker = app.segmentedControls["playbackModePicker"]
+          XCTAssertTrue(picker.waitForExistence(timeout: 2), "El picker debería existir")
+          
+          // Primero tap en Shuffle para asegurar que estamos en ese estado
+          let shuffleSegment = picker.buttons.element(boundBy: 1)
+          shuffleSegment.tap()
+          sleep(1) // Esperar para asegurar que el estado cambió
+          
+          // Luego tap en Playlist
+          let playlistSegment = picker.buttons.element(boundBy: 0)
+          XCTAssertTrue(playlistSegment.waitForExistence(timeout: 2), "El segmento Playlist debería existir")
+          playlistSegment.tap()
+          
+          // Verificar que se seleccionó
+          XCTAssertTrue(playlistSegment.isSelected, "El segmento Playlist debería estar seleccionado después del tap")
+      }
+      
+      /// Test que el picker aparece entre el toolbar y el grid de videos (posición correcta)
+      func testPlaybackModePickerPosition() {
+          // Verificar que el picker existe
+          let picker = app.segmentedControls["playbackModePicker"]
+          XCTAssertTrue(picker.waitForExistence(timeout: 2), "El picker debería existir")
+          
+          // Verificar que el toolbar existe encima
+          let titleText = app.staticTexts["app_title_text"]
+          XCTAssertTrue(titleText.waitForExistence(timeout: 2), "El título del toolbar debería existir")
+          
+          // El picker debería estar visible en la pantalla (verificar que su frame es válido)
+          XCTAssertTrue(picker.frame.height > 0, "El picker debería tener altura positiva")
+          XCTAssertTrue(picker.frame.width > 0, "El picker debería tener ancho positivo")
+      }
+      
+      /// Test que el picker refleja el estado actual de isShuffleMode
+      func testPlaybackModePickerReflectsCurrentState() {
+          let picker = app.segmentedControls["playbackModePicker"]
+          XCTAssertTrue(picker.waitForExistence(timeout: 2), "El picker debería existir")
+          
+          // Por defecto, debería estar en Playlist (false/primer segmento)
+          let playlistSegment = picker.buttons.element(boundBy: 0)
+          XCTAssertTrue(playlistSegment.isSelected, "El segmento Playlist debería estar seleccionado por defecto")
+      }
+}

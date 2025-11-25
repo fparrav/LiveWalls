@@ -20,6 +20,21 @@ struct ContentView: View {
             
             Divider()
             
+            // Playback Mode Picker
+            Picker("Playback Mode", selection: $wallpaperManager.isShuffleMode) {
+                Label("Playlist", systemImage: "list.number")
+                    .tag(false)
+                Label("Shuffle", systemImage: "shuffle")
+                    .tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 400)
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .accessibilityIdentifier("playbackModePicker")
+            
+            Divider()
+            
             // Contenido principal
             mainContentView
             
