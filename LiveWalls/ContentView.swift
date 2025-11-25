@@ -296,13 +296,20 @@ struct VideoThumbnailCard: View {
                 // Indicadores superpuestos
                 VStack {
                     HStack {
-                        // Indicador de deshabilitado para reproducción aleatoria
-                        if !video.isEnabledForRandomPlay {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(.white, .red)
-                                .font(.caption)
-                                .shadow(radius: 2)
+                        // Large checkbox Toggle para aleatoriedad en top-left
+                        Toggle(isOn: Binding(
+                            get: { video.isEnabledForRandomPlay },
+                            set: { _ in wallpaperManager.toggleVideoRandomPlayEnabled(video) }
+                        )) {
+                            EmptyView()
                         }
+                        .toggleStyle(.checkbox)
+                        .frame(width: 24, height: 24)
+                        .padding(8)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .accessibilityIdentifier("videoToggle_\(video.id)")
+                        .allowsHitTesting(true)
                         
                         Spacer()
                         if isActive {
@@ -333,6 +340,10 @@ struct VideoThumbnailCard: View {
                 }
                 .padding(6)
             }
+            // Fix for binding synchronization bug: Force view recreation when video state changes
+            // by using .id() modifier. This ensures SwiftUI refreshes the view when the underlying
+            // video object in the array is mutated by toggleVideoRandomPlayEnabled().
+            .id(video.id)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
