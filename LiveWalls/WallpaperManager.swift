@@ -1365,72 +1365,71 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Manual Next Wallpaper & Random Play Control
     
-    /// Manually changes to the next wallpaper available for random playback
-    func nextWallpaper() async {
-        let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
-        
-        // DEBUG: Log detallado de videos disponibles
-        appLogger.info("🔍 DEBUG nextWallpaper() - Videos habilitados: \(enabledVideos.count)")
-        appLogger.info("🔍 DEBUG - Current video: \(self.currentVideo?.name ?? "nil")")
-        for (idx, video) in enabledVideos.enumerated() {
-            appLogger.info("🔍 DEBUG - [\(idx)]: \(video.name) (id: \(video.id.uuidString.prefix(8))...)")
-        }
-        
-        guard !isChangingVideo else {
-            appLogger.warning("⚠️ Cambio de wallpaper ya en progreso (manual) - ignorando")
-            return
-        }
-        isChangingVideo = true
-        defer { isChangingVideo = false }
-        
-        guard enabledVideos.count > 1 else {
-            appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio manual (count: \(enabledVideos.count))")
-            return
-        }
-        
-        guard let currentVideo = currentVideo,
-              let currentIndex = enabledVideos.firstIndex(where: { $0.id == currentVideo.id }) else {
-            // Si el video actual no está en la lista habilitada, ir al primer habilitado
-            if let firstEnabled = enabledVideos.first {
-                appLogger.info("🔄 Cambiando manualmente al primer wallpaper habilitado: \(firstEnabled.name)")
-                
-                if isPlayingWallpaper {
-                    await changeToNextVideoWithTransition(to: firstEnabled)
-                    // Reiniciar timer después de cambio manual
-                    await MainActor.run {
-                        self.restartAutoChangeTimerIfNeeded()
-                    }
-                } else {
-                    await setActiveVideo(firstEnabled)
-                }
-            }
-            return
-        }
-        
-        let nextIndex = (currentIndex + 1) % enabledVideos.count
-        let nextVideo = enabledVideos[nextIndex]
-        
-        appLogger.info("🔄 Cambiando manualmente de [\(currentIndex)] \(currentVideo.name) → [\(nextIndex)] \(nextVideo.name)")
-        
-        // VERIFICACIÓN: Asegurar que realmente es un video diferente
-        if nextVideo.id == currentVideo.id {
-            appLogger.error("❌ BUG DETECTADO: nextVideo es el mismo que currentVideo!")
-            appLogger.error("   Current: \(currentVideo.name) (\(currentVideo.id.uuidString))")
-            appLogger.error("   Next: \(nextVideo.name) (\(nextVideo.id.uuidString))")
-            appLogger.error("   CurrentIndex: \(currentIndex), NextIndex: \(nextIndex), Count: \(enabledVideos.count)")
-            return
-        }
-        
-        if isPlayingWallpaper {
-            await changeToNextVideoWithTransition(to: nextVideo)
-            // Reiniciar timer después de cambio manual
-            await MainActor.run {
-                self.restartAutoChangeTimerIfNeeded()
-            }
-        } else {
-            await setActiveVideo(nextVideo)
-        }
-    }
+     /// Manually changes to the next wallpaper available for random playback
+     /// Respects shuffle mode: uses random selection if shuffle is enabled, circular queue otherwise
+     func nextWallpaper() async {
+         let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
+         
+         // DEBUG: Log detallado de videos disponibles
+         appLogger.info("🔍 DEBUG nextWallpaper() - Videos habilitados: \(enabledVideos.count), Shuffle: \(self.isShuffleMode)")
+         appLogger.info("🔍 DEBUG - Current video: \(self.currentVideo?.name ?? "nil")")
+         for (idx, video) in enabledVideos.enumerated() {
+             appLogger.info("🔍 DEBUG - [\(idx)]: \(video.name) (id: \(video.id.uuidString.prefix(8))...)")
+         }
+         
+         guard !isChangingVideo else {
+             appLogger.warning("⚠️ Cambio de wallpaper ya en progreso (manual) - ignorando")
+             return
+         }
+         isChangingVideo = true
+         defer { isChangingVideo = false }
+         
+         guard enabledVideos.count > 1 else {
+             appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio manual (count: \(enabledVideos.count))")
+             return
+         }
+         
+         // Determine next video based on shuffle mode
+         var nextVideo: VideoFile?
+         if self.isShuffleMode {
+             // Use shuffle mode logic
+             nextVideo = await getNextVideoInShuffleMode()
+         } else {
+             // Use circular queue logic
+             if let currentVideo = self.currentVideo,
+                let currentIndex = enabledVideos.firstIndex(where: { $0.id == currentVideo.id }) {
+                 let nextIndex = (currentIndex + 1) % enabledVideos.count
+                 nextVideo = enabledVideos[nextIndex]
+             } else {
+                 // Si el video actual no está en la lista habilitada, ir al primer habilitado
+                 nextVideo = enabledVideos.first
+                 appLogger.info("🔄 Cambiando manualmente al primer wallpaper habilitado: \(nextVideo?.name ?? "nil")")
+             }
+         }
+         
+         guard let nextVideo = nextVideo else {
+             appLogger.warning("⚠️ No se pudo obtener el siguiente video para cambio manual")
+             return
+         }
+         
+         // Don't change to the same video
+         if let currentVideo = self.currentVideo, nextVideo.id == currentVideo.id {
+             appLogger.warning("⚠️ Siguiente video es el mismo que el actual - ignorando")
+             return
+         }
+         
+         appLogger.info("🔄 Cambiando manualmente (modo \(self.isShuffleMode ? "shuffle" : "playlist")) a: \(nextVideo.name)")
+         
+         if isPlayingWallpaper {
+             await changeToNextVideoWithTransition(to: nextVideo)
+             // Reiniciar timer después de cambio manual
+             await MainActor.run {
+                 self.restartAutoChangeTimerIfNeeded()
+             }
+         } else {
+             await setActiveVideo(nextVideo)
+         }
+     }
     
     /// Comprueba si el botón "Siguiente Wallpaper" debe estar habilitado
     var canGoToNextWallpaper: Bool {

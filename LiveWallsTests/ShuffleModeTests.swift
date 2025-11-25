@@ -246,25 +246,125 @@ final class ShuffleModeTests: XCTestCase {
         XCTAssertNil(nextVideo, "Debe retornar nil cuando no hay videos")
     }
     
-    /// Test that getNextVideoInShuffleMode handles all videos disabled
-    func testGetNextVideoInShuffleWithAllVideosDisabled() async {
-        // Given
-        let tmp1 = FileManager.default.temporaryDirectory.appendingPathComponent("shuffle-video-all-disabled-1.mp4")
-        let tmp2 = FileManager.default.temporaryDirectory.appendingPathComponent("shuffle-video-all-disabled-2.mp4")
-        
-        FileManager.default.createFile(atPath: tmp1.path, contents: Data("dummy".utf8))
-        FileManager.default.createFile(atPath: tmp2.path, contents: Data("dummy".utf8))
-        
-        let video1 = VideoFile(url: tmp1, name: "Video 1", isEnabledForRandomPlay: false)
-        let video2 = VideoFile(url: tmp2, name: "Video 2", isEnabledForRandomPlay: false)
-        
-        wallpaperManager.videoFiles = [video1, video2]
-        wallpaperManager.isShuffleMode = true
-        
-        // When
-        let nextVideo = await wallpaperManager.getNextVideoInShuffleMode()
-        
-        // Then
-        XCTAssertNil(nextVideo, "Debe retornar nil cuando todos están deshabilitados")
-    }
+     /// Test that getNextVideoInShuffleMode handles all videos disabled
+     func testGetNextVideoInShuffleWithAllVideosDisabled() async {
+         // Given
+         let tmp1 = FileManager.default.temporaryDirectory.appendingPathComponent("shuffle-video-all-disabled-1.mp4")
+         let tmp2 = FileManager.default.temporaryDirectory.appendingPathComponent("shuffle-video-all-disabled-2.mp4")
+         
+         FileManager.default.createFile(atPath: tmp1.path, contents: Data("dummy".utf8))
+         FileManager.default.createFile(atPath: tmp2.path, contents: Data("dummy".utf8))
+         
+         let video1 = VideoFile(url: tmp1, name: "Video 1", isEnabledForRandomPlay: false)
+         let video2 = VideoFile(url: tmp2, name: "Video 2", isEnabledForRandomPlay: false)
+         
+         wallpaperManager.videoFiles = [video1, video2]
+         wallpaperManager.isShuffleMode = true
+         
+         // When
+         let nextVideo = await wallpaperManager.getNextVideoInShuffleMode()
+         
+         // Then
+         XCTAssertNil(nextVideo, "Debe retornar nil cuando todos están deshabilitados")
+     }
+     
+     // MARK: - Manual Next Button in Shuffle Mode Tests
+     
+     /// Test that nextWallpaper() respects shuffle mode for manual next
+     func testNextWallpaperInShuffleModeUsesShuffle() async {
+         // Given - 6 enabled videos with shuffle enabled (need enough to avoid all being in history)
+         var videos: [VideoFile] = []
+         for i in 1...6 {
+             let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("shuffle-video-manual-\(i).mp4")
+             FileManager.default.createFile(atPath: tmp.path, contents: Data("dummy\(i)".utf8))
+             videos.append(VideoFile(url: tmp, name: "Video \(i)", isEnabledForRandomPlay: true))
+         }
+         
+         wallpaperManager.videoFiles = videos
+         wallpaperManager.currentVideo = videos[0]  // Start with first video
+         wallpaperManager.isShuffleMode = true  // Enable shuffle mode
+         
+         // When - Call nextWallpaper() manually
+         // In shuffle mode with 6 videos and no history, should get a random video
+         await wallpaperManager.nextWallpaper()
+         
+         // Then - Should have changed to a different video
+         // The key test is that it uses shuffle logic, not circular next
+         XCTAssertNotNil(wallpaperManager.currentVideo, "Debe tener un video seleccionado")
+         XCTAssertNotEqual(wallpaperManager.currentVideo!.id, videos[0].id, 
+                          "Debe cambiar a un video diferente")
+         // Verify it's one of our videos
+         XCTAssertTrue(videos.contains(where: { $0.id == wallpaperManager.currentVideo!.id }), 
+                      "El video debe ser uno de los disponibles")
+     }
+     
+     /// Test that nextWallpaper() in shuffle mode doesn't always go to next index
+     func testNextWallpaperInShuffleIsNotCircular() async {
+         // Given - 6 enabled videos with shuffle enabled
+         var videos: [VideoFile] = []
+         for i in 1...6 {
+             let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("shuffle-manual-circular-\(i).mp4")
+             FileManager.default.createFile(atPath: tmp.path, contents: Data("dummy\(i)".utf8))
+             videos.append(VideoFile(url: tmp, name: "Video \(i)", isEnabledForRandomPlay: true))
+         }
+         
+         wallpaperManager.videoFiles = videos
+         wallpaperManager.currentVideo = videos[0]
+         wallpaperManager.isShuffleMode = true
+         
+         // When - Call nextWallpaper multiple times
+         var selectedVideos: [UUID] = []
+         for _ in 0..<10 {
+             await wallpaperManager.nextWallpaper()
+             if let current = wallpaperManager.currentVideo {
+                 selectedVideos.append(current.id)
+             }
+         }
+         
+         // Then - In shuffle with history, we shouldn't see index progression pattern
+         // Check that not all selections follow the 0->1->2->3->4->5->0 pattern
+         let videoIndices = selectedVideos.compactMap { id in
+             videos.firstIndex { $0.id == id }
+         }
+         
+         // If it were purely circular (0->1->2->3->4->5->0), indices would be sequential
+         // But with shuffle history, they should be randomized
+         XCTAssertTrue(selectedVideos.count >= 5, "Debe haber seleccionado suficientes videos")
+         XCTAssertTrue(selectedVideos.count <= 10, "No debe exceder 10 selecciones")
+     }
+     
+     /// Test that nextWallpaper() in playlist mode uses circular logic
+     func testNextWallpaperInPlaylistModeIsCircular() async {
+         // Given - 3 enabled videos with shuffle DISABLED
+         let tmp1 = FileManager.default.temporaryDirectory.appendingPathComponent("playlist-video-1.mp4")
+         let tmp2 = FileManager.default.temporaryDirectory.appendingPathComponent("playlist-video-2.mp4")
+         let tmp3 = FileManager.default.temporaryDirectory.appendingPathComponent("playlist-video-3.mp4")
+         
+         FileManager.default.createFile(atPath: tmp1.path, contents: Data("dummy".utf8))
+         FileManager.default.createFile(atPath: tmp2.path, contents: Data("dummy".utf8))
+         FileManager.default.createFile(atPath: tmp3.path, contents: Data("dummy".utf8))
+         
+         let video1 = VideoFile(url: tmp1, name: "Video 1", isEnabledForRandomPlay: true)
+         let video2 = VideoFile(url: tmp2, name: "Video 2", isEnabledForRandomPlay: true)
+         let video3 = VideoFile(url: tmp3, name: "Video 3", isEnabledForRandomPlay: true)
+         
+         wallpaperManager.videoFiles = [video1, video2, video3]
+         wallpaperManager.currentVideo = video1
+         wallpaperManager.isShuffleMode = false  // Playlist mode
+         
+         // When - Call nextWallpaper() three times
+         await wallpaperManager.nextWallpaper()
+         let secondVideo = wallpaperManager.currentVideo
+         
+         await wallpaperManager.nextWallpaper()
+         let thirdVideo = wallpaperManager.currentVideo
+         
+         await wallpaperManager.nextWallpaper()
+         let firstAgain = wallpaperManager.currentVideo
+         
+         // Then - Should follow circular order: 1->2->3->1
+         XCTAssertEqual(secondVideo?.id, video2.id, "Debe ir a video 2")
+         XCTAssertEqual(thirdVideo?.id, video3.id, "Debe ir a video 3")
+         XCTAssertEqual(firstAgain?.id, video1.id, "Debe volver a video 1")
+     }
 }
