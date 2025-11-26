@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var selectedVideo: VideoFile?
     @State private var showSettings = false
     @State private var localIsShuffleMode: Bool = false
+    @State private var localIsPlaying: Bool = false
 
     // Grid columns para la vista de miniaturas
     private let gridColumns = [
@@ -53,6 +54,10 @@ struct ContentView: View {
         }
         .onAppear {
             localIsShuffleMode = wallpaperManager.isShuffleMode
+            localIsPlaying = wallpaperManager.isPlayingWallpaper
+        }
+        .onChange(of: wallpaperManager.isPlayingWallpaper) { newValue in
+            localIsPlaying = newValue
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowMainWindow"))) { _ in
             // Si la ventana está oculta, traerla al frente
@@ -83,15 +88,17 @@ struct ContentView: View {
                     HStack(spacing: 8) {
                         // Play/Stop Button
                         Button(action: {
-                            if wallpaperManager.isPlayingWallpaper {
+                            if localIsPlaying {
+                                localIsPlaying = false
                                 wallpaperManager.stopWallpaperSafe()
                             } else {
+                                localIsPlaying = true
                                 wallpaperManager.startWallpaperSafe()
                             }
                         }) {
                             HStack(spacing: 4) {
-                                Image(systemName: wallpaperManager.isPlayingWallpaper ? "stop.fill" : "play.fill")
-                                Text(wallpaperManager.isPlayingWallpaper ? NSLocalizedString("stop_button", comment: "Stop button") : NSLocalizedString("play_button", comment: "Play button"))
+                                Image(systemName: localIsPlaying ? "stop.fill" : "play.fill")
+                                Text(localIsPlaying ? NSLocalizedString("stop_button", comment: "Stop button") : NSLocalizedString("play_button", comment: "Play button"))
                                     .font(.subheadline)
                             }
                             .frame(maxWidth: .infinity)
@@ -157,8 +164,8 @@ struct ContentView: View {
                     }
                 }
                 
-                // Mode Selection Section (only visible when auto-change is disabled)
-                if !wallpaperManager.isAutoChangeEnabled {
+                // Mode Selection Section (only visible when auto-change is enabled)
+                if wallpaperManager.isAutoChangeEnabled {
                     Divider()
                     
                     VStack(alignment: .leading, spacing: 8) {
@@ -271,6 +278,7 @@ struct ContentView: View {
                         // PHASE 4: Drag & Drop reordering (only in playlist mode)
                         .onDrag {
                             // Only enable drag in playlist mode
+                            print("🎯 Drag attempt: localIsShuffleMode=\(localIsShuffleMode), autoChangeEnabled=\(wallpaperManager.isAutoChangeEnabled)")
                             guard !localIsShuffleMode else {
                                 print("🚫 Drag blocked: shuffle mode active")
                                 return NSItemProvider()
@@ -364,23 +372,6 @@ struct ContentView: View {
             
             // Botones de acción para video seleccionado
             HStack(spacing: 12) {
-                // Botón de reproducción/parada
-                Button(action: {
-                    if wallpaperManager.isPlayingWallpaper {
-                        wallpaperManager.stopWallpaperSafe()
-                    } else {
-                        wallpaperManager.startWallpaperSafe()
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: wallpaperManager.isPlayingWallpaper ? "stop.fill" : "play.fill")
-                        Text(wallpaperManager.isPlayingWallpaper ? NSLocalizedString("stop_button", comment: "Stop button") : NSLocalizedString("play_button", comment: "Play button"))
-                    }
-                }
-                .buttonStyle(.bordered)
-                .disabled(wallpaperManager.currentVideo == nil)
-                .accessibilityIdentifier("bottom_play_toggle_button")
-                
                 // Botón establecer como wallpaper
                 Button(action: {
                     if let video = selectedVideo {
