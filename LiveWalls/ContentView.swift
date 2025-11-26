@@ -663,6 +663,14 @@ struct VideoPreviewPlayer: NSViewRepresentable {
                 let resolvedURL = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
                 print("✅ VideoPreviewPlayer: Bookmark resolved for \(video.name)")
                 
+                // Start security scoped access
+                let accessGranted = await bookmarkActor.startAccessingSecurityScopedResource(url: resolvedURL)
+                guard accessGranted else {
+                    print("❌ VideoPreviewPlayer: Failed to start security scoped access for \(video.name)")
+                    return
+                }
+                print("🔓 VideoPreviewPlayer: Security scoped access granted for \(video.name)")
+                
                 // Create player on main thread
                 await MainActor.run {
                     // Create AVPlayer with resolved URL
@@ -677,11 +685,12 @@ struct VideoPreviewPlayer: NSViewRepresentable {
                     // Add layer to view
                     containerView.layer?.addSublayer(playerLayer)
                     
-                    // Store player and layer in coordinator for cleanup
+                    // Store player, layer, and URL in coordinator for cleanup
                     context.coordinator.player = player
                     context.coordinator.playerLayer = playerLayer
                     context.coordinator.video = video
                     context.coordinator.bookmarkActor = bookmarkActor
+                    context.coordinator.resolvedURL = resolvedURL
                     
                     // Setup looping
                     NotificationCenter.default.addObserver(
@@ -720,15 +729,14 @@ struct VideoPreviewPlayer: NSViewRepresentable {
         var playerLayer: AVPlayerLayer?
         var video: VideoFile?
         var bookmarkActor: BookmarkActor?
+        var resolvedURL: URL?
         
         deinit {
-            // Stop bookmark access if we have URL
-            if let player = player, let currentItem = player.currentItem {
-                let url = (currentItem.asset as? AVURLAsset)?.url
-                if let url = url, let bookmarkActor = bookmarkActor {
-                    Task {
-                        await bookmarkActor.stopAccessingSecurityScopedResource(url: url)
-                    }
+            // Stop bookmark access
+            if let resolvedURL = resolvedURL, let bookmarkActor = bookmarkActor {
+                Task {
+                    await bookmarkActor.stopAccessingSecurityScopedResource(url: resolvedURL)
+                    print("🔒 VideoPreviewPlayer: Stopped security scoped access")
                 }
             }
             
