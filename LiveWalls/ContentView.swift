@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import AVKit
 
 struct ContentView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
@@ -416,6 +417,8 @@ struct VideoThumbnailCard: View {
     let onTap: () -> Void
     let wallpaperManager: WallpaperManager
     
+    @State private var isHovering: Bool = false
+    
     var body: some View {
         // Using GlassCard instead of HoverableGlassCard to avoid gesture conflicts with drag & drop
         GlassCard(padding: 8, cornerRadius: 12) {
@@ -438,6 +441,14 @@ struct VideoThumbnailCard: View {
                                 .font(.title2)
                                 .foregroundColor(.secondary)
                         }
+                }
+                
+                // Video preview overlay on hover
+                if isHovering, video.bookmarkData != nil {
+                    VideoPreviewPlayer(videoURL: video.url)
+                        .frame(width: 160, height: 90)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .transition(.opacity.animation(.easeInOut(duration: 0.2)))
                 }
                 
                 // Indicadores superpuestos
@@ -539,6 +550,18 @@ struct VideoThumbnailCard: View {
         .onAppear {
             print("🔍 VideoThumbnailCard apareció: \(video.name) (ID: \(video.id))")
         }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active:
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isHovering = true
+                }
+            case .ended:
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isHovering = false
+                }
+            }
+        }
     }
 }
 
@@ -594,6 +617,84 @@ struct VideoRowView: View {
 
 /// Drop delegate for reordering videos via drag and drop
 /// Only active in playlist mode (not shuffle mode)
+// MARK: - Video Preview Player
+/// Component that displays a looping video preview on hover
+struct VideoPreviewPlayer: NSViewRepresentable {
+    let videoURL: URL
+    
+    func makeNSView(context: Context) -> NSView {
+        let containerView = NSView()
+        
+        // Create AVPlayer with the video
+        let player = AVPlayer(url: videoURL)
+        player.isMuted = true // No audio for preview
+        
+        // Create player layer
+        let playerLayer = AVPlayerLayer(player: player)
+        playerLayer.videoGravity = .resizeAspectFill
+        playerLayer.frame = CGRect(x: 0, y: 0, width: 160, height: 90)
+        
+        // Add layer to view
+        containerView.layer = CALayer()
+        containerView.wantsLayer = true
+        containerView.layer?.addSublayer(playerLayer)
+        
+        // Store player and layer in coordinator for cleanup
+        context.coordinator.player = player
+        context.coordinator.playerLayer = playerLayer
+        
+        // Setup looping
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player.currentItem,
+            queue: .main
+        ) { _ in
+            player.seek(to: .zero)
+            player.play()
+        }
+        
+        // Start playing
+        player.play()
+        
+        return containerView
+    }
+    
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // Update player layer frame if needed
+        if let playerLayer = context.coordinator.playerLayer {
+            playerLayer.frame = nsView.bounds
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator: NSObject {
+        var player: AVPlayer?
+        var playerLayer: AVPlayerLayer?
+        
+        deinit {
+            // Clean up player and observers
+            player?.pause()
+            player?.replaceCurrentItem(with: nil)
+            player = nil
+            playerLayer?.removeFromSuperlayer()
+            playerLayer = nil
+        }
+    }
+    
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        // Ensure cleanup happens
+        coordinator.player?.pause()
+        coordinator.player?.replaceCurrentItem(with: nil)
+        coordinator.player = nil
+        coordinator.playerLayer?.removeFromSuperlayer()
+        coordinator.playerLayer = nil
+    }
+}
+
+// MARK: - Video Drop Delegate
 struct VideoDropDelegate: DropDelegate {
     let wallpaperManager: WallpaperManager
     let currentIndex: Int
