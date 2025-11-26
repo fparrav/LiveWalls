@@ -80,7 +80,7 @@ struct ContentView: View {
                         .textCase(.uppercase)
                         .tracking(1.2)
                     
-                    VStack(spacing: 12) {
+                    HStack(spacing: 8) {
                         // Play/Stop Button
                         Button(action: {
                             if wallpaperManager.isPlayingWallpaper {
@@ -89,14 +89,15 @@ struct ContentView: View {
                                 wallpaperManager.startWallpaperSafe()
                             }
                         }) {
-                            HStack {
+                            HStack(spacing: 4) {
                                 Image(systemName: wallpaperManager.isPlayingWallpaper ? "stop.fill" : "play.fill")
                                 Text(wallpaperManager.isPlayingWallpaper ? NSLocalizedString("stop_button", comment: "Stop button") : NSLocalizedString("play_button", comment: "Play button"))
+                                    .font(.subheadline)
                             }
                             .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .controlSize(.regular)
                         .accessibilityIdentifier("sidebar_play_toggle_button")
                         
                         // Next Wallpaper Button
@@ -105,41 +106,11 @@ struct ContentView: View {
                                 await wallpaperManager.nextWallpaper()
                             }
                         }) {
-                            HStack {
-                                Image(systemName: "forward.fill")
-                                Text("Next")
-                            }
-                            .frame(maxWidth: .infinity)
+                            Image(systemName: "forward.fill")
                         }
                         .buttonStyle(.bordered)
+                        .controlSize(.regular)
                         .accessibilityIdentifier("sidebar_next_button")
-                    }
-                }
-                
-                Divider()
-                
-                // Mode Selection Section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("MODE")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(1.2)
-                    
-                    Picker("Playback Mode", selection: $localIsShuffleMode) {
-                        Text("Playlist").tag(false)
-                        Text("Shuffle").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .accessibilityIdentifier("sidebar_mode_picker")
-                    .onChange(of: localIsShuffleMode) { newValue in
-                        wallpaperManager.isShuffleMode = newValue
-                    }
-                    .onChange(of: wallpaperManager.isShuffleMode) { newValue in
-                        if localIsShuffleMode != newValue {
-                            localIsShuffleMode = newValue
-                        }
                     }
                 }
                 
@@ -181,6 +152,35 @@ struct ContentView: View {
                                 .pickerStyle(.menu)
                                 .frame(width: 100)
                                 .accessibilityIdentifier("sidebar_interval_picker")
+                            }
+                        }
+                    }
+                }
+                
+                // Mode Selection Section (only visible when auto-change is disabled)
+                if !wallpaperManager.isAutoChangeEnabled {
+                    Divider()
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("MODE")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                            .tracking(1.2)
+                        
+                        Picker("Playback Mode", selection: $localIsShuffleMode) {
+                            Text("Playlist").tag(false)
+                            Text("Shuffle").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityIdentifier("sidebar_mode_picker")
+                        .onChange(of: localIsShuffleMode) { newValue in
+                            wallpaperManager.isShuffleMode = newValue
+                        }
+                        .onChange(of: wallpaperManager.isShuffleMode) { newValue in
+                            if localIsShuffleMode != newValue {
+                                localIsShuffleMode = newValue
                             }
                         }
                     }
