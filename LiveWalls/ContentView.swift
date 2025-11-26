@@ -426,6 +426,7 @@ struct VideoThumbnailCard: View {
     let wallpaperManager: WallpaperManager
     
     var body: some View {
+        HoverableGlassCard(padding: 8, cornerRadius: 12, hoverScale: 1.03, hoverShadowRadius: 12) {
         VStack(spacing: 8) {
             // Contenedor de miniatura
             ZStack {
@@ -517,6 +518,7 @@ struct VideoThumbnailCard: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                     .frame(maxWidth: 160)
+            }
             }
         }
         .onTapGesture {

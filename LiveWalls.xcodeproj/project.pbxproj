@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		61D705F2786D39DF9CC2FA97 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE659E300FC697EC0C200769 /* GlassCard.swift */; };
 		1A2B3C4D5E6F7890ABCD1234 /* PersistenceActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */; };
 		1E989763C576060F77A4B154 /* PlaybackHealthChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D8281213FF821B3EB49E72 /* PlaybackHealthChecker.swift */; };
 		2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */; };
@@ -74,6 +75,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		BE659E300FC697EC0C200769 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActor.swift; sourceTree = "<group>"; };
 		2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActorTests.swift; sourceTree = "<group>"; };
 		30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaybackHealthCheckerTests.swift; sourceTree = "<group>"; };
@@ -291,7 +293,8 @@
 				8B0C7D2F2B1F4A3100123456 /* Preview Content */,
 				A9D8281213FF821B3EB49E72 /* PlaybackHealthChecker.swift */,
 				412CE12ADD8B4EED8D0A5283 /* VideoPreloader.swift */,
-			);
+			
+				BE659E300FC697EC0C200769 /* GlassCard.swift */,);
 			path = LiveWalls;
 			sourceTree = "<group>";
 		};
@@ -483,7 +486,8 @@
 				1E989763C576060F77A4B154 /* PlaybackHealthChecker.swift in Sources */,
 				55846EBE2EBF778A00E46C3B /* WindowCreationCoordinator.swift in Sources */,
 				72BF47E36CA54AACAFD3EFEC /* VideoPreloader.swift in Sources */,
-			);
+			
+				61D705F2786D39DF9CC2FA97 /* GlassCard.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 	AAAA11112222333344440005 /* Sources */ = {
