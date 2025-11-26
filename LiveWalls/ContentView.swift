@@ -443,21 +443,6 @@ struct VideoThumbnailCard: View {
                 // Indicadores superpuestos
                 VStack {
                     HStack {
-                        // Large checkbox Toggle para aleatoriedad en top-left
-                        Toggle(isOn: Binding(
-                            get: { video.isEnabledForRandomPlay },
-                            set: { _ in wallpaperManager.toggleVideoRandomPlayEnabled(video) }
-                        )) {
-                            EmptyView()
-                        }
-                        .toggleStyle(.checkbox)
-                        .frame(width: 24, height: 24)
-                        .padding(8)
-                        .background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .accessibilityIdentifier("videoToggle_\(video.id)")
-                        .allowsHitTesting(true)
-                        
                         Spacer()
                         if isActive {
                             Image(systemName: "checkmark.circle.fill")
@@ -474,15 +459,32 @@ struct VideoThumbnailCard: View {
                     }
                     Spacer()
                     
-                    // Indicador de reproducción si es el video activo
-                    if isActive {
-                        HStack {
-                            Spacer()
+                    // Bottom row: play indicator (left) and checkbox (right)
+                    HStack {
+                        // Indicador de reproducción si es el video activo
+                        if isActive {
                             Image(systemName: "play.circle.fill")
                                 .foregroundStyle(.white, .blue)
                                 .font(.title2)
                                 .shadow(radius: 2)
                         }
+                        
+                        Spacer()
+                        
+                        // Checkbox para aleatoriedad en bottom-right
+                        Toggle(isOn: Binding(
+                            get: { video.isEnabledForRandomPlay },
+                            set: { _ in wallpaperManager.toggleVideoRandomPlayEnabled(video) }
+                        )) {
+                            EmptyView()
+                        }
+                        .toggleStyle(.checkbox)
+                        .frame(width: 24, height: 24)
+                        .padding(8)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .accessibilityIdentifier("videoToggle_\(video.id)")
+                        .allowsHitTesting(true)
                     }
                 }
                 .padding(6)
@@ -597,8 +599,14 @@ struct VideoDropDelegate: DropDelegate {
     let currentIndex: Int
     let isShuffleMode: Bool
     
+    func validateDrop(info: DropInfo) -> Bool {
+        // Only allow drops in playlist mode
+        print("🔍 validateDrop called: isShuffleMode=\(isShuffleMode)")
+        return !isShuffleMode && info.hasItemsConforming(to: [.text])
+    }
+    
     func dropEntered(info: DropInfo) {
-        // Visual feedback not needed in this simple implementation
+        print("👆 dropEntered: hovering over index \(currentIndex)")
     }
     
     func performDrop(info: DropInfo) -> Bool {
