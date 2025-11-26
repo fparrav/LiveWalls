@@ -437,13 +437,13 @@ struct VideoThumbnailCard: View {
                 }
                 
                 // Video preview overlay on hover
-                // TEMPORARILY DISABLED - Investigating why it doesn't work
-                // if isHovering, video.bookmarkData != nil {
-                //     VideoPreviewPlayer(videoURL: video.url)
-                //         .frame(width: 160, height: 90)
-                //         .clipShape(RoundedRectangle(cornerRadius: 8))
-                //         .transition(.opacity.animation(.easeInOut(duration: 0.2)))
-                // }
+                if isHovering && !isDragging, video.bookmarkData != nil {
+                    VideoPreviewPlayer(videoURL: video.url)
+                        .frame(width: 160, height: 90)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+                        .allowsHitTesting(false) // Don't interfere with drag gestures
+                }
                 
                 // Indicadores superpuestos
                 VStack {
@@ -527,9 +527,21 @@ struct VideoThumbnailCard: View {
                 return NSItemProvider()
             }
             
+            // Set dragging state to hide hover preview
+            DispatchQueue.main.async {
+                self.isDragging = true
+                self.isHovering = false
+            }
+            
             print("📦 Drag started from card: index=\(index), video=\(video.name)")
             let data = "\(index)".data(using: .utf8)!
             let provider = NSItemProvider(item: data as NSData, typeIdentifier: "public.text")
+            
+            // Reset dragging state after a delay (drag is finished)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.isDragging = false
+            }
+            
             return provider
         }
         .onTapGesture {
@@ -556,19 +568,21 @@ struct VideoThumbnailCard: View {
         .onAppear {
             print("🔍 VideoThumbnailCard apareció: \(video.name) (ID: \(video.id))")
         }
-        // TEMPORARILY DISABLED hover - may be interfering with drag & drop
-        // .onContinuousHover { phase in
-        //     switch phase {
-        //     case .active:
-        //         withAnimation(.easeInOut(duration: 0.2)) {
-        //             isHovering = true
-        //         }
-        //     case .ended:
-        //         withAnimation(.easeInOut(duration: 0.2)) {
-        //             isHovering = false
-        //         }
-        //     }
-        // }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active:
+                // Only show hover preview if not dragging
+                if !isDragging {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isHovering = true
+                    }
+                }
+            case .ended:
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isHovering = false
+                }
+            }
+        }
     }
 }
 

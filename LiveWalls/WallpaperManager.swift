@@ -1461,10 +1461,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Only works in playlist mode (not shuffle mode)
     /// PHASE 4: Drag & Drop reordering
     func reorderVideos(from source: Int, to destination: Int) {
+        print("🔄 reorderVideos called: from \(source) to \(destination)")
+        print("📋 Before reorder: \(videoFiles.map { $0.name })")
+        
         // Validate indices
         guard source != destination,
               source >= 0, source < videoFiles.count,
               destination >= 0, destination < videoFiles.count else {
+            print("❌ Reorder validation failed: source=\(source), dest=\(destination), count=\(videoFiles.count)")
             return
         }
         
@@ -1472,6 +1476,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let movedVideo = videoFiles[source]
         videoFiles.remove(at: source)
         videoFiles.insert(movedVideo, at: destination)
+        
+        print("📋 After reorder: \(videoFiles.map { $0.name })")
+        
+        // Force objectWillChange to trigger UI update
+        objectWillChange.send()
         
         // Update currentVideo reference if affected by reordering
         if currentVideo?.id == movedVideo.id {
