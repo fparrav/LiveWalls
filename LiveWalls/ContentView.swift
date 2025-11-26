@@ -417,7 +417,8 @@ struct VideoThumbnailCard: View {
     let wallpaperManager: WallpaperManager
     
     var body: some View {
-        HoverableGlassCard(padding: 8, cornerRadius: 12, hoverScale: 1.03, hoverShadowRadius: 12) {
+        // Using GlassCard instead of HoverableGlassCard to avoid gesture conflicts with drag & drop
+        GlassCard(padding: 8, cornerRadius: 12) {
         VStack(spacing: 8) {
             // Contenedor de miniatura
             ZStack {
