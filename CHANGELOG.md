@@ -5,11 +5,50 @@ All notable changes to LiveWalls will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2025-11-24
+## [2.0.0] - 2025-11-26
 
-### 🎉 Major Release: Complete Video Playback Stability Overhaul
+### 🎉 Major Release: Liquid Glass UI + Complete Video Playback Stability
 
-This major release represents a comprehensive 7-phase architectural improvement to eliminate all random video freezes and Space change flickers. The video playback system has been completely rewritten with rock-solid stability.
+This major release combines a modern Liquid Glass UI redesign (macOS 15+ aesthetic) with comprehensive video playback stability improvements. Includes new drag & drop reordering and video preview on hover features.
+
+### ✨ NEW: Liquid Glass UI (Nov 26, 2025)
+
+#### Modern macOS Interface
+- **NavigationSplitView layout** with 200pt glass sidebar
+- **Glass material effects** (.ultraThinMaterial) throughout UI
+- Reorganized controls in sidebar for cleaner layout
+- Enhanced visual hierarchy with modern design patterns
+
+#### Drag & Drop Reordering
+- **Drag videos to reorder** in playlist mode
+- Intuitive gesture-based video management
+- Real-time UI updates when dropping
+- NSString-based encoding for reliable data transfer
+
+#### Video Preview on Hover
+- **Live video preview** when hovering over thumbnails
+- Looping playback with muted audio
+- Smooth fade in/out animations (0.2s)
+- Security-scoped bookmark resolution for file access
+- Non-intrusive overlay that doesn't block interactions
+
+#### UI Improvements
+- Repositioned video checkbox to bottom-right (from top-left)
+- Removed redundant Play/Stop button
+- Fixed Mode visibility logic (now shows when auto-change active)
+- Optimistic UI updates for better responsiveness
+- Compact button layout with icon-only Next button
+
+#### Technical Implementation
+- **VideoPreviewPlayer** component with AVKit integration
+- Proper security-scoped resource management
+- Gesture conflict resolution (drag vs tap vs hover)
+- State management with isDragging to prevent conflicts
+- objectWillChange.send() for reliable UI updates
+
+### 🎉 Video Playback Stability Overhaul (Nov 24, 2025)
+
+This comprehensive 7-phase architectural improvement eliminates all random video freezes and Space change flickers. The video playback system has been completely rewritten with rock-solid stability.
 
 ### ✨ Added
 
@@ -91,15 +130,21 @@ This major release represents a comprehensive 7-phase architectural improvement 
 
 ### 🏗️ Architecture Changes
 
-#### New Components
+#### New Components (Liquid Glass UI)
+- `GlassCard.swift` - Reusable glass card components (GlassCard, HoverableGlassCard, SelectableGlassCard)
+- `VideoPreviewPlayer` - NSViewRepresentable for hover video preview with AVKit
+
+#### New Components (Playback Stability)
 - `PlaybackHealthChecker.swift` - Actor for async health checks
 - `ScheduledHealthCheckManager.swift` - Background check scheduling  
 - `PlaybackTelemetry.swift` - Production metrics tracking
 
 #### Modified Components
+- `ContentView.swift` - NavigationSplitView layout, drag & drop, video preview
+- `WallpaperManager.swift` - Window lifecycle, rate limiting, health checks, reorderVideos
 - `DesktopVideoWindowMejorada.swift` - AVQueuePlayer, window reuse, health checks
-- `WallpaperManager.swift` - Window lifecycle, rate limiting, health checks
 - `TransitionManager.swift` - Deferred cleanup coordination
+- `VideoFile.swift` - Enhanced with isEnabledForRandomPlay property
 
 ### 📚 Documentation
 
@@ -132,6 +177,20 @@ All objectives met:
 
 ### 📝 Commits
 
+#### Liquid Glass UI (Nov 26, 2025)
+- `8c1ea63` - feat: implement NavigationSplitView layout with glass sidebar
+- `991217b` - feat: create GlassCard reusable components
+- `854191b` - feat: improve sidebar layout and button organization
+- `5c010b9` - fix: remove redundant button and fix Mode visibility logic
+- `ac145e1` - feat: attempt HoverableGlassCard for video thumbnails
+- `f1e1fdc` - fix: reposition checkbox and add missing validateDrop
+- `c447d9f` - feat: add video preview on hover with AVPlayer
+- `f4c5814` - fix: move onDrag to VideoThumbnailCard to fix gesture conflicts
+- `745af25` - fix: force UI update on reorder and re-enable video preview
+- `c104c0d` - fix: NSItemProvider encoding and VideoPreviewPlayer bookmark resolution
+- `248eb70` - fix: start security scoped access for video preview
+
+#### Video Playback Stability (Nov 24, 2025)
 - `f7e7adb` - feat: reemplazar looping manual de AVPlayer con AVQueuePlayer + AVPlayerLooper
 - `f202c6a` - feat: implementar reutilización de ventanas en cambios de Space
 - `bef221f` - feat: diferir limpieza de recursos hasta después de transiciones
