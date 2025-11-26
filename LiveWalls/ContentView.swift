@@ -438,7 +438,7 @@ struct VideoThumbnailCard: View {
                 
                 // Video preview overlay on hover
                 if isHovering && !isDragging, video.bookmarkData != nil {
-                    VideoPreviewPlayer(videoURL: video.url)
+                    VideoPreviewPlayer(video: video, bookmarkActor: wallpaperManager.bookmarkActor)
                         .frame(width: 160, height: 90)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .transition(.opacity.animation(.easeInOut(duration: 0.2)))
@@ -534,8 +534,10 @@ struct VideoThumbnailCard: View {
             }
             
             print("📦 Drag started from card: index=\(index), video=\(video.name)")
-            let data = "\(index)".data(using: .utf8)!
-            let provider = NSItemProvider(item: data as NSData, typeIdentifier: "public.text")
+            
+            // Use NSString for better NSItemProvider compatibility
+            let indexString = "\(index)" as NSString
+            let provider = NSItemProvider(object: indexString)
             
             // Reset dragging state after a delay (drag is finished)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -641,41 +643,63 @@ struct VideoRowView: View {
 // MARK: - Video Preview Player
 /// Component that displays a looping video preview on hover
 struct VideoPreviewPlayer: NSViewRepresentable {
-    let videoURL: URL
+    let video: VideoFile
+    let bookmarkActor: BookmarkActor
     
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView()
-        
-        // Create AVPlayer with the video
-        let player = AVPlayer(url: videoURL)
-        player.isMuted = true // No audio for preview
-        
-        // Create player layer
-        let playerLayer = AVPlayerLayer(player: player)
-        playerLayer.videoGravity = .resizeAspectFill
-        playerLayer.frame = CGRect(x: 0, y: 0, width: 160, height: 90)
-        
-        // Add layer to view
-        containerView.layer = CALayer()
         containerView.wantsLayer = true
-        containerView.layer?.addSublayer(playerLayer)
+        containerView.layer = CALayer()
         
-        // Store player and layer in coordinator for cleanup
-        context.coordinator.player = player
-        context.coordinator.playerLayer = playerLayer
-        
-        // Setup looping
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: player.currentItem,
-            queue: .main
-        ) { _ in
-            player.seek(to: .zero)
-            player.play()
+        // Resolve bookmark asynchronously and create player
+        Task {
+            do {
+                // Resolve bookmark to get access to file
+                guard let bookmarkData = video.bookmarkData else {
+                    print("⚠️ VideoPreviewPlayer: No bookmark data for \(video.name)")
+                    return
+                }
+                
+                let resolvedURL = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
+                print("✅ VideoPreviewPlayer: Bookmark resolved for \(video.name)")
+                
+                // Create player on main thread
+                await MainActor.run {
+                    // Create AVPlayer with resolved URL
+                    let player = AVPlayer(url: resolvedURL)
+                    player.isMuted = true // No audio for preview
+                    
+                    // Create player layer
+                    let playerLayer = AVPlayerLayer(player: player)
+                    playerLayer.videoGravity = .resizeAspectFill
+                    playerLayer.frame = containerView.bounds
+                    
+                    // Add layer to view
+                    containerView.layer?.addSublayer(playerLayer)
+                    
+                    // Store player and layer in coordinator for cleanup
+                    context.coordinator.player = player
+                    context.coordinator.playerLayer = playerLayer
+                    context.coordinator.video = video
+                    context.coordinator.bookmarkActor = bookmarkActor
+                    
+                    // Setup looping
+                    NotificationCenter.default.addObserver(
+                        forName: .AVPlayerItemDidPlayToEndTime,
+                        object: player.currentItem,
+                        queue: .main
+                    ) { _ in
+                        player.seek(to: .zero)
+                        player.play()
+                    }
+                    
+                    // Start playing
+                    player.play()
+                }
+            } catch {
+                print("❌ VideoPreviewPlayer: Failed to resolve bookmark: \(error.localizedDescription)")
+            }
         }
-        
-        // Start playing
-        player.play()
         
         return containerView
     }
@@ -694,8 +718,20 @@ struct VideoPreviewPlayer: NSViewRepresentable {
     class Coordinator: NSObject {
         var player: AVPlayer?
         var playerLayer: AVPlayerLayer?
+        var video: VideoFile?
+        var bookmarkActor: BookmarkActor?
         
         deinit {
+            // Stop bookmark access if we have URL
+            if let player = player, let currentItem = player.currentItem {
+                let url = (currentItem.asset as? AVURLAsset)?.url
+                if let url = url, let bookmarkActor = bookmarkActor {
+                    Task {
+                        await bookmarkActor.stopAccessingSecurityScopedResource(url: url)
+                    }
+                }
+            }
+            
             // Clean up player and observers
             player?.pause()
             player?.replaceCurrentItem(with: nil)
@@ -745,14 +781,16 @@ struct VideoDropDelegate: DropDelegate {
             return false
         }
         
-        // Load the dragged video's index asynchronously.
-        // Return true immediately to indicate drop is accepted and being processed.
-        // The actual reordering happens asynchronously in the closure below.
-        item.loadItem(forTypeIdentifier: "public.text", options: nil) { (data, error) in
-            guard let data = data as? Data,
-                  let sourceIndexString = String(data: data, encoding: .utf8),
+        // Load the dragged video's index asynchronously using NSString
+        item.loadObject(ofClass: NSString.self) { (object, error) in
+            if let error = error {
+                print("❌ Drop failed with error: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let sourceIndexString = object as? String,
                   let sourceIndex = Int(sourceIndexString) else {
-                print("❌ Drop failed: could not decode index from data")
+                print("❌ Drop failed: could not decode index from object")
                 return
             }
             
@@ -760,14 +798,12 @@ struct VideoDropDelegate: DropDelegate {
             
             // Perform reordering on main thread
             DispatchQueue.main.async {
-                wallpaperManager.reorderVideos(from: sourceIndex, to: self.currentIndex)
+                self.wallpaperManager.reorderVideos(from: sourceIndex, to: self.currentIndex)
                 print("✅ Reordering completed: moved video from \(sourceIndex) to \(self.currentIndex)")
             }
         }
         
         // Return true to indicate drop is accepted and being processed asynchronously.
-        // This fixes the race condition where the method was returning before the
-        // closure could execute, causing the drop to always appear to fail.
         return true
     }
 }
