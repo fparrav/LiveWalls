@@ -270,29 +270,19 @@ struct ContentView: View {
                             video: video,
                             isSelected: selectedVideo?.id == video.id,
                             isActive: wallpaperManager.currentVideo?.id == video.id,
+                            index: index,
+                            isShuffleMode: localIsShuffleMode,
                             onTap: {
                                 selectedVideo = video
                                 print("🎯 Video seleccionado: \(video.name) (ID: \(video.id))")
                             },
                             wallpaperManager: wallpaperManager
                         )
-                        // PHASE 4: Drag & Drop reordering (only in playlist mode)
-                        .onDrag {
-                            // Only enable drag in playlist mode
-                            print("🎯 Drag attempt: localIsShuffleMode=\(localIsShuffleMode), autoChangeEnabled=\(wallpaperManager.isAutoChangeEnabled)")
-                            guard !localIsShuffleMode else {
-                                print("🚫 Drag blocked: shuffle mode active")
-                                return NSItemProvider()
-                            }
-                            
-                            print("📦 Drag started: index=\(index), video=\(video.name)")
-                            let data = "\(index)".data(using: .utf8)!
-                            return NSItemProvider(item: data as NSData, typeIdentifier: "public.text")
-                        }
+                        // PHASE 4: Drop delegate for drag & drop reordering
                         .onDrop(of: [.text], delegate: VideoDropDelegate(
                             wallpaperManager: wallpaperManager,
                             currentIndex: index,
-                            isShuffleMode: localIsShuffleMode  // Use local state instead of manager state
+                            isShuffleMode: localIsShuffleMode
                         ))
                     }
                 }
@@ -409,15 +399,18 @@ struct ContentView: View {
 
 // MARK: - Componentes de UI
 
-/// Tarjeta de miniatura para mostrar un video en el grid
+    /// Tarjeta de miniatura para mostrar un video en el grid
 struct VideoThumbnailCard: View {
     let video: VideoFile
     let isSelected: Bool
     let isActive: Bool
+    let index: Int  // Add index for drag & drop
+    let isShuffleMode: Bool  // Add shuffle mode flag
     let onTap: () -> Void
     let wallpaperManager: WallpaperManager
     
     @State private var isHovering: Bool = false
+    @State private var isDragging: Bool = false
     
     var body: some View {
         // Using GlassCard instead of HoverableGlassCard to avoid gesture conflicts with drag & drop
@@ -444,12 +437,13 @@ struct VideoThumbnailCard: View {
                 }
                 
                 // Video preview overlay on hover
-                if isHovering, video.bookmarkData != nil {
-                    VideoPreviewPlayer(videoURL: video.url)
-                        .frame(width: 160, height: 90)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .transition(.opacity.animation(.easeInOut(duration: 0.2)))
-                }
+                // TEMPORARILY DISABLED - Investigating why it doesn't work
+                // if isHovering, video.bookmarkData != nil {
+                //     VideoPreviewPlayer(videoURL: video.url)
+                //         .frame(width: 160, height: 90)
+                //         .clipShape(RoundedRectangle(cornerRadius: 8))
+                //         .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+                // }
                 
                 // Indicadores superpuestos
                 VStack {
@@ -525,6 +519,18 @@ struct VideoThumbnailCard: View {
                     .frame(maxWidth: 160)
             }
             }
+         }
+        .onDrag {
+            // Only enable drag in playlist mode
+            guard !isShuffleMode else {
+                print("🚫 Drag blocked: shuffle mode active")
+                return NSItemProvider()
+            }
+            
+            print("📦 Drag started from card: index=\(index), video=\(video.name)")
+            let data = "\(index)".data(using: .utf8)!
+            let provider = NSItemProvider(item: data as NSData, typeIdentifier: "public.text")
+            return provider
         }
         .onTapGesture {
             onTap()
@@ -550,18 +556,19 @@ struct VideoThumbnailCard: View {
         .onAppear {
             print("🔍 VideoThumbnailCard apareció: \(video.name) (ID: \(video.id))")
         }
-        .onContinuousHover { phase in
-            switch phase {
-            case .active:
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isHovering = true
-                }
-            case .ended:
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isHovering = false
-                }
-            }
-        }
+        // TEMPORARILY DISABLED hover - may be interfering with drag & drop
+        // .onContinuousHover { phase in
+        //     switch phase {
+        //     case .active:
+        //         withAnimation(.easeInOut(duration: 0.2)) {
+        //             isHovering = true
+        //         }
+        //     case .ended:
+        //         withAnimation(.easeInOut(duration: 0.2)) {
+        //             isHovering = false
+        //         }
+        //     }
+        // }
     }
 }
 
