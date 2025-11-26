@@ -15,47 +15,21 @@ struct ContentView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Barra de herramientas superior
-            toolbarView
-            
-            Divider()
-            
-            // Playback Mode Picker
-            Picker("Playback Mode", selection: $localIsShuffleMode) {
-                Label("Playlist", systemImage: "list.number")
-                    .tag(false)
-                Label("Shuffle", systemImage: "shuffle")
-                    .tag(true)
+        NavigationSplitView {
+            // Sidebar with glass effect
+            sidebarView
+                .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 200)
+        } detail: {
+            // Main content area
+            VStack(spacing: 0) {
+                // Video grid content
+                mainContentView
+                
+                Divider()
+                
+                // Bottom controls
+                bottomControlsView
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 400)
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .accessibilityIdentifier("playbackModePicker")
-            .onChange(of: localIsShuffleMode) { newValue in
-                wallpaperManager.isShuffleMode = newValue
-            }
-            .onChange(of: wallpaperManager.isShuffleMode) { newValue in
-                if localIsShuffleMode != newValue {
-                    localIsShuffleMode = newValue
-                }
-            }
-            
-            Divider()
-            
-            // Playback Controls Section
-            playbackControlsView
-            
-            Divider()
-            
-            // Contenido principal
-            mainContentView
-            
-            Divider()
-            
-            // Controles inferiores
-            bottomControlsView
         }
         .fileImporter(
             isPresented: $isImporting,
@@ -92,41 +66,185 @@ struct ContentView: View {
     
     // MARK: - Vistas computadas
     
-    /// Barra de herramientas superior con botones principales
+    /// Sidebar with glass effect containing all controls
     @ViewBuilder
-    private var toolbarView: some View {
-        HStack {
-            Text(NSLocalizedString("app_title", comment: "Application title"))
-                .font(.title2)
-                .fontWeight(.bold)
-                .accessibilityIdentifier("app_title_text")
-            
-            Spacer()
-            
-            // Botones de acción
-            HStack(spacing: 12) {
-                Button(action: {
-                    isImporting = true
-                }) {
-                    Label(NSLocalizedString("import_button", comment: "Import button"), systemImage: "plus")
+    private var sidebarView: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Playback Controls Section
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("PLAYBACK")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(1.2)
+                    
+                    VStack(spacing: 12) {
+                        // Play/Stop Button
+                        Button(action: {
+                            if wallpaperManager.isPlayingWallpaper {
+                                wallpaperManager.stopWallpaperSafe()
+                            } else {
+                                wallpaperManager.startWallpaperSafe()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: wallpaperManager.isPlayingWallpaper ? "stop.fill" : "play.fill")
+                                Text(wallpaperManager.isPlayingWallpaper ? NSLocalizedString("stop_button", comment: "Stop button") : NSLocalizedString("play_button", comment: "Play button"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .accessibilityIdentifier("sidebar_play_toggle_button")
+                        
+                        // Next Wallpaper Button
+                        Button(action: {
+                            Task {
+                                await wallpaperManager.nextWallpaper()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "forward.fill")
+                                Text("Next")
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("sidebar_next_button")
+                    }
                 }
-                .help(NSLocalizedString("import_help", comment: "Import help text"))
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("toolbar_import_button")
                 
-                Button(action: {
-                    showSettings = true
-                }) {
-                    Label(NSLocalizedString("settings_button", comment: "Settings button"), systemImage: "gear")
+                Divider()
+                
+                // Mode Selection Section
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MODE")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(1.2)
+                    
+                    Picker("Playback Mode", selection: $localIsShuffleMode) {
+                        Text("Playlist").tag(false)
+                        Text("Shuffle").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("sidebar_mode_picker")
+                    .onChange(of: localIsShuffleMode) { newValue in
+                        wallpaperManager.isShuffleMode = newValue
+                    }
+                    .onChange(of: wallpaperManager.isShuffleMode) { newValue in
+                        if localIsShuffleMode != newValue {
+                            localIsShuffleMode = newValue
+                        }
+                    }
                 }
-                .help(NSLocalizedString("settings_help", comment: "Settings help text"))
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("toolbar_settings_button")
                 
+                Divider()
                 
+                // Auto-Change Section
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AUTO-CHANGE")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(1.2)
+                    
+                    VStack(spacing: 12) {
+                        Toggle("Enable Auto-Change", isOn: Binding(
+                            get: { wallpaperManager.isAutoChangeEnabled },
+                            set: { newValue in wallpaperManager.isAutoChangeEnabled = newValue }
+                        ))
+                        .toggleStyle(.switch)
+                        .accessibilityIdentifier("sidebar_autochange_toggle")
+                        
+                        if wallpaperManager.isAutoChangeEnabled {
+                            HStack {
+                                Text("Every")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Picker("", selection: Binding(
+                                    get: { Int(wallpaperManager.autoChangeInterval / 60) },
+                                    set: { newValue in wallpaperManager.autoChangeInterval = TimeInterval(newValue * 60) }
+                                )) {
+                                    ForEach([1, 2, 5, 10, 15, 30, 60], id: \.self) { minutes in
+                                        Text("\(minutes) min").tag(minutes)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(width: 100)
+                                .accessibilityIdentifier("sidebar_interval_picker")
+                            }
+                        }
+                    }
+                }
+                
+                Divider()
+                
+                // Audio Section
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AUDIO")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(1.2)
+                    
+                    Button(action: {
+                        let currentMute = UserDefaults.standard.bool(forKey: "MuteVideo")
+                        UserDefaults.standard.set(!currentMute, forKey: "MuteVideo")
+                    }) {
+                        HStack {
+                            Image(systemName: UserDefaults.standard.bool(forKey: "MuteVideo") ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                            Text(UserDefaults.standard.bool(forKey: "MuteVideo") ? "Unmute" : "Mute")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("sidebar_mute_button")
+                }
+                
+                Spacer()
+                
+                Divider()
+                
+                // Settings & Import Buttons
+                VStack(spacing: 8) {
+                    Button(action: {
+                        isImporting = true
+                    }) {
+                        HStack {
+                            Image(systemName: "plus")
+                            Text(NSLocalizedString("import_button", comment: "Import button"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("sidebar_import_button")
+                    
+                    Button(action: {
+                        showSettings = true
+                    }) {
+                        HStack {
+                            Image(systemName: "gear")
+                            Text(NSLocalizedString("settings_button", comment: "Settings button"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("sidebar_settings_button")
+                }
             }
+            .padding()
         }
-        .padding()
+        .background(.ultraThinMaterial)
     }
     
     /// Contenido principal con grid de videos
@@ -215,52 +333,7 @@ struct ContentView: View {
         }
     }
     
-    /// Playback controls section (auto-change and mute)
-    @ViewBuilder
-    private var playbackControlsView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Auto-change controls
-            HStack {
-                Toggle("Auto-change", isOn: Binding(
-                    get: { wallpaperManager.isAutoChangeEnabled },
-                    set: { newValue in wallpaperManager.isAutoChangeEnabled = newValue }
-                ))
-                .toggleStyle(.switch)
-                .accessibilityIdentifier("autoChangeToggle")
-                
-                if wallpaperManager.isAutoChangeEnabled {
-                    Spacer()
-                    Text("Every")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Picker("", selection: Binding(
-                        get: { Int(wallpaperManager.autoChangeInterval / 60) },
-                        set: { newValue in wallpaperManager.autoChangeInterval = TimeInterval(newValue * 60) }
-                    )) {
-                        ForEach([1, 2, 5, 10, 15, 30, 60], id: \.self) { minutes in
-                            Text("\(minutes) min").tag(minutes)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 100)
-                    .accessibilityIdentifier("autoChangeIntervalPicker")
-                }
-            }
-            
-            // Mute toggle
-            Toggle("Mute videos", isOn: Binding(
-                get: { UserDefaults.standard.bool(forKey: "MuteVideo") },
-                set: { newValue in 
-                    UserDefaults.standard.set(newValue, forKey: "MuteVideo")
-                }
-            ))
-            .toggleStyle(.switch)
-            .accessibilityIdentifier("muteToggle")
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-    }
+
     
     /// Controles inferiores con acciones para el video seleccionado
     @ViewBuilder
