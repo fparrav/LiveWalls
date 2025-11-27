@@ -34,6 +34,7 @@
 "active_wallpaper" = "アクティブな壁紙: %@";
 "no_active_wallpaper" = "アクティブな壁紙なし";
 "videos_total" = "合計 %d 個のビデオ";
+"drag_drop_hint" = "ドラッグして並べ替え";
 
 /* ステータスバーメニュー */
 "current_wallpaper" = "🎬 現在の壁紙";

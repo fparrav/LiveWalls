@@ -34,6 +34,7 @@
 "active_wallpaper" = "Fond d'écran actif : %@";
 "no_active_wallpaper" = "Aucun fond d'écran actif";
 "videos_total" = "%d vidéos au total";
+"drag_drop_hint" = "Glisser pour réorganiser";
 
 /* Menu de la barre d'état */
 "current_wallpaper" = "🎬 Fond d'écran actuel";

@@ -34,6 +34,7 @@
 "active_wallpaper" = "Aktives Hintergrundbild: %@";
 "no_active_wallpaper" = "Kein aktives Hintergrundbild";
 "videos_total" = "%d Videos insgesamt";
+"drag_drop_hint" = "Ziehen zum Neuordnen";
 
 /* Statusleisten-Menü */
 "current_wallpaper" = "🎬 Aktuelles Hintergrundbild";

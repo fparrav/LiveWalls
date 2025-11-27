@@ -34,6 +34,7 @@
 "active_wallpaper" = "Sfondo attivo: %@";
 "no_active_wallpaper" = "Nessuno sfondo attivo";
 "videos_total" = "%d video in totale";
+"drag_drop_hint" = "Trascina per riordinare";
 
 /* Menu barra di stato */
 "current_wallpaper" = "🎬 Sfondo Corrente";

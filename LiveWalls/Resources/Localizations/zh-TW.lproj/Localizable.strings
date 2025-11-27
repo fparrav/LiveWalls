@@ -34,6 +34,7 @@
 "active_wallpaper" = "使用中桌布：%@";
 "no_active_wallpaper" = "無使用中桌布";
 "videos_total" = "共 %d 部影片";
+"drag_drop_hint" = "拖曳以重新排序";
 
 /* 狀態列選單 */
 "current_wallpaper" = "🎬 目前桌布";

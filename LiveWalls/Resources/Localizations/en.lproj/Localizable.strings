@@ -34,6 +34,7 @@
 "active_wallpaper" = "Active wallpaper: %@";
 "no_active_wallpaper" = "No active wallpaper";
 "videos_total" = "%d videos total";
+"drag_drop_hint" = "Drag to reorder";
 
 /* Status Bar Menu */
 "current_wallpaper" = "🎬 Current Wallpaper";

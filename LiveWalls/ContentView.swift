@@ -357,6 +357,18 @@ struct ContentView: View {
                 Text(String(format: NSLocalizedString("videos_total", comment: "Videos total count"), wallpaperManager.videoFiles.count))
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                
+                // Drag & drop hint (only show if there are videos)
+                if !wallpaperManager.videoFiles.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.and.down.circle")
+                            .font(.caption2)
+                        Text(NSLocalizedString("drag_drop_hint", comment: "Drag and drop hint"))
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.secondary.opacity(0.8))
+                    .padding(.top, 2)
+                }
             }
             
             Spacer()
@@ -436,7 +448,7 @@ struct VideoThumbnailCard: View {
                         }
                 }
                 
-                // Video preview overlay on hover
+                // Video preview overlay on hover (with delay to allow drag to start)
                 if isHovering && !isDragging, video.bookmarkData != nil {
                     VideoPreviewPlayer(video: video, bookmarkActor: wallpaperManager.bookmarkActor)
                         .frame(width: 160, height: 90)
@@ -521,17 +533,12 @@ struct VideoThumbnailCard: View {
             }
          }
         .onDrag {
-            // Only enable drag in playlist mode
-            guard !isShuffleMode else {
-                print("🚫 Drag blocked: shuffle mode active")
-                return NSItemProvider()
-            }
+            // Drag & drop enabled in both modes (Playlist and Shuffle)
+            // User can organize library regardless of playback mode
             
-            // Set dragging state to hide hover preview
-            DispatchQueue.main.async {
-                self.isDragging = true
-                self.isHovering = false
-            }
+            // Hide preview during drag
+            self.isDragging = true
+            self.isHovering = false
             
             print("📦 Drag started from card: index=\(index), video=\(video.name)")
             
@@ -539,7 +546,7 @@ struct VideoThumbnailCard: View {
             let indexString = "\(index)" as NSString
             let provider = NSItemProvider(object: indexString)
             
-            // Reset dragging state after a delay (drag is finished)
+            // Reset dragging state after drag ends
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.isDragging = false
             }
@@ -573,13 +580,15 @@ struct VideoThumbnailCard: View {
         .onContinuousHover { phase in
             switch phase {
             case .active:
-                // Only show hover preview if not dragging
+                // Show preview immediately on hover (no delay needed)
+                // .onDrag only activates when user actually drags, not on hover
                 if !isDragging {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isHovering = true
                     }
                 }
             case .ended:
+                // Hide preview when hover ends
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isHovering = false
                 }

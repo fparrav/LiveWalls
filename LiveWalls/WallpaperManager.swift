@@ -1854,27 +1854,44 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // Si el wallpaper estaba activo antes de suspender, lo reiniciamos.
         if isPlayingWallpaper {
             appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
-            // Optimized restart: first check screens then start
+            // Restart wallpaper with clean state
             Task {
-                try? await Task.sleep(for: .milliseconds(200))
+                // Wait for system to stabilize
+                try? await Task.sleep(for: .milliseconds(500))
                 
                 // Verificar que aún tenemos un video actual
-                guard let currentVideo = self.currentVideo else { return }
-                
-                // Pre-resolver el bookmark para reducir latencia
-                guard let accessibleURL = await self.resolveBookmark(for: currentVideo) else {
+                guard let currentVideo = self.currentVideo else { 
                     await MainActor.run {
-                        self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
+                        self.appLogger.error("❌ No hay video actual al despertar")
                     }
                     return
                 }
                 
-                // Crear ventanas de forma asíncrona sin bloquear main thread
-                await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
-                
                 await MainActor.run {
-                    self.isPlayingWallpaper = true
-                    self.startAutoChangeTimerIfNeeded()
+                    // CRITICAL: Destroy old windows first to prevent zombie windows
+                    self.appLogger.info("🧹 Limpiando ventanas antes de reiniciar")
+                    self.destroyAllDesktopWindows {
+                        // After cleanup, restart wallpaper
+                        Task {
+                            // Pre-resolver el bookmark para reducir latencia
+                            guard let accessibleURL = await self.resolveBookmark(for: currentVideo) else {
+                                await MainActor.run {
+                                    self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
+                                    self.isPlayingWallpaper = false
+                                }
+                                return
+                            }
+                            
+                            // Crear ventanas de forma asíncrona sin bloquear main thread
+                            await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+                            
+                            await MainActor.run {
+                                self.isPlayingWallpaper = true
+                                self.startAutoChangeTimerIfNeeded()
+                                self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
+                            }
+                        }
+                    }
                 }
             }
         }

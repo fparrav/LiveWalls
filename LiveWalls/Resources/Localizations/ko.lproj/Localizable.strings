@@ -34,6 +34,7 @@
 "active_wallpaper" = "활성 배경화면: %@";
 "no_active_wallpaper" = "활성 배경화면 없음";
 "videos_total" = "총 %d개 비디오";
+"drag_drop_hint" = "드래그하여 재정렬";
 
 /* 상태 표시줄 메뉴 */
 "current_wallpaper" = "🎬 현재 배경화면";

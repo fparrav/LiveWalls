@@ -34,6 +34,7 @@
 "active_wallpaper" = "Papel de parede ativo: %@";
 "no_active_wallpaper" = "Nenhum papel de parede ativo";
 "videos_total" = "%d vídeos no total";
+"drag_drop_hint" = "Arraste para reordenar";
 
 /* Menu da barra de status */
 "current_wallpaper" = "🎬 Papel de Parede Atual";

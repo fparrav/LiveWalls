@@ -34,6 +34,7 @@
 "active_wallpaper" = "活动壁纸：%@";
 "no_active_wallpaper" = "无活动壁纸";
 "videos_total" = "共 %d 个视频";
+"drag_drop_hint" = "拖动以重新排序";
 
 /* 状态栏菜单 */
 "current_wallpaper" = "🎬 当前壁纸";
