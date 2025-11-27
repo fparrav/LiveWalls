@@ -5,6 +5,25 @@ All notable changes to LiveWalls will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2025-11-27
+
+### 🐛 Bug Fixes
+
+#### UI Improvements
+- **Fixed picker label overlap in MODE section** - Removed redundant "Modo de Reproducción" label that was wrapping and overlapping with picker control in Spanish and other languages
+- Section header remains visible above picker for proper UI hierarchy
+
+#### AVFoundation Optimizations
+- **Removed conflicting AVPlayerLayer properties** - Eliminated `shouldRasterize` and `rasterizationScale` which were designed for static content and conflicted with dynamic video rendering
+- **Added AVURLAsset configuration** - Configured with `AVURLAssetPreferPreciseDurationAndTimingKey` option to optimize video loading
+- **Optimized AVPlayerItem settings** - Set `preferredForwardBufferDuration` to 2.0s and disabled `canUseNetworkResourcesForLiveStreamingWhilePaused` to reduce initialization overhead
+- **Note:** VRP (-12852) and FigFilePlayer (-12860) errors are internal AVFoundation warnings during codec negotiation and are non-critical; they do not affect video playback functionality
+
+### 📝 Technical Details
+- These optimizations minimize internal Video Toolbox warnings during pixel format negotiation
+- Video playback remains stable and performant
+- Changes ensure proper layer configuration for dynamic video content vs static UI elements
+
 ## [2.0.0] - 2025-11-26
 
 ### 🎉 Major Release: Liquid Glass UI + Complete Video Playback Stability
