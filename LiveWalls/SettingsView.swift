@@ -150,7 +150,7 @@ struct SettingsView: View {
     private var updateSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Versión actual: \(currentVersion)")
+                Text(String(format: NSLocalizedString("current_version", comment: "Current version label"), currentVersion))
                     .font(.caption)
                     .foregroundColor(.secondary)
                 Spacer()

@@ -73,6 +73,7 @@
 "clear_all_videos" = "清除所有影片";
 "optimize_videos_hevc" = "最佳化影片為HEVC";
 "app_version" = "Live Walls";
+"current_version" = "目前版本: %@";
 
 /* 警告 */
 "delete_all_videos_title" = "刪除所有影片？";

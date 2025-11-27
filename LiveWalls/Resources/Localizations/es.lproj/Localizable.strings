@@ -75,6 +75,7 @@
 "clear_all_videos" = "Limpiar todos los videos";
 "optimize_videos_hevc" = "Optimizar videos a HEVC";
 "app_version" = "Live Walls";
+"current_version" = "Versión actual: %@";
 
 /* Alertas */
 "delete_all_videos_title" = "¿Eliminar todos los videos?";

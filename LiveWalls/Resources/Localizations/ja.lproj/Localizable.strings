@@ -73,6 +73,7 @@
 "clear_all_videos" = "すべてのビデオをクリア";
 "optimize_videos_hevc" = "ビデオをHEVCに最適化";
 "app_version" = "Live Walls";
+"current_version" = "現在のバージョン: %@";
 
 /* アラート */
 "delete_all_videos_title" = "すべてのビデオを削除しますか？";
