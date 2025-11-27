@@ -188,10 +188,19 @@ public class DesktopVideoWindowMejorada: NSWindow {
             isPlayerSetupInProgress = true
             setupLock.unlock()
 
-            // Use preloaded asset if available, otherwise create new one
-            let asset = preloadedAsset ?? AVURLAsset(url: url)
-            if preloadedAsset != nil {
+            // Use preloaded asset if available, otherwise create new one with optimized options
+            let asset: AVURLAsset
+            if let preloadedAsset = preloadedAsset {
+                asset = preloadedAsset
                 memoryLogger.info("🚀 Using PRELOADED AVAsset - fast path")
+            } else {
+                // Configure AVURLAsset with options to minimize internal errors
+                let assetOptions: [String: Any] = [
+                    AVURLAssetPreferPreciseDurationAndTimingKey: true,
+                    // Reduce pixel format negotiation warnings
+                    "AVURLAssetHTTPHeaderFieldsKey": [:] as [String: String]
+                ]
+                asset = AVURLAsset(url: url, options: assetOptions)
             }
             
             Task {
@@ -217,6 +226,11 @@ public class DesktopVideoWindowMejorada: NSWindow {
 
                         // PHASE 2: Create AVQueuePlayer with AVPlayerLooper for automatic looping
                         let newPlayerItem = AVPlayerItem(asset: asset)
+                        
+                        // Configure AVPlayerItem to reduce internal errors
+                        newPlayerItem.preferredForwardBufferDuration = 2.0 // Reduce buffer to minimize overhead
+                        newPlayerItem.canUseNetworkResourcesForLiveStreamingWhilePaused = false
+                        
                         let newQueuePlayer = AVQueuePlayer(playerItem: newPlayerItem)
                         
                         // Optimized configuration for background playback
@@ -234,9 +248,9 @@ public class DesktopVideoWindowMejorada: NSWindow {
                         newPlayerLayer.isOpaque = true
                         newPlayerLayer.backgroundColor = CGColor.black
                         newPlayerLayer.masksToBounds = true
-                        newPlayerLayer.shouldRasterize = true // Optimize rendering
-                        newPlayerLayer.rasterizationScale = NSScreen.main?.backingScaleFactor ?? 1.0
-                        newPlayerLayer.drawsAsynchronously = true // Asynchronous rendering
+                        // Use asynchronous drawing for smooth video playback
+                        // Note: shouldRasterize is NOT used as it's for static content and conflicts with video rendering
+                        newPlayerLayer.drawsAsynchronously = true
 
                         // Add layer to view
                         if let contentView = self.contentView {

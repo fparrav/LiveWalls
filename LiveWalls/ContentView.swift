@@ -177,7 +177,7 @@ struct ContentView: View {
                             .textCase(.uppercase)
                             .tracking(1.2)
                         
-                        Picker(NSLocalizedString("playback_mode_picker", comment: "Playback mode picker"), selection: $localIsShuffleMode) {
+                        Picker("", selection: $localIsShuffleMode) {
                             Text(NSLocalizedString("playlist_mode", comment: "Playlist mode")).tag(false)
                             Text(NSLocalizedString("shuffle_mode", comment: "Shuffle mode")).tag(true)
                         }
