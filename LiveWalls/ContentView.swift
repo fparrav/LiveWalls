@@ -648,7 +648,7 @@ struct VideoRowView: View {
 // MARK: - Drag & Drop Support (PHASE 4)
 
 /// Drop delegate for reordering videos via drag and drop
-/// Only active in playlist mode (not shuffle mode)
+/// Active in both Playlist and Shuffle modes for library organization
 // MARK: - Video Preview Player
 /// Component that displays a looping video preview on hover
 struct VideoPreviewPlayer: NSViewRepresentable {
@@ -775,9 +775,9 @@ struct VideoDropDelegate: DropDelegate {
     let isShuffleMode: Bool
     
     func validateDrop(info: DropInfo) -> Bool {
-        // Only allow drops in playlist mode
+        // Allow drops in both modes (Playlist and Shuffle)
         print("🔍 validateDrop called: isShuffleMode=\(isShuffleMode)")
-        return !isShuffleMode && info.hasItemsConforming(to: [.text])
+        return info.hasItemsConforming(to: [.text])
     }
     
     func dropEntered(info: DropInfo) {
@@ -787,11 +787,8 @@ struct VideoDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         print("🎯 Drop triggered: currentIndex=\(currentIndex), isShuffleMode=\(isShuffleMode)")
         
-        // Only allow drops in playlist mode
-        guard !isShuffleMode else {
-            print("🚫 Drop rejected: shuffle mode active")
-            return false
-        }
+        // Allow drops in both modes (Playlist and Shuffle)
+        // User can organize library regardless of playback mode
         
         guard let item = info.itemProviders(for: [.text]).first else {
             print("⚠️ Drop failed: no text item provider found")
