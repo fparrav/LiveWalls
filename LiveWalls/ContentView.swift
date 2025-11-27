@@ -79,7 +79,7 @@ struct ContentView: View {
             VStack(spacing: 20) {
                 // Playback Controls Section
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("PLAYBACK")
+                    Text(NSLocalizedString("playback_section", comment: "Playback section header"))
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.secondary)
@@ -126,7 +126,7 @@ struct ContentView: View {
                 
                 // Auto-Change Section
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("AUTO-CHANGE")
+                    Text(NSLocalizedString("auto_change_section_header", comment: "Auto-change section header"))
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.secondary)
@@ -134,7 +134,7 @@ struct ContentView: View {
                         .tracking(1.2)
                     
                     VStack(spacing: 12) {
-                        Toggle("Enable Auto-Change", isOn: Binding(
+                        Toggle(NSLocalizedString("enable_auto_change", comment: "Enable auto-change toggle"), isOn: Binding(
                             get: { wallpaperManager.isAutoChangeEnabled },
                             set: { newValue in wallpaperManager.isAutoChangeEnabled = newValue }
                         ))
@@ -143,7 +143,7 @@ struct ContentView: View {
                         
                         if wallpaperManager.isAutoChangeEnabled {
                             HStack {
-                                Text("Every")
+                                Text(NSLocalizedString("every_label", comment: "Every label for interval"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 
@@ -170,16 +170,16 @@ struct ContentView: View {
                     Divider()
                     
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("MODE")
+                        Text(NSLocalizedString("mode_section", comment: "Mode section header"))
                             .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(.secondary)
                             .textCase(.uppercase)
                             .tracking(1.2)
                         
-                        Picker("Playback Mode", selection: $localIsShuffleMode) {
-                            Text("Playlist").tag(false)
-                            Text("Shuffle").tag(true)
+                        Picker(NSLocalizedString("playback_mode_picker", comment: "Playback mode picker"), selection: $localIsShuffleMode) {
+                            Text(NSLocalizedString("playlist_mode", comment: "Playlist mode")).tag(false)
+                            Text(NSLocalizedString("shuffle_mode", comment: "Shuffle mode")).tag(true)
                         }
                         .pickerStyle(.segmented)
                         .accessibilityIdentifier("sidebar_mode_picker")
@@ -198,7 +198,7 @@ struct ContentView: View {
                 
                 // Audio Section
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("AUDIO")
+                    Text(NSLocalizedString("audio_section", comment: "Audio section header"))
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.secondary)
@@ -211,7 +211,7 @@ struct ContentView: View {
                     }) {
                         HStack {
                             Image(systemName: UserDefaults.standard.bool(forKey: "MuteVideo") ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            Text(UserDefaults.standard.bool(forKey: "MuteVideo") ? "Unmute" : "Mute")
+                            Text(UserDefaults.standard.bool(forKey: "MuteVideo") ? NSLocalizedString("unmute_button", comment: "Unmute button") : NSLocalizedString("mute_button", comment: "Mute button"))
                         }
                         .frame(maxWidth: .infinity)
                     }

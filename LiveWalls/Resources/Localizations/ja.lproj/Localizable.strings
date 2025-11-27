@@ -8,6 +8,10 @@
 "import_button" = "インポート";
 "settings_button" = "設定";
 "accept_button" = "OK";
+"audio_section" = "オーディオ";
+"mode_section" = "モード";
+"auto_change_section_header" = "自動変更";
+"playback_section" = "再生";
 
 /* 新しい壁紙コントロール機能 */
 "next_wallpaper" = "次の壁紙";
@@ -56,6 +60,12 @@
 "launch_at_login" = "ログイン時に Live Walls を起動";
 "launch_at_login_help" = "macOS ログイン時に Live Walls を自動的に開始";
 "enable_auto_change" = "壁紙の自動変更を有効化";
+"unmute_button" = "ミュート解除";
+"mute_button" = "ミュート";
+"playback_mode_picker" = "再生モード";
+"shuffle_mode" = "シャッフル";
+"playlist_mode" = "プレイリスト";
+"every_label" = "間隔";
 "interval_label" = "間隔:";
 
 /* 設定 - 情報 */

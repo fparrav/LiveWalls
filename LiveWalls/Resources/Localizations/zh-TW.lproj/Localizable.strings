@@ -8,6 +8,10 @@
 "import_button" = "匯入";
 "settings_button" = "設定";
 "accept_button" = "確定";
+"audio_section" = "音訊";
+"mode_section" = "模式";
+"auto_change_section_header" = "自動更換";
+"playback_section" = "播放";
 
 /* 新桌布控制功能 */
 "next_wallpaper" = "下一個桌布";
@@ -56,6 +60,12 @@
 "launch_at_login" = "登入時啟動 Live Walls";
 "launch_at_login_help" = "登入 macOS 時自動啟動 Live Walls";
 "enable_auto_change" = "啟用自動更換桌布";
+"unmute_button" = "取消靜音";
+"mute_button" = "靜音";
+"playback_mode_picker" = "播放模式";
+"shuffle_mode" = "隨機";
+"playlist_mode" = "播放清單";
+"every_label" = "每";
 "interval_label" = "間隔：";
 
 /* 設定 - 資訊 */

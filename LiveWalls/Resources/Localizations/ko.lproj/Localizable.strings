@@ -8,6 +8,10 @@
 "import_button" = "가져오기";
 "settings_button" = "설정";
 "accept_button" = "확인";
+"audio_section" = "오디오";
+"mode_section" = "모드";
+"auto_change_section_header" = "자동 변경";
+"playback_section" = "재생";
 
 /* 새로운 배경화면 제어 기능 */
 "next_wallpaper" = "다음 배경화면";
@@ -56,6 +60,12 @@
 "launch_at_login" = "로그인 시 Live Walls 시작";
 "launch_at_login_help" = "macOS 로그인 시 Live Walls 자동 시작";
 "enable_auto_change" = "자동 배경화면 변경 활성화";
+"unmute_button" = "소리 켜기";
+"mute_button" = "음소거";
+"playback_mode_picker" = "재생 모드";
+"shuffle_mode" = "무작위";
+"playlist_mode" = "재생목록";
+"every_label" = "간격";
 "interval_label" = "간격:";
 
 /* 설정 - 정보 */

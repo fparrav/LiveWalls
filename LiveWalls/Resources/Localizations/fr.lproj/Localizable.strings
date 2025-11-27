@@ -8,6 +8,10 @@
 "import_button" = "Importer";
 "settings_button" = "Paramètres";
 "accept_button" = "Accepter";
+"audio_section" = "AUDIO";
+"mode_section" = "MODE";
+"auto_change_section_header" = "CHANGEMENT AUTO";
+"playback_section" = "LECTURE";
 
 /* Nouvelles fonctionnalités de contrôle de papier peint */
 "next_wallpaper" = "Papier Peint Suivant";
@@ -56,6 +60,12 @@
 "launch_at_login" = "Lancer Live Walls à la connexion";
 "launch_at_login_help" = "Démarrer automatiquement Live Walls lors de la connexion à macOS";
 "enable_auto_change" = "Activer le changement automatique du fond d'écran";
+"unmute_button" = "Son activé";
+"mute_button" = "Muet";
+"playback_mode_picker" = "Mode de lecture";
+"shuffle_mode" = "Aléatoire";
+"playlist_mode" = "Liste";
+"every_label" = "Toutes les";
 "interval_label" = "Intervalle :";
 
 /* Paramètres - Informations */

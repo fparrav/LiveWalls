@@ -8,6 +8,10 @@
 "import_button" = "Importieren";
 "settings_button" = "Einstellungen";
 "accept_button" = "Akzeptieren";
+"audio_section" = "AUDIO";
+"mode_section" = "MODUS";
+"auto_change_section_header" = "AUTOMATISCHER WECHSEL";
+"playback_section" = "WIEDERGABE";
 
 /* Neue Wallpaper-Kontrollfunktionen */
 "next_wallpaper" = "Nächstes Wallpaper";
@@ -56,6 +60,12 @@
 "launch_at_login" = "Live Walls beim Anmelden starten";
 "launch_at_login_help" = "Live Walls automatisch beim Anmelden bei macOS starten";
 "enable_auto_change" = "Automatischen Hintergrundbildwechsel aktivieren";
+"unmute_button" = "Ton an";
+"mute_button" = "Stumm";
+"playback_mode_picker" = "Wiedergabemodus";
+"shuffle_mode" = "Zufällig";
+"playlist_mode" = "Playlist";
+"every_label" = "Alle";
 "interval_label" = "Intervall:";
 
 /* Einstellungen - Informationen */

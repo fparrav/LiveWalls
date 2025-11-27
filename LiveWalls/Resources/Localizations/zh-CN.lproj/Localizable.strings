@@ -8,6 +8,10 @@
 "import_button" = "导入";
 "settings_button" = "设置";
 "accept_button" = "确定";
+"audio_section" = "音频";
+"mode_section" = "模式";
+"auto_change_section_header" = "自动更换";
+"playback_section" = "播放";
 
 /* 新壁纸控制功能 */
 "next_wallpaper" = "下一个壁纸";
@@ -56,6 +60,12 @@
 "launch_at_login" = "登录时启动 Live Walls";
 "launch_at_login_help" = "登录 macOS 时自动启动 Live Walls";
 "enable_auto_change" = "启用自动更换壁纸";
+"unmute_button" = "取消静音";
+"mute_button" = "静音";
+"playback_mode_picker" = "播放模式";
+"shuffle_mode" = "随机";
+"playlist_mode" = "播放列表";
+"every_label" = "每";
 "interval_label" = "间隔：";
 
 /* 设置 - 信息 */

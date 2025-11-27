@@ -9,6 +9,12 @@
 "settings_button" = "Settings";
 "accept_button" = "Accept";
 
+/* Sidebar sections */
+"playback_section" = "PLAYBACK";
+"auto_change_section_header" = "AUTO-CHANGE";
+"mode_section" = "MODE";
+"audio_section" = "AUDIO";
+
 /* New wallpaper control features */
 "next_wallpaper" = "Next Wallpaper";
 "disable_for_random" = "Disable for Random Rotation";
@@ -55,8 +61,14 @@
 "mute_videos" = "Mute videos";
 "launch_at_login" = "Launch Live Walls at login";
 "launch_at_login_help" = "Automatically start Live Walls when you log into macOS";
-"enable_auto_change" = "Enable automatic wallpaper change";
+"enable_auto_change" = "Enable Auto-Change";
 "interval_label" = "Interval:";
+"every_label" = "Every";
+"playlist_mode" = "Playlist";
+"shuffle_mode" = "Shuffle";
+"playback_mode_picker" = "Playback Mode";
+"mute_button" = "Mute";
+"unmute_button" = "Unmute";
 
 /* Settings - Information */
 "videos_saved" = "Videos saved: %d";

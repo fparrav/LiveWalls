@@ -8,6 +8,10 @@
 "import_button" = "Importar";
 "settings_button" = "Configurações";
 "accept_button" = "Aceitar";
+"audio_section" = "ÁUDIO";
+"mode_section" = "MODO";
+"auto_change_section_header" = "MUDANÇA AUTOMÁTICA";
+"playback_section" = "REPRODUÇÃO";
 
 /* Novas funcionalidades de controle de papel de parede */
 "next_wallpaper" = "Próximo Papel de Parede";
@@ -56,6 +60,12 @@
 "launch_at_login" = "Iniciar Live Walls no login";
 "launch_at_login_help" = "Iniciar automaticamente o Live Walls quando você fizer login no macOS";
 "enable_auto_change" = "Ativar mudança automática de papel de parede";
+"unmute_button" = "Ativar som";
+"mute_button" = "Silenciar";
+"playback_mode_picker" = "Modo de reprodução";
+"shuffle_mode" = "Aleatório";
+"playlist_mode" = "Lista";
+"every_label" = "A cada";
 "interval_label" = "Intervalo:";
 
 /* Configurações - Informações */

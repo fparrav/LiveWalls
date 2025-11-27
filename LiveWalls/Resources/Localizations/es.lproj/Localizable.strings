@@ -9,6 +9,12 @@
 "settings_button" = "Configuración";
 "accept_button" = "Aceptar";
 
+/* Secciones del sidebar */
+"playback_section" = "REPRODUCCIÓN";
+"auto_change_section_header" = "CAMBIO AUTOMÁTICO";
+"mode_section" = "MODO";
+"audio_section" = "AUDIO";
+
 /* Nuevas funcionalidades de control de wallpaper */
 "next_wallpaper" = "Siguiente Wallpaper";
 "disable_for_random" = "Deshabilitar para rotación aleatoria";
@@ -55,8 +61,14 @@
 "mute_videos" = "Silenciar videos";
 "launch_at_login" = "Iniciar Live Walls con el sistema";
 "launch_at_login_help" = "Inicia automáticamente Live Walls cuando inicies sesión en macOS";
-"enable_auto_change" = "Activar cambio automático de wallpaper";
+"enable_auto_change" = "Activar Cambio Automático";
 "interval_label" = "Intervalo:";
+"every_label" = "Cada";
+"playlist_mode" = "Lista";
+"shuffle_mode" = "Aleatorio";
+"playback_mode_picker" = "Modo de Reproducción";
+"mute_button" = "Silenciar";
+"unmute_button" = "Activar Audio";
 
 /* Configuraciones - Información */
 "videos_saved" = "Videos guardados: %d";
