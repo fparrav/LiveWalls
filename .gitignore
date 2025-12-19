@@ -219,4 +219,6 @@ homebrew-livewalls/
 # Permitimos versionar documentación de planes
 # (antes se ignoraba toda la carpeta plans/)
 # Ignore local plan documents
-plans/
+plans/.chunkhound.json
+.chunkhound/
+.claude/
