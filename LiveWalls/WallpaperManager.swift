@@ -1430,11 +1430,92 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
              await setActiveVideo(nextVideo)
          }
      }
-    
+
+    /// Manually changes to the previous wallpaper.
+    /// - In playlist (non-shuffle) mode: mirrors `nextWallpaper()`'s circular queue, moving one index backward.
+    /// - In shuffle mode: there is no fixed order to invert, so this walks backward through `shuffleHistory`
+    ///   (the real, chronological record of the last `shuffleHistoryMaxSize` videos played), rather than
+    ///   picking another random video. Once fewer than 2 entries remain in that history, there is no real
+    ///   "previous" left to go back to and this becomes a no-op (see `canGoToPreviousWallpaper`).
+    func previousWallpaper() async {
+        let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
+
+        appLogger.info("🔍 DEBUG previousWallpaper() - Videos habilitados: \(enabledVideos.count), Shuffle: \(self.isShuffleMode)")
+
+        guard !isChangingVideo else {
+            appLogger.warning("⚠️ Cambio de wallpaper ya en progreso (manual) - ignorando")
+            return
+        }
+        isChangingVideo = true
+        defer { isChangingVideo = false }
+
+        guard enabledVideos.count > 1 else {
+            appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para retroceder")
+            return
+        }
+
+        var previousVideo: VideoFile?
+        if self.isShuffleMode {
+            // shuffleHistory's last entry tracks the currently-playing video (see getNextVideoInShuffleMode).
+            // Drop it and use the new last entry as the real previous video, instead of sampling a fresh
+            // random pick — that would not be a "previous" in any meaningful sense.
+            guard shuffleHistory.count >= 2 else {
+                appLogger.warning("⚠️ No hay historial suficiente para retroceder en modo aleatorio")
+                return
+            }
+            shuffleHistory.removeLast()
+            if let previousID = shuffleHistory.last {
+                previousVideo = enabledVideos.first(where: { $0.id == previousID })
+            }
+        } else {
+            if let currentVideo = self.currentVideo,
+               let currentIndex = enabledVideos.firstIndex(where: { $0.id == currentVideo.id }) {
+                let previousIndex = (currentIndex - 1 + enabledVideos.count) % enabledVideos.count
+                previousVideo = enabledVideos[previousIndex]
+            } else {
+                previousVideo = enabledVideos.last
+            }
+        }
+
+        guard let previousVideo = previousVideo else {
+            appLogger.warning("⚠️ No se pudo obtener el video anterior")
+            return
+        }
+
+        if let currentVideo = self.currentVideo, previousVideo.id == currentVideo.id {
+            appLogger.warning("⚠️ Video anterior es el mismo que el actual - ignorando")
+            return
+        }
+
+        appLogger.info("🔄 Retrocediendo manualmente (modo \(self.isShuffleMode ? "shuffle" : "playlist")) a: \(previousVideo.name)")
+
+        if isPlayingWallpaper {
+            await changeToNextVideoWithTransition(to: previousVideo)
+            // Reiniciar timer después de cambio manual
+            await MainActor.run {
+                self.restartAutoChangeTimerIfNeeded()
+            }
+        } else {
+            await setActiveVideo(previousVideo)
+        }
+    }
+
     /// Comprueba si el botón "Siguiente Wallpaper" debe estar habilitado
     var canGoToNextWallpaper: Bool {
         let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
         return isAutoChangeEnabled && enabledVideos.count > 1
+    }
+
+    /// Comprueba si el botón "Wallpaper Anterior" debe estar habilitado.
+    /// En modo shuffle, además requiere al menos 2 entradas en `shuffleHistory` (un video anterior real
+    /// al que volver); en modo lista, cualquier lista con más de un video habilitado permite retroceder.
+    var canGoToPreviousWallpaper: Bool {
+        let enabledVideos = videoFiles.filter { $0.isEnabledForRandomPlay }
+        guard isAutoChangeEnabled && enabledVideos.count > 1 else { return false }
+        if isShuffleMode {
+            return shuffleHistory.count >= 2
+        }
+        return true
     }
     
     /// Toggles the enabled state for random playback of a specific video

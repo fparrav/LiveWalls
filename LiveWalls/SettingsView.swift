@@ -115,36 +115,42 @@ struct SettingsView: View {
     }
     
     private var generalPlaybackSection: some View {
-        GroupBox(NSLocalizedString("general_playback_section", comment: "General playback section")) {
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle(NSLocalizedString("auto_start_wallpaper", comment: "Auto start wallpaper"), isOn: $autoStartWallpaper)
-                    .toggleStyle(SwitchToggleStyle())
-                
-                // NOTE: Mute videos toggle moved to main window (ContentView) - PHASE 3
-                // Toggle(NSLocalizedString("mute_videos", comment: "Mute videos"), isOn: $muteVideo)
-                //     .toggleStyle(SwitchToggleStyle())
-            }
-            .padding(12)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(NSLocalizedString("general_playback_section", comment: "General playback section"))
+                .font(.headline)
+            Divider()
+                .overlay(LiquidGlassMetrics.dividerColor)
+            Toggle(NSLocalizedString("auto_start_wallpaper", comment: "Auto start wallpaper"), isOn: $autoStartWallpaper)
+                .toggleStyle(SwitchToggleStyle())
+            
+            // NOTE: Mute videos toggle moved to main window (ContentView) - PHASE 3
+            // Toggle(NSLocalizedString("mute_videos", comment: "Mute videos"), isOn: $muteVideo)
+            //     .toggleStyle(SwitchToggleStyle())
         }
+        .padding(LiquidGlassMetrics.cardCornerRadius)
+        .glassDarkSurface()
     }
     
     private var systemSection: some View {
-        GroupBox(NSLocalizedString("system_section", comment: "System section")) {
-            VStack(alignment: .leading, spacing: 12) {
-                launchAtLoginToggle
-                
-                // Sección de actualizaciones
-                updateSection
-                
-                if #unavailable(macOS 13.0) {
-                    Text(NSLocalizedString("macos_compatibility_warning", comment: "macOS compatibility warning"))
-                        .font(.caption2)
-                        .foregroundColor(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            Text(NSLocalizedString("system_section", comment: "System section"))
+                .font(.headline)
+            Divider()
+                .overlay(LiquidGlassMetrics.dividerColor)
+            launchAtLoginToggle
+            
+            // Sección de actualizaciones
+            updateSection
+            
+            if #unavailable(macOS 13.0) {
+                Text(NSLocalizedString("macos_compatibility_warning", comment: "macOS compatibility warning"))
+                    .font(.caption2)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(12)
         }
+        .padding(LiquidGlassMetrics.cardCornerRadius)
+        .glassDarkSurface()
     }
     
     private var updateSection: some View {
@@ -213,36 +219,41 @@ struct SettingsView: View {
     }
     
     private var videoManagementSection: some View {
-        GroupBox(NSLocalizedString("video_management_section", comment: "Video management section")) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(String(format: NSLocalizedString("videos_saved", comment: "Videos saved"), wallpaperManager.videoFiles.count))
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                duplicateHandlingSection
-                
-                Button(NSLocalizedString("optimize_videos_hevc", comment: "Optimize videos to HEVC")) {
-                    optimizeVideosToHEVC()
-                }
-                .buttonStyle(.bordered)
-                .disabled(wallpaperManager.videoFiles.isEmpty || isOptimizing)
-                .accessibilityIdentifier("optimize_hevc_button")
-                
-                Button(NSLocalizedString("remove_black_frames", comment: "Remove black frames")) {
-                    removeBlackFrames()
-                }
-                .buttonStyle(.bordered)
-                .disabled(wallpaperManager.videoFiles.isEmpty || isOptimizing)
-                .accessibilityIdentifier("remove_black_frames_button")
-                
-                Button(NSLocalizedString("clear_all_videos", comment: "Clear all videos")) {
-                    clearAllVideos()
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("clear_videos_button")
+        VStack(alignment: .leading, spacing: 12) {
+            Text(NSLocalizedString("video_management_section", comment: "Video management section"))
+                .font(.headline)
+            Divider()
+                .overlay(LiquidGlassMetrics.dividerColor)
+            Text(String(format: NSLocalizedString("videos_saved", comment: "Videos saved"), wallpaperManager.videoFiles.count))
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            duplicateHandlingSection
+            
+            Button(NSLocalizedString("optimize_videos_hevc", comment: "Optimize videos to HEVC")) {
+                optimizeVideosToHEVC()
             }
-            .padding(12)
+            .buttonStyle(.bordered)
+            .disabled(wallpaperManager.videoFiles.isEmpty || isOptimizing)
+            .accessibilityIdentifier("optimize_hevc_button")
+            
+            Button(NSLocalizedString("remove_black_frames", comment: "Remove black frames")) {
+                removeBlackFrames()
+            }
+            .buttonStyle(.bordered)
+            .disabled(wallpaperManager.videoFiles.isEmpty || isOptimizing)
+            .accessibilityIdentifier("remove_black_frames_button")
+            
+            Button(NSLocalizedString("clear_all_videos", comment: "Clear all videos")) {
+                clearAllVideos()
+            }
+            .buttonStyle(.bordered)
+            .tint(LiquidGlassMetrics.accentColor)
+            .foregroundColor(LiquidGlassMetrics.accentColor)
+            .accessibilityIdentifier("clear_videos_button")
         }
+        .padding(LiquidGlassMetrics.cardCornerRadius)
+        .glassDarkSurface()
         .sheet(isPresented: $isOptimizing) {
             optimizationProgressSheet
         }

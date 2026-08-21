@@ -222,3 +222,5 @@ homebrew-livewalls/
 plans/.chunkhound.json
 .chunkhound/
 .claude/
+# Local Pi runtime state
+.atl/

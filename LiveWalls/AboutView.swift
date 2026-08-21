@@ -11,6 +11,11 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 64, height: 64)
+                .aspectRatio(contentMode: .fit)
+
             Text(NSLocalizedString("about", comment: "About title"))
                 .font(.title2)
                 .fontWeight(.semibold)
@@ -49,7 +54,8 @@ struct AboutView: View {
                 .font(.footnote)
                 .foregroundColor(.secondary)
         }
-        .padding(20)
+        .padding(LiquidGlassMetrics.cardCornerRadius)
+        .glassDarkSurface()
         .frame(width: 360)
     }
 }

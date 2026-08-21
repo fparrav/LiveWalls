@@ -10,6 +10,10 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var localIsShuffleMode: Bool = false
     @State private var localIsPlaying: Bool = false
+     // Task 2.4: local flag controlling the library rail's visibility in the
+     // main window. Toggled by `libraryToggleButton`; consumed by the library
+     // rail added in task 2.5.
+     @State private var isLibraryRailVisible: Bool = false
 
     // Grid columns para la vista de miniaturas
     private let gridColumns = [
@@ -17,22 +21,25 @@ struct ContentView: View {
     ]
 
     var body: some View {
-        NavigationSplitView {
-            // Sidebar with glass effect
-            sidebarView
-                .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 200)
-        } detail: {
-            // Main content area
-            VStack(spacing: 0) {
-                // Video grid content
-                mainContentView
-                
-                Divider()
-                
-                // Bottom controls
-                bottomControlsView
-            }
-        }
+          // Task 2.1: floating-glass layout over a full-bleed video preview.
+          // Replaces the previous NavigationSplitView (fixed opaque sidebar + detail pane).
+          // The active video now renders as a live full-bleed background, with the
+          // playback/library controls to be presented as floating glass panels on top.
+          //
+          // Incremental step 2.1: only the preview layer and the floating-controls
+          // container are wired here. The actual controls (transport pill, library
+          // toggle, library rail, rotation bar) arrive in tasks 2.2-2.6. For now the
+          // floating layer is an empty placeholder so the preview is visible and the
+          // file keeps compiling while the sidebar view code stays in place (unused).
+        ZStack {
+                 // Layer 1: full-bleed video preview background.
+             videoPreviewLayer
+
+                 // Layer 2: floating glass controls on top of the preview.
+                 // TODO: transport pill, library toggle, library rail, rotation bar
+                 //       are added in tasks 2.2-2.6.
+             floatingControlsLayer
+          }
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: [.movie],
@@ -72,9 +79,452 @@ struct ContentView: View {
     
     // MARK: - Vistas computadas
     
-    /// Sidebar with glass effect containing all controls
+     /// Full-bleed video preview background layer (task 2.1 placeholder).
+     ///
+     /// Shows the active video's thumbnail (reusing the existing `thumbnailData`)
+     /// scaled to fill the window, falling back to a solid dark background when there
+     /// is no current video or thumbnail. A live, rendering video preview is deferred
+     /// to a later task; for step 2.1 this layer only needs to be visible and compile.
+     @ViewBuilder
+    private var videoPreviewLayer: some View {
+         if let currentVideo = wallpaperManager.currentVideo,
+            let thumbnailData = currentVideo.thumbnailData,
+            let nsImage = NSImage(data: thumbnailData) {
+             Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+          } else {
+             // Task 2.7: surface the preserved empty-state view when there are no
+             // videos at all; a simple black background remains for the edge case
+             // of videos present but no currentVideo.
+             ZStack {
+                 Color.black
+                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                 if wallpaperManager.videoFiles.isEmpty {
+                     emptyStateView
+                 }
+             }
+          }
+      }
+
+     /// Floating glass controls layer that sits on top of the video preview.
+     ///
+     /// Task 2.1 placeholder: intentionally empty. Tasks 2.2-2.6 add the transport
+     /// pill, library-toggle button, library rail, and rotation bar as floating glass
+     /// panels positioned inside this layer.
+     ///
+     /// Task 2.8 accessibility-identifier mapping (old `sidebarView`/`bottomControlsView`
+     /// identifier -> new floating-control identifier):
+     ///   sidebar_settings_button    -> main_settings_button   (trafficLightPill)
+     ///   sidebar_play_toggle_button -> main_transport_play_toggle_button (transportPill)
+     ///   sidebar_next_button        -> main_transport_next_button (transportPill; a new
+     ///                                 main_transport_previous_button was also added,
+     ///                                 no old equivalent existed)
+     ///   sidebar_import_button      -> library_import_button  (libraryRail)
+     ///   sidebar_autochange_toggle  -> bottom_bar_autochange_toggle (bottomGlassBar)
+     ///   sidebar_interval_picker    -> bottom_bar_interval_picker  (bottomGlassBar)
+     ///   sidebar_mode_picker        -> bottom_bar_mode_picker      (bottomGlassBar)
+     ///   sidebar_mute_button        -> (no floating equivalent yet; mute stays
+     ///                                 reachable only via the still-unused sidebarView
+     ///                                 until it is fully retired)
+     ///   bottom_set_wallpaper_button, bottom_delete_button -> (no floating equivalent
+     ///                                 yet; per-video actions now live on `library_row_*`
+     ///                                 taps, no dedicated set/delete controls added)
+     ///   (new, no old equivalent) main_library_toggle_button, library_rail,
+     ///                                 library_row_*, bottom_bar_video_count
+     @ViewBuilder
+    private var floatingControlsLayer: some View {
+          // Task 2.2: top-left decorative traffic-light glass pill added.
+          // Tasks 2.3-2.6 add the transport pill, library-toggle button, library
+          // rail, and rotation bar as floating glass panels inside the SAME ZStack,
+          // each with its own alignment/.position.
+        ZStack(alignment: .topLeading) {
+            trafficLightPill
+
+             // Task 2.3: top-center glass transport pill. Spans the full layered
+             // width so it centers horizontally, anchored to the top edge with the
+             // shared outer margin. Tasks 2.4-2.6 add the library toggle, library
+             // rail, and rotation bar inside the SAME ZStack.
+            transportPill
+                  .frame(maxWidth: .infinity, alignment: .top)
+                  .padding(.top, LiquidGlassMetrics.outerMargin)
+
+             // Task 2.4: top-right glass library-toggle button. Anchored to the
+             // top-trailing edge with the shared outer margin on the top and trailing
+             // sides (mirrors `trafficLightPill`, which sits top-leading). The rail it
+             // reveals arrives in task 2.5.
+            libraryToggleButton
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, LiquidGlassMetrics.outerMargin)
+                .padding(.trailing, LiquidGlassMetrics.outerMargin)
+            // Task 2.5: right-side glass-dark library rail. Anchored to the
+            // trailing edge, revealed only when `isLibraryRailVisible` is true
+            // (toggled by `libraryToggleButton`). The top padding keeps it below
+            // the top control row (pill height + two outer margins) so it never
+            // overlaps `trafficLightPill` / `transportPill` / `libraryToggleButton`.
+            if isLibraryRailVisible {
+                libraryRail
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.top, LiquidGlassMetrics.pillHeight + LiquidGlassMetrics.outerMargin * 2)
+                .padding(.trailing, LiquidGlassMetrics.outerMargin)
+                .padding(.bottom, LiquidGlassMetrics.outerMargin)
+                .transition(.move(edge: .trailing))
+            }
+            // Task 2.6: bottom glass bar with the auto-rotation controls and
+            // video count. Anchored to the bottom edge of the layered controls
+            // with the shared outer margin; spans the full width so the
+            // controls stay horizontally distributed.
+            bottomGlassBar
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, LiquidGlassMetrics.outerMargin)
+            }
+     }
+
+      /// Top-left glass pill for the main window's floating-glass layer.
+      ///
+      /// Combines the decorative macOS-style traffic-light dots (close / minimize
+      /// / zoom - visual only, the real window controls remain the system-provided
+      /// native chrome) with the app's settings entry point. The settings button
+      /// is the only way to reach `SettingsView` once the old `sidebarView` (whose
+      /// `sidebar_settings_button` previously opened it) is retired in tasks
+      /// 2.8/2.9 - design.md/spec.md did not carve out a dedicated settings
+      /// control for the new floating layout, so it lives here alongside the
+      /// other top-left window chrome. Rendered with the shared light
+      /// `glassSurface()` treatment and sized to the standard
+      /// `LiquidGlassMetrics.pillHeight` (36px), placed at the top-left with the
+      /// shared `LiquidGlassMetrics.outerMargin` (20px) clearance from the window
+      /// edge via the outer `.padding` below (the host ZStack is `.topLeading`).
+      @ViewBuilder
+    private var trafficLightPill: some View {
+        HStack(spacing: 8) {
+             // Decorative dots only - no tappable actions. Colors reference the
+             // macOS window-control palette (close / minimize / zoom).
+            HStack(spacing: 8) {
+                Circle()
+                     .fill(Color(red: 1.0, green: 0x5F / 255.0, blue: 0x57 / 255.0))
+                     .frame(width: 12, height: 12)
+                Circle()
+                     .fill(Color(red: 0xFE / 255.0, green: 0xBC / 255.0, blue: 0x2E / 255.0))
+                     .frame(width: 12, height: 12)
+                Circle()
+                     .fill(Color(red: 0x28 / 255.0, green: 0xC8 / 255.0, blue: 0x40 / 255.0))
+                     .frame(width: 12, height: 12)
+             }
+             .accessibilityHidden(true)
+
+            Divider()
+                 .frame(height: 16)
+                 .overlay(LiquidGlassMetrics.dividerColor)
+
+             // Settings entry point - the only way to reach `SettingsView` once
+             // the old `sidebarView`'s `sidebar_settings_button` is retired.
+            Button(action: { showSettings = true }) {
+                Image(systemName: "gearshape.fill")
+                     .imageScale(.small)
+             }
+             .buttonStyle(.borderless)
+             .accessibilityIdentifier("main_settings_button")
+             .accessibilityLabel(NSLocalizedString("settings_button", comment: "Settings button"))
+         }
+         .padding(.horizontal, 12)
+         .frame(height: LiquidGlassMetrics.pillHeight)
+         .glassSurface()
+         .padding(LiquidGlassMetrics.outerMargin)
+     }
+
+    /// Top-center glass transport pill for the main window's floating-glass layer.
+    ///
+    /// Presents a "previous / play-pause / next" transport group plus the current
+    /// wallpaper filename as a single floating glass pill. Actions reuse the
+    /// `sidebarView` playback logic: play/pause toggles through the local
+    /// `localIsPlaying` mirror, while next and previous route through the async
+    /// `wallpaperManager` methods, which already honor the configured list/shuffle
+    /// mode. `previous` is disabled when the manager reports it is unavailable.
     @ViewBuilder
-    private var sidebarView: some View {
+    private var transportPill: some View {
+        HStack(spacing: 8) {
+             // Previous wallpaper - disabled when no earlier video is available.
+            Button(action: {
+                Task {
+                    await wallpaperManager.previousWallpaper()
+                 }
+             }) {
+                Image(systemName: "backward.fill")
+             }
+              .buttonStyle(.borderless)
+              .disabled(!wallpaperManager.canGoToPreviousWallpaper)
+              .accessibilityIdentifier("main_transport_previous_button")
+
+             // Play/Stop button - same local-mirror pattern as `sidebarView`.
+            Button(action: {
+                if localIsPlaying {
+                    localIsPlaying = false
+                    wallpaperManager.stopWallpaperSafe()
+                 } else {
+                    localIsPlaying = true
+                    wallpaperManager.startWallpaperSafe()
+                 }
+             }) {
+                Image(systemName: localIsPlaying ? "stop.fill" : "play.fill")
+             }
+              .buttonStyle(.borderless)
+              .imageScale(.large)
+              .accessibilityIdentifier("main_transport_play_toggle_button")
+
+             // Current wallpaper filename, with a localized fallback when nil.
+            Text(
+                wallpaperManager.currentVideo?.name
+                        ?? NSLocalizedString("no_active_wallpaper", comment: "No active wallpaper")
+             )
+              .font(.subheadline)
+              .foregroundStyle(.primary)
+              .lineLimit(1)
+              .multilineTextAlignment(.center)
+              .frame(minWidth: 120, alignment: .center)
+
+             // Next wallpaper.
+            Button(action: {
+                Task {
+                    await wallpaperManager.nextWallpaper()
+                 }
+             }) {
+                Image(systemName: "forward.fill")
+             }
+              .buttonStyle(.borderless)
+              .accessibilityIdentifier("main_transport_next_button")
+        }
+        .frame(height: LiquidGlassMetrics.pillHeight)
+        .glassSurface()
+    }
+
+     /// Top-right glass library-toggle button for the main window's
+     /// floating-glass layer.
+     ///
+     /// Presents a pill with a library icon (`rectangle.grid.1x2`) that toggles
+     /// `isLibraryRailVisible`, revealing the glass library rail added in task 2.5.
+     /// Rendered with the shared light `glassSurface()` treatment, sized to the
+     /// standard `LiquidGlassMetrics.pillHeight` (36px), and anchored to the
+     /// top-right with the shared `LiquidGlassMetrics.outerMargin` (20px) clearance
+     /// from the window edges via the host ZStack framing in `floatingControlsLayer`.
+     @ViewBuilder
+     private var libraryToggleButton: some View {
+         Button(action: {
+             // Local show/hide state -- not persisted (design decision 4).
+             // The library rail consumed by this flag arrives in task 2.5.
+             withAnimation(.easeInOut(duration: 0.2)) {
+                 isLibraryRailVisible.toggle()
+             }
+         }) {
+             Image(systemName: "rectangle.grid.1x2")
+                 .imageScale(.large)
+         }
+         .buttonStyle(.borderless)
+         .frame(height: LiquidGlassMetrics.pillHeight)
+         .glassSurface()
+         .accessibilityIdentifier("main_library_toggle_button")
+     }
+
+      /// Right-side glass-dark library rail (240px) for the main window's
+      /// floating-glass layer.
+      ///
+      /// Task 2.5: a tall panel anchored to the trailing window edge, rendered with
+      /// the shared dark `glassDarkSurface()` treatment. This is a panel over an
+      /// opaque background (not a control floating over the live preview), so it
+      /// uses the dark style per design.md. Presents, top-down:
+      ///      - a "Biblioteca" header with an "Importar" action wired to the existing
+      ///        `isImporting` file importer already mounted on the `body`,
+      ///      - a scrollable list of `wallpaperManager.videoFiles`, one compact row
+      ///    per video (name + path), with an accent badge on the current wallpaper.
+      ///
+      /// Reuses existing shared state only (`videoFiles`, `currentVideo`,
+      /// `selectedVideo`, `isImporting`) -- no new manager behavior. Tapping a row
+      /// sets `selectedVideo`. Empty-library state reuses existing localized copy.
+      @ViewBuilder
+     private var libraryRail: some View {
+         VStack(alignment: .leading, spacing: 12) {
+              // Header: title + Importar action (reuses the `isImporting` importer).
+             HStack(spacing: 8) {
+                 Text("Biblioteca")
+                      .font(.headline)
+                      .foregroundStyle(.primary)
+
+                 Spacer(minLength: 8)
+
+                 Button(action: { isImporting = true }) {
+                     Image(systemName: "plus.circle.fill")
+                          .imageScale(.large)
+                  }
+                  .buttonStyle(.borderless)
+                  .help(NSLocalizedString("import_button", comment: "Import button"))
+                  .accessibilityIdentifier("library_import_button")
+              }
+
+             Divider()
+                  .overlay(LiquidGlassMetrics.dividerColor)
+
+              // Scrollable video list, or the localized empty state.
+             if wallpaperManager.videoFiles.isEmpty {
+                 VStack(spacing: 8) {
+                     Text(NSLocalizedString("no_videos_title", comment: "No videos title"))
+                          .font(.subheadline)
+                          .foregroundStyle(.secondary)
+                     Text(NSLocalizedString("no_videos_description", comment: "No videos description"))
+                          .font(.caption)
+                          .foregroundStyle(.secondary)
+                          .multilineTextAlignment(.center)
+                  }
+                  .frame(maxWidth: .infinity, alignment: .center)
+                  .padding(.vertical, 16)
+              } else {
+                 ScrollView {
+                     LazyVStack(spacing: 8) {
+                         ForEach(wallpaperManager.videoFiles, id: \.id) { video in
+                             libraryRow(video: video)
+                          }
+                      }
+                      .padding(.horizontal, 4)
+                  }
+              }
+         }
+         .padding(LiquidGlassMetrics.cardCornerRadius)
+         .frame(width: LiquidGlassMetrics.railWidth)
+         .glassDarkSurface()
+         .accessibilityIdentifier("library_rail")
+     }
+
+      /// Compact library-rail row for a single video.
+      ///
+      /// Shows a thumbnail (when available) plus the video name and path, and an
+      /// accent dot/badge when this video is the current wallpaper. Tapping sets
+      /// `selectedVideo` (the same selection state used elsewhere in the view).
+      @ViewBuilder
+     private func libraryRow(video: VideoFile) -> some View {
+         let isActive = wallpaperManager.currentVideo?.id == video.id
+
+         HStack(spacing: 10) {
+              // Thumbnail or fallback placeholder.
+             Group {
+                 if let thumbnailData = video.thumbnailData,
+                    let nsImage = NSImage(data: thumbnailData) {
+                     Image(nsImage: nsImage)
+                          .resizable()
+                          .aspectRatio(contentMode: .fill)
+                  } else {
+                     RoundedRectangle(cornerRadius: 6)
+                          .fill(Color.white.opacity(0.10))
+                  }
+              }
+              .frame(width: 64, height: 36)
+              .clipShape(RoundedRectangle(cornerRadius: 6))
+
+              // Name + path.
+             VStack(alignment: .leading, spacing: 2) {
+                 Text(video.name)
+                      .font(.system(size: 12, weight: .medium))
+                      .lineLimit(1)
+                 Text(video.url.lastPathComponent)
+                      .font(.system(size: 10))
+                      .foregroundStyle(.secondary)
+                      .lineLimit(1)
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+
+              // Active badge (accent color) -- only for the current wallpaper.
+             if isActive {
+                 Circle()
+                      .fill(LiquidGlassMetrics.accentColor)
+                      .frame(width: 8, height: 8)
+              }
+         }
+         .padding(.vertical, 6)
+         .padding(.horizontal, 8)
+         .background(
+             RoundedRectangle(cornerRadius: LiquidGlassMetrics.controlCornerRadius)
+                 .fill(isActive ? LiquidGlassMetrics.accentColor.opacity(0.15) : Color.white.opacity(0.06))
+         )
+         .overlay(
+             RoundedRectangle(cornerRadius: LiquidGlassMetrics.controlCornerRadius)
+                 .stroke(
+                     isActive ? LiquidGlassMetrics.accentColor.opacity(0.6) : LiquidGlassMetrics.dividerColor,
+                     lineWidth: LiquidGlassMetrics.dividerWidth
+                 )
+         )
+         .contentShape(Rectangle())
+         .onTapGesture { selectedVideo = video }
+         .accessibilityIdentifier("library_row_\(video.id)")
+     }
+
+
+    /// Bottom glass bar with the auto-rotation controls and video count.
+        ///
+        /// Task 2.6: floating light-glass bar anchored to the bottom edge of the
+        /// layered controls. Reuses the exact same bindings as the `sidebarView`
+        /// rotation controls (which remain until tasks 2.7-2.9 retire them):
+        /// the auto-change toggle, the interval menu picker (visible only when
+        /// auto-change is enabled), the playlist/shuffle segmented picker
+        /// (mirrored through the existing `localIsShuffleMode` state), and the
+        /// localized total video count.
+        @ViewBuilder
+        private var bottomGlassBar: some View {
+            HStack(spacing: 12) {
+                // Auto-rotation toggle - same get/set binding as `sidebarView`.
+                Toggle(NSLocalizedString("enable_auto_change", comment: "Enable auto-change toggle"), isOn: Binding(
+                    get: { wallpaperManager.isAutoChangeEnabled },
+                    set: { newValue in wallpaperManager.isAutoChangeEnabled = newValue }
+                ))
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("bottom_bar_autochange_toggle")
+
+                // Interval picker - visible only when auto-change is enabled.
+                if wallpaperManager.isAutoChangeEnabled {
+                    Picker("", selection: Binding(
+                        get: { Int(wallpaperManager.autoChangeInterval / 60) },
+                        set: { newValue in wallpaperManager.autoChangeInterval = TimeInterval(newValue * 60) }
+                    )) {
+                        ForEach([1, 2, 5, 10, 15, 30, 60], id: \.self) { minutes in
+                            Text("\(minutes) min").tag(minutes)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("bottom_bar_interval_picker")
+                }
+
+                // Playlist/shuffle segmented picker - visible only when auto-change
+                // is enabled. Mirrors the manager value through `localIsShuffleMode`
+                // exactly like `sidebarView` does.
+                if wallpaperManager.isAutoChangeEnabled {
+                    Picker("", selection: $localIsShuffleMode) {
+                        Text(NSLocalizedString("playlist_mode", comment: "Playlist mode")).tag(false)
+                        Text(NSLocalizedString("shuffle_mode", comment: "Shuffle mode")).tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("bottom_bar_mode_picker")
+                    .onChange(of: localIsShuffleMode) { newValue in
+                        wallpaperManager.isShuffleMode = newValue
+                    }
+                    .onChange(of: wallpaperManager.isShuffleMode) { newValue in
+                        if localIsShuffleMode != newValue {
+                            localIsShuffleMode = newValue
+                        }
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                // Total video count - same localization key as `sidebarView`.
+                Text(String(format: NSLocalizedString("videos_total", comment: "Videos total count"), wallpaperManager.videoFiles.count))
+                    .accessibilityIdentifier("bottom_bar_video_count")
+            }
+            .padding(.horizontal, 12)
+            .frame(height: LiquidGlassMetrics.pillHeight)
+            .glassSurface()
+        }
+
+
+        @ViewBuilder
+            private var sidebarView: some View {
         ScrollView {
             VStack(spacing: 20) {
                 // Playback Controls Section

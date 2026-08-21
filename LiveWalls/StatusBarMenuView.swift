@@ -25,8 +25,12 @@ struct StatusBarMenuView: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.secondary.opacity(0.1))
-                .cornerRadius(6)
+                .background(Color(red: 0.09, green: 0.10, blue: 0.13).opacity(0.85))
+                .cornerRadius(LiquidGlassMetrics.controlCornerRadius)
+                .overlay(
+                    RoundedRectangle(cornerRadius: LiquidGlassMetrics.controlCornerRadius)
+                        .stroke(LiquidGlassMetrics.dividerColor, lineWidth: LiquidGlassMetrics.dividerWidth)
+                    )
                 
                 Divider()
             }
@@ -80,8 +84,6 @@ struct StatusBarMenuView: View {
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "about")
             }
-
-            Divider()
 
             Divider()
             
