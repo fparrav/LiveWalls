@@ -5,6 +5,25 @@ All notable changes to LiveWalls will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-08-24
+
+### 🎨 Rediseño liquid-glass del resto de la UI
+
+Continuación del rediseño Liquid Glass iniciado en 2.0.0, extendido a las pantallas restantes:
+
+- **Vista principal** - nueva interfaz con materiales de vidrio para transporte y playlist
+- **Settings** - panel de configuración rediseñado con estética Liquid Glass
+- **Status bar** - controles de la barra de menú rediseñados
+- **About** - ventana de información renovada
+
+### 🐛 Bug Fixes
+- Corregido el mute desde la status bar
+- Marquesina (scroll) para títulos largos en la pill de transporte
+- Correcciones de layout en las vistas rediseñadas
+
+### 📝 Technical Details
+- Actualizado `.gitignore` para ignorar configuraciones de herramientas y directorios de build locales
+
 ## [2.0.1] - 2025-11-27
 
 ### 🐛 Bug Fixes
