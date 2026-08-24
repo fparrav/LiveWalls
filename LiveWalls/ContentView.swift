@@ -10,36 +10,71 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var localIsShuffleMode: Bool = false
     @State private var localIsPlaying: Bool = false
+     // Backed by the same "MuteVideo" UserDefaults key `DesktopVideoWindowMejorada`
+     // reads at player setup. `@AppStorage` (not a plain UserDefaults read in the
+     // button's body) so the speaker icon actually redraws when tapped -- a bare
+     // `UserDefaults.standard.bool(forKey:)` read doesn't trigger a SwiftUI
+     // view update, so the icon looked stuck even though the preference changed.
+     @AppStorage("MuteVideo") private var isMuteEnabled: Bool = false
      // Task 2.4: local flag controlling the library rail's visibility in the
      // main window. Toggled by `libraryToggleButton`; consumed by the library
      // rail added in task 2.5.
      @State private var isLibraryRailVisible: Bool = false
 
-    // Grid columns para la vista de miniaturas
-    private let gridColumns = [
-        GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)
-    ]
+     // Task 6.2: the window's current content size, tracked so the library
+     // rail can be force-hidden as the window nears its 960x640 minimum,
+     // where it would otherwise overlap the bottom rotation bar.
+     @State private var windowSize: CGSize = .zero
+
+     // Below this width/height the library rail is considered too close to
+     // the 960x640 minimum to safely coexist with the bottom rotation bar.
+     private let libraryRailAutoHideSize = CGSize(width: 1040, height: 700)
 
     var body: some View {
-          // Task 2.1: floating-glass layout over a full-bleed video preview.
-          // Replaces the previous NavigationSplitView (fixed opaque sidebar + detail pane).
-          // The active video now renders as a live full-bleed background, with the
-          // playback/library controls to be presented as floating glass panels on top.
-          //
-          // Incremental step 2.1: only the preview layer and the floating-controls
-          // container are wired here. The actual controls (transport pill, library
-          // toggle, library rail, rotation bar) arrive in tasks 2.2-2.6. For now the
-          // floating layer is an empty placeholder so the preview is visible and the
-          // file keeps compiling while the sidebar view code stays in place (unused).
+          // Floating-glass layout over a full-bleed video preview: the active
+          // video renders as a live full-bleed background, with the
+          // playback/library controls presented as floating glass panels on top.
         ZStack {
                  // Layer 1: full-bleed video preview background.
              videoPreviewLayer
 
                  // Layer 2: floating glass controls on top of the preview.
-                 // TODO: transport pill, library toggle, library rail, rotation bar
-                 //       are added in tasks 2.2-2.6.
              floatingControlsLayer
           }
+        .frame(minWidth: 960, minHeight: 640)
+        .background(
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear { windowSize = geometry.size }
+                    .onChange(of: geometry.size) { newSize in
+                        windowSize = newSize
+                        if isLibraryRailVisible
+                            && (newSize.width <= libraryRailAutoHideSize.width
+                                || newSize.height <= libraryRailAutoHideSize.height) {
+                            isLibraryRailVisible = false
+                        }
+                    }
+            }
+        )
+          // Hide the native title bar so the real system traffic lights float
+          // directly over the video preview, with no opaque strip beneath them.
+          // The Scene-level `.windowStyle(.hiddenTitleBar)` (LiveWallsApp.swift)
+          // does the heavy lifting; this just confirms the same intent at the
+          // NSWindow level in case the window is ever hosted differently.
+        .background(WindowAccessor { window in
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            // AppKit's own frame-autosave (keyed off the WindowGroup id) can
+            // restore or cascade the window partly off-screen after a display
+            // change (e.g. disconnecting an external monitor). Re-center
+            // whenever the current frame isn't fully visible so controls near
+            // the window edges stay reachable.
+            if let screen = window.screen ?? NSScreen.main,
+                !screen.visibleFrame.contains(window.frame) {
+                window.center()
+            }
+        })
+        .ignoresSafeArea()
         .fileImporter(
             isPresented: $isImporting,
             allowedContentTypes: [.movie],
@@ -54,11 +89,6 @@ struct ContentView: View {
             case .failure(let error):
                 print("❌ Error al importar videos: \(error.localizedDescription)")
             }
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environmentObject(wallpaperManager)
-                .environmentObject(launchManager)
         }
         .onAppear {
             localIsShuffleMode = wallpaperManager.isShuffleMode
@@ -79,26 +109,19 @@ struct ContentView: View {
     
     // MARK: - Vistas computadas
     
-     /// Full-bleed video preview background layer (task 2.1 placeholder).
+     /// Full-bleed video preview background layer.
      ///
-     /// Shows the active video's thumbnail (reusing the existing `thumbnailData`)
-     /// scaled to fill the window, falling back to a solid dark background when there
-     /// is no current video or thumbnail. A live, rendering video preview is deferred
-     /// to a later task; for step 2.1 this layer only needs to be visible and compile.
+     /// Shows the active wallpaper actually playing (muted, looping) via
+     /// `LiveVideoPreviewView`, filling the window. Falls back to a solid dark
+     /// background when there is no current video, surfacing the empty-state
+     /// view when there are no videos at all.
      @ViewBuilder
     private var videoPreviewLayer: some View {
-         if let currentVideo = wallpaperManager.currentVideo,
-            let thumbnailData = currentVideo.thumbnailData,
-            let nsImage = NSImage(data: thumbnailData) {
-             Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+         if let currentVideo = wallpaperManager.currentVideo, currentVideo.bookmarkData != nil {
+             LiveVideoPreviewView(video: currentVideo, bookmarkActor: wallpaperManager.bookmarkActor)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
           } else {
-             // Task 2.7: surface the preserved empty-state view when there are no
-             // videos at all; a simple black background remains for the edge case
-             // of videos present but no currentVideo.
              ZStack {
                  Color.black
                      .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -136,12 +159,29 @@ struct ContentView: View {
      ///                                 library_row_*, bottom_bar_video_count
      @ViewBuilder
     private var floatingControlsLayer: some View {
-          // Task 2.2: top-left decorative traffic-light glass pill added.
-          // Tasks 2.3-2.6 add the transport pill, library-toggle button, library
+          // Tasks 2.3-2.6 add the transport pill, top-trailing controls, library
           // rail, and rotation bar as floating glass panels inside the SAME ZStack,
           // each with its own alignment/.position.
         ZStack(alignment: .topLeading) {
-            trafficLightPill
+             // Tap-outside-to-dismiss catcher for the library rail and
+             // settings panel: a near-invisible full-size layer placed BELOW
+             // every floating control in z-order (declared first, so
+             // transportPill/topTrailingControls/bottomGlassBar render on top
+             // and keep receiving their own taps), that only exists while
+             // one of the panels is visible and simply closes it on tap --
+             // mirrors how a native popover dismisses when you click outside it.
+            if isLibraryRailVisible || showSettings {
+                Color.black.opacity(0.001)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isLibraryRailVisible = false
+                            showSettings = false
+                        }
+                    }
+                    .accessibilityHidden(true)
+            }
 
              // Task 2.3: top-center glass transport pill. Spans the full layered
              // width so it centers horizontally, anchored to the top edge with the
@@ -151,11 +191,20 @@ struct ContentView: View {
                   .frame(maxWidth: .infinity, alignment: .top)
                   .padding(.top, LiquidGlassMetrics.outerMargin)
 
-             // Task 2.4: top-right glass library-toggle button. Anchored to the
-             // top-trailing edge with the shared outer margin on the top and trailing
-             // sides (mirrors `trafficLightPill`, which sits top-leading). The rail it
-             // reveals arrives in task 2.5.
-            libraryToggleButton
+             // Top-trailing control group: settings and library-toggle sit
+             // together on the right (the native traffic lights are the only
+             // thing at the top-left, so nothing else competes with them for
+             // space there), matching icon sizes between the two.
+            topTrailingControls
+                // `containerRelativeFrame(.horizontal)` sizes THIS view to a
+                // fraction of the ZStack's width and then places it inside
+                // that ZStack per its own `.topLeading` alignment -- so a
+                // 30%-wide box (meant for the transport pill's marquee
+                // effect) ended up anchoring the settings/library icons near
+                // the LEFT edge instead of the right. `.frame(maxWidth:
+                // .infinity, alignment: .trailing)` is the correct way to
+                // push a compact, content-sized view to the trailing edge of
+                // a wider parent.
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.top, LiquidGlassMetrics.outerMargin)
                 .padding(.trailing, LiquidGlassMetrics.outerMargin)
@@ -169,69 +218,68 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(.top, LiquidGlassMetrics.pillHeight + LiquidGlassMetrics.outerMargin * 2)
                 .padding(.trailing, LiquidGlassMetrics.outerMargin)
+                // Clears the bottom glass bar (height + its own bottom margin),
+                // which otherwise overlaps the rail's last row and blocks its
+                // per-card action buttons (set wallpaper / delete / shuffle).
+                .padding(.bottom, LiquidGlassMetrics.bottomBarHeight + LiquidGlassMetrics.outerMargin * 2)
+                .transition(.move(edge: .trailing))
+            }
+
+            // Settings floating panel: same top-trailing anchor and z-order
+            // as the library rail (never shown at the same time -- opening
+            // one closes the other, see `topTrailingControls`), replacing the
+            // old modal `.sheet` so it can be dismissed by tapping outside it
+            // like a native popover, via the shared catcher above.
+            if showSettings {
+                settingsPanel
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.top, LiquidGlassMetrics.pillHeight + LiquidGlassMetrics.outerMargin * 2)
+                .padding(.trailing, LiquidGlassMetrics.outerMargin)
                 .padding(.bottom, LiquidGlassMetrics.outerMargin)
                 .transition(.move(edge: .trailing))
             }
             // Task 2.6: bottom glass bar with the auto-rotation controls and
-            // video count. Anchored to the bottom edge of the layered controls
-            // with the shared outer margin; spans the full width so the
-            // controls stay horizontally distributed.
+            // video count. Anchored to the bottom edge of the layered controls,
+            // centered, and sized to `bottomBarWidthRatio` of the window's
+            // current width so it reads as a distinct, narrower control strip
+            // rather than spanning edge to edge like the top-row pills.
             bottomGlassBar
+                .frame(width: windowSize.width > 0 ? windowSize.width * LiquidGlassMetrics.bottomBarWidthRatio : nil)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .padding(.bottom, LiquidGlassMetrics.outerMargin)
             }
      }
 
-      /// Top-left glass pill for the main window's floating-glass layer.
-      ///
-      /// Combines the decorative macOS-style traffic-light dots (close / minimize
-      /// / zoom - visual only, the real window controls remain the system-provided
-      /// native chrome) with the app's settings entry point. The settings button
-      /// is the only way to reach `SettingsView` once the old `sidebarView` (whose
-      /// `sidebar_settings_button` previously opened it) is retired in tasks
-      /// 2.8/2.9 - design.md/spec.md did not carve out a dedicated settings
-      /// control for the new floating layout, so it lives here alongside the
-      /// other top-left window chrome. Rendered with the shared light
-      /// `glassSurface()` treatment and sized to the standard
-      /// `LiquidGlassMetrics.pillHeight` (36px), placed at the top-left with the
-      /// shared `LiquidGlassMetrics.outerMargin` (20px) clearance from the window
-      /// edge via the outer `.padding` below (the host ZStack is `.topLeading`).
+      /// Top-trailing glass control group for the main window's floating-glass
+      /// layer: settings entry point and library-toggle button, side by side,
+      /// both on the right so neither competes with the native traffic lights
+      /// (top-left) or the transport pill (top-center). Both buttons share the
+      /// same `LiquidGlassMetrics.pillHeight` (36px) and `.imageScale(.medium)`
+      /// icon size so they read as one consistent pair rather than two
+      /// mismatched controls.
       @ViewBuilder
-    private var trafficLightPill: some View {
-        HStack(spacing: 8) {
-             // Decorative dots only - no tappable actions. Colors reference the
-             // macOS window-control palette (close / minimize / zoom).
-            HStack(spacing: 8) {
-                Circle()
-                     .fill(Color(red: 1.0, green: 0x5F / 255.0, blue: 0x57 / 255.0))
-                     .frame(width: 12, height: 12)
-                Circle()
-                     .fill(Color(red: 0xFE / 255.0, green: 0xBC / 255.0, blue: 0x2E / 255.0))
-                     .frame(width: 12, height: 12)
-                Circle()
-                     .fill(Color(red: 0x28 / 255.0, green: 0xC8 / 255.0, blue: 0x40 / 255.0))
-                     .frame(width: 12, height: 12)
-             }
-             .accessibilityHidden(true)
-
-            Divider()
-                 .frame(height: 16)
-                 .overlay(LiquidGlassMetrics.dividerColor)
-
+    private var topTrailingControls: some View {
+        HStack(spacing: 12) {
              // Settings entry point - the only way to reach `SettingsView` once
              // the old `sidebarView`'s `sidebar_settings_button` is retired.
-            Button(action: { showSettings = true }) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isLibraryRailVisible = false
+                    showSettings.toggle()
+                }
+             }) {
                 Image(systemName: "gearshape.fill")
-                     .imageScale(.small)
+                     .imageScale(.medium)
              }
              .buttonStyle(.borderless)
+             .padding(.horizontal, 12)
+             .frame(height: LiquidGlassMetrics.pillHeight)
+             .glassSurface()
              .accessibilityIdentifier("main_settings_button")
              .accessibilityLabel(NSLocalizedString("settings_button", comment: "Settings button"))
+
+            libraryToggleButton
          }
-         .padding(.horizontal, 12)
-         .frame(height: LiquidGlassMetrics.pillHeight)
-         .glassSurface()
-         .padding(LiquidGlassMetrics.outerMargin)
      }
 
     /// Top-center glass transport pill for the main window's floating-glass layer.
@@ -244,7 +292,7 @@ struct ContentView: View {
     /// mode. `previous` is disabled when the manager reports it is unavailable.
     @ViewBuilder
     private var transportPill: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) {
              // Previous wallpaper - disabled when no earlier video is available.
             Button(action: {
                 Task {
@@ -256,6 +304,7 @@ struct ContentView: View {
               .buttonStyle(.borderless)
               .disabled(!wallpaperManager.canGoToPreviousWallpaper)
               .accessibilityIdentifier("main_transport_previous_button")
+              .padding(.horizontal, 4)
 
              // Play/Stop button - same local-mirror pattern as `sidebarView`.
             Button(action: {
@@ -272,17 +321,28 @@ struct ContentView: View {
               .buttonStyle(.borderless)
               .imageScale(.large)
               .accessibilityIdentifier("main_transport_play_toggle_button")
+              .padding(.horizontal, 4)
 
              // Current wallpaper filename, with a localized fallback when nil.
-            Text(
-                wallpaperManager.currentVideo?.name
-                        ?? NSLocalizedString("no_active_wallpaper", comment: "No active wallpaper")
-             )
-              .font(.subheadline)
-              .foregroundStyle(.primary)
-              .lineLimit(1)
-              .multilineTextAlignment(.center)
-              .frame(minWidth: 120, alignment: .center)
+             // MarqueeText scrolls long filenames (same pattern as
+             // StatusBarMenuView); .id() resets the scroll when the video changes.
+            Group {
+                if let currentVideo = wallpaperManager.currentVideo {
+                    MarqueeText(text: currentVideo.name, font: .subheadline, foregroundColor: .primary)
+                        .id(currentVideo.name)
+                } else {
+                    Text(NSLocalizedString("no_active_wallpaper", comment: "No active wallpaper"))
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.center)
+                }
+             }
+              // `MarqueeText`'s internal `GeometryReader` has no intrinsic
+              // width, so without a `maxWidth` cap here it greedily fills all
+              // remaining HStack space and stretches the whole pill edge to
+              // edge instead of staying a compact floating control.
+              .frame(minWidth: 120, maxWidth: 220, alignment: .center)
 
              // Next wallpaper.
             Button(action: {
@@ -294,8 +354,34 @@ struct ContentView: View {
              }
               .buttonStyle(.borderless)
               .accessibilityIdentifier("main_transport_next_button")
+              .padding(.horizontal, 4)
+
+            Divider()
+                 .frame(height: 16)
+                 .overlay(LiquidGlassMetrics.dividerColor)
+
+             // Mute/unmute - same `UserDefaults`/`MuteVideo` logic previously
+             // only reachable via the dead `sidebarView`'s `sidebar_mute_button`.
+             // Also pushes the new value to any already-playing desktop
+             // wallpaper windows, since they read this preference once at
+             // player setup and otherwise wouldn't pick up the change until
+             // the video/window was recreated.
+            Button(action: {
+                isMuteEnabled.toggle()
+                wallpaperManager.applyMuteSettingToActiveWindows()
+             }) {
+                Image(systemName: isMuteEnabled ? "speaker.slash.fill" : "speaker.wave.2.fill")
+             }
+              .buttonStyle(.borderless)
+              .accessibilityIdentifier("main_transport_mute_button")
+              .padding(.horizontal, 4)
+              .accessibilityLabel(
+                isMuteEnabled
+                    ? NSLocalizedString("unmute_button", comment: "Unmute button")
+                    : NSLocalizedString("mute_button", comment: "Mute button")
+              )
         }
-        .frame(height: LiquidGlassMetrics.pillHeight)
+        .frame(height: LiquidGlassMetrics.bottomBarHeight)
         .glassSurface()
     }
 
@@ -314,13 +400,15 @@ struct ContentView: View {
              // Local show/hide state -- not persisted (design decision 4).
              // The library rail consumed by this flag arrives in task 2.5.
              withAnimation(.easeInOut(duration: 0.2)) {
+                 showSettings = false
                  isLibraryRailVisible.toggle()
              }
          }) {
-             Image(systemName: "rectangle.grid.1x2")
-                 .imageScale(.large)
+             Image(systemName: "square.grid.2x2")
+                 .imageScale(.medium)
          }
          .buttonStyle(.borderless)
+         .padding(.horizontal, 12)
          .frame(height: LiquidGlassMetrics.pillHeight)
          .glassSurface()
          .accessibilityIdentifier("main_library_toggle_button")
@@ -379,9 +467,14 @@ struct ContentView: View {
                   .padding(.vertical, 16)
               } else {
                  ScrollView {
-                     LazyVStack(spacing: 8) {
-                         ForEach(wallpaperManager.videoFiles, id: \.id) { video in
-                             libraryRow(video: video)
+                     LazyVStack(spacing: 12) {
+                         ForEach(Array(wallpaperManager.videoFiles.enumerated()), id: \.element.id) { index, video in
+                             libraryRow(video: video, index: index)
+                                 .onDrop(of: [.text], delegate: VideoDropDelegate(
+                                    wallpaperManager: wallpaperManager,
+                                    currentIndex: index,
+                                    isShuffleMode: localIsShuffleMode
+                                 ))
                           }
                       }
                       .padding(.horizontal, 4)
@@ -391,20 +484,60 @@ struct ContentView: View {
          .padding(LiquidGlassMetrics.cardCornerRadius)
          .frame(width: LiquidGlassMetrics.railWidth)
          .glassDarkSurface()
+         // Without `.contain`, this container's own identifier leaks onto
+         // every descendant (including ones with their own identifier, e.g.
+         // `library_import_button`), overriding them in the AX tree.
+         .accessibilityElement(children: .contain)
          .accessibilityIdentifier("library_rail")
      }
 
-      /// Compact library-rail row for a single video.
+      /// Top-right floating settings panel for the main window's
+      /// floating-glass layer.
       ///
-      /// Shows a thumbnail (when available) plus the video name and path, and an
-      /// accent dot/badge when this video is the current wallpaper. Tapping sets
-      /// `selectedVideo` (the same selection state used elsewhere in the view).
+      /// Replaces the old modal `.sheet(isPresented: $showSettings)`
+      /// presentation with an inline `SettingsView`, anchored the same way as
+      /// `libraryRail` so it can be dismissed by tapping outside it (via the
+      /// shared catcher in `floatingControlsLayer`) instead of requiring its
+      /// own Cancel/Accept button.
       @ViewBuilder
-     private func libraryRow(video: VideoFile) -> some View {
+     private var settingsPanel: some View {
+         SettingsView(onClose: {
+             withAnimation(.easeInOut(duration: 0.2)) {
+                 showSettings = false
+             }
+         })
+         .environmentObject(wallpaperManager)
+         .environmentObject(launchManager)
+         .accessibilityElement(children: .contain)
+         .accessibilityIdentifier("settings_panel")
+     }
+
+      /// Full-width 16:9 library-rail card for a single video.
+      ///
+      /// Anatomy matches the mockup: thumbnail (with an on-demand resolution
+      /// badge and an "EN PANTALLA" badge on the active card), filename, and a
+      /// per-card action row - set as background, delete, reorder (drag handle),
+      /// and an "en aleatorio" (include-in-shuffle) checkbox - wired to the same
+      /// `wallpaperManager`/`selectedVideo` calls the dead `sidebarView`/
+      /// `VideoThumbnailCard` already used.
+      @ViewBuilder
+     private func libraryRow(video: VideoFile, index: Int) -> some View {
          let isActive = wallpaperManager.currentVideo?.id == video.id
 
-         HStack(spacing: 10) {
-              // Thumbnail or fallback placeholder.
+         VStack(alignment: .leading, spacing: 8) {
+              // Thumbnail (16:9) with badges overlay.
+             //
+             // The badges are attached via `.overlay(alignment:)` on the
+             // ALREADY-SIZED thumbnail `Group` rather than as a `ZStack`
+             // sibling. A `ZStack` re-negotiates size across every child
+             // simultaneously, and `aspectRatio(...) .frame(maxWidth:
+             // .infinity)` inside a `LazyVStack` can resolve to an
+             // oversized/ambiguous proposal in that negotiation -- which
+             // silently anchored the "EN PANTALLA" badge to a frame far
+             // wider than what's actually visible, pushing it outside the
+             // card. `.overlay` positions its content strictly against the
+             // base view's own already-resolved frame, so the badge can
+             // never be placed (or clipped) relative to the wrong size.
              Group {
                  if let thumbnailData = video.thumbnailData,
                     let nsImage = NSImage(data: thumbnailData) {
@@ -412,34 +545,89 @@ struct ContentView: View {
                           .resizable()
                           .aspectRatio(contentMode: .fill)
                   } else {
-                     RoundedRectangle(cornerRadius: 6)
+                     RoundedRectangle(cornerRadius: LiquidGlassMetrics.controlCornerRadius)
                           .fill(Color.white.opacity(0.10))
                   }
               }
-              .frame(width: 64, height: 36)
-              .clipShape(RoundedRectangle(cornerRadius: 6))
+              .frame(maxWidth: .infinity)
+              .aspectRatio(16.0 / 9.0, contentMode: .fill)
+              .clipShape(RoundedRectangle(cornerRadius: LiquidGlassMetrics.controlCornerRadius))
+              .overlay(alignment: .topTrailing) {
+                 VStack(alignment: .trailing, spacing: 4) {
+                     if isActive {
+                         Text(NSLocalizedString("on_screen_badge", comment: "On-screen badge"))
+                              .font(.system(size: 10, weight: .semibold))
+                              .lineLimit(1)
+                              .fixedSize()
+                              .padding(.horizontal, 6)
+                              .padding(.vertical, 3)
+                              .background(LiquidGlassMetrics.accentColor, in: Capsule())
+                              .foregroundStyle(.white)
+                              .accessibilityIdentifier("library_row_\(video.id)_on_screen_badge")
+                      }
+                     LibraryRowResolutionBadge(video: video, bookmarkActor: wallpaperManager.bookmarkActor)
+                  }
+                  .padding(6)
+              }
 
               // Name + path.
              VStack(alignment: .leading, spacing: 2) {
                  Text(video.name)
-                      .font(.system(size: 12, weight: .medium))
+                      .font(.system(size: 13, weight: .medium))
                       .lineLimit(1)
                  Text(video.url.lastPathComponent)
-                      .font(.system(size: 10))
+                      .font(.system(size: 11))
                       .foregroundStyle(.secondary)
                       .lineLimit(1)
               }
-              .frame(maxWidth: .infinity, alignment: .leading)
 
-              // Active badge (accent color) -- only for the current wallpaper.
-             if isActive {
-                 Circle()
-                      .fill(LiquidGlassMetrics.accentColor)
-                      .frame(width: 8, height: 8)
+              // Per-card actions: set as background, delete, reorder, shuffle-inclusion.
+             HStack(spacing: 14) {
+                 Button(action: { wallpaperManager.setAsCurrentWallpaper(video: video) }) {
+                     Image(systemName: "pin.fill")
+                  }
+                  .buttonStyle(.borderless)
+                  .help(NSLocalizedString("set_as_wallpaper", comment: "Set as wallpaper"))
+                  .accessibilityIdentifier("library_row_\(video.id)_set_wallpaper_button")
+
+                 Button(action: {
+                     wallpaperManager.removeVideo(video)
+                     if selectedVideo?.id == video.id { selectedVideo = nil }
+                  }) {
+                     Image(systemName: "trash")
+                  }
+                  .buttonStyle(.borderless)
+                  .help(NSLocalizedString("delete_button", comment: "Delete"))
+                  .accessibilityIdentifier("library_row_\(video.id)_delete_button")
+
+                 Toggle(isOn: Binding(
+                     get: { video.isEnabledForRandomPlay },
+                     set: { _ in wallpaperManager.toggleVideoRandomPlayEnabled(video) }
+                 )) {
+                     Image(systemName: "shuffle")
+                 }
+                 .toggleStyle(.button)
+                 .buttonStyle(.borderless)
+                 .help(NSLocalizedString(
+                    video.isEnabledForRandomPlay ? "disable_for_random" : "enable_for_random",
+                    comment: "Include in shuffle rotation"
+                 ))
+                 .accessibilityIdentifier("library_row_\(video.id)_shuffle_toggle")
+
+                 Spacer(minLength: 4)
+
+                 // Reorder drag handle.
+                 Image(systemName: "line.3.horizontal")
+                      .foregroundStyle(.secondary)
+                      .accessibilityIdentifier("library_row_\(video.id)_reorder_handle")
+                      .onDrag {
+                          let indexString = "\(index)" as NSString
+                          return NSItemProvider(object: indexString)
+                      }
               }
+              .imageScale(.medium)
          }
-         .padding(.vertical, 6)
-         .padding(.horizontal, 8)
+         .padding(10)
          .background(
              RoundedRectangle(cornerRadius: LiquidGlassMetrics.controlCornerRadius)
                  .fill(isActive ? LiquidGlassMetrics.accentColor.opacity(0.15) : Color.white.opacity(0.06))
@@ -453,6 +641,9 @@ struct ContentView: View {
          )
          .contentShape(Rectangle())
          .onTapGesture { selectedVideo = video }
+         // See `libraryRail`: without `.contain`, this row's own identifier
+         // would leak onto its per-card action buttons, overriding them.
+         .accessibilityElement(children: .contain)
          .accessibilityIdentifier("library_row_\(video.id)")
      }
 
@@ -518,232 +709,10 @@ struct ContentView: View {
                     .accessibilityIdentifier("bottom_bar_video_count")
             }
             .padding(.horizontal, 12)
-            .frame(height: LiquidGlassMetrics.pillHeight)
+            .frame(height: LiquidGlassMetrics.bottomBarHeight)
             .glassSurface()
         }
 
-
-        @ViewBuilder
-            private var sidebarView: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Playback Controls Section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(NSLocalizedString("playback_section", comment: "Playback section header"))
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(1.2)
-                    
-                    HStack(spacing: 8) {
-                        // Play/Stop Button
-                        Button(action: {
-                            if localIsPlaying {
-                                localIsPlaying = false
-                                wallpaperManager.stopWallpaperSafe()
-                            } else {
-                                localIsPlaying = true
-                                wallpaperManager.startWallpaperSafe()
-                            }
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: localIsPlaying ? "stop.fill" : "play.fill")
-                                Text(localIsPlaying ? NSLocalizedString("stop_button", comment: "Stop button") : NSLocalizedString("play_button", comment: "Play button"))
-                                    .font(.subheadline)
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.regular)
-                        .accessibilityIdentifier("sidebar_play_toggle_button")
-                        
-                        // Next Wallpaper Button
-                        Button(action: {
-                            Task {
-                                await wallpaperManager.nextWallpaper()
-                            }
-                        }) {
-                            Image(systemName: "forward.fill")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
-                        .accessibilityIdentifier("sidebar_next_button")
-                    }
-                }
-                
-                Divider()
-                
-                // Auto-Change Section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(NSLocalizedString("auto_change_section_header", comment: "Auto-change section header"))
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(1.2)
-                    
-                    VStack(spacing: 12) {
-                        Toggle(NSLocalizedString("enable_auto_change", comment: "Enable auto-change toggle"), isOn: Binding(
-                            get: { wallpaperManager.isAutoChangeEnabled },
-                            set: { newValue in wallpaperManager.isAutoChangeEnabled = newValue }
-                        ))
-                        .toggleStyle(.switch)
-                        .accessibilityIdentifier("sidebar_autochange_toggle")
-                        
-                        if wallpaperManager.isAutoChangeEnabled {
-                            HStack {
-                                Text(NSLocalizedString("every_label", comment: "Every label for interval"))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                
-                                Spacer()
-                                
-                                Picker("", selection: Binding(
-                                    get: { Int(wallpaperManager.autoChangeInterval / 60) },
-                                    set: { newValue in wallpaperManager.autoChangeInterval = TimeInterval(newValue * 60) }
-                                )) {
-                                    ForEach([1, 2, 5, 10, 15, 30, 60], id: \.self) { minutes in
-                                        Text("\(minutes) min").tag(minutes)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .frame(width: 100)
-                                .accessibilityIdentifier("sidebar_interval_picker")
-                            }
-                        }
-                    }
-                }
-                
-                // Mode Selection Section (only visible when auto-change is enabled)
-                if wallpaperManager.isAutoChangeEnabled {
-                    Divider()
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(NSLocalizedString("mode_section", comment: "Mode section header"))
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(1.2)
-                        
-                        Picker("", selection: $localIsShuffleMode) {
-                            Text(NSLocalizedString("playlist_mode", comment: "Playlist mode")).tag(false)
-                            Text(NSLocalizedString("shuffle_mode", comment: "Shuffle mode")).tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        .accessibilityIdentifier("sidebar_mode_picker")
-                        .onChange(of: localIsShuffleMode) { newValue in
-                            wallpaperManager.isShuffleMode = newValue
-                        }
-                        .onChange(of: wallpaperManager.isShuffleMode) { newValue in
-                            if localIsShuffleMode != newValue {
-                                localIsShuffleMode = newValue
-                            }
-                        }
-                    }
-                }
-                
-                Divider()
-                
-                // Audio Section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(NSLocalizedString("audio_section", comment: "Audio section header"))
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(1.2)
-                    
-                    Button(action: {
-                        let currentMute = UserDefaults.standard.bool(forKey: "MuteVideo")
-                        UserDefaults.standard.set(!currentMute, forKey: "MuteVideo")
-                    }) {
-                        HStack {
-                            Image(systemName: UserDefaults.standard.bool(forKey: "MuteVideo") ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            Text(UserDefaults.standard.bool(forKey: "MuteVideo") ? NSLocalizedString("unmute_button", comment: "Unmute button") : NSLocalizedString("mute_button", comment: "Mute button"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("sidebar_mute_button")
-                }
-                
-                Spacer()
-                
-                Divider()
-                
-                // Settings & Import Buttons
-                VStack(spacing: 8) {
-                    Button(action: {
-                        isImporting = true
-                    }) {
-                        HStack {
-                            Image(systemName: "plus")
-                            Text(NSLocalizedString("import_button", comment: "Import button"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("sidebar_import_button")
-                    
-                    Button(action: {
-                        showSettings = true
-                    }) {
-                        HStack {
-                            Image(systemName: "gear")
-                            Text(NSLocalizedString("settings_button", comment: "Settings button"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("sidebar_settings_button")
-                }
-            }
-            .padding()
-        }
-        .background(.ultraThinMaterial)
-    }
-    
-    /// Contenido principal con grid de videos
-    @ViewBuilder
-    private var mainContentView: some View {
-        if wallpaperManager.videoFiles.isEmpty {
-            // Estado vacío
-            emptyStateView
-        } else {
-            // Grid de videos
-            ScrollView {
-                LazyVGrid(columns: gridColumns, spacing: 16) {
-                    ForEach(Array(wallpaperManager.videoFiles.enumerated()), id: \.element.id) { index, video in
-                        VideoThumbnailCard(
-                            video: video,
-                            isSelected: selectedVideo?.id == video.id,
-                            isActive: wallpaperManager.currentVideo?.id == video.id,
-                            index: index,
-                            isShuffleMode: localIsShuffleMode,
-                            onTap: {
-                                selectedVideo = video
-                                print("🎯 Video seleccionado: \(video.name) (ID: \(video.id))")
-                            },
-                            wallpaperManager: wallpaperManager
-                        )
-                        // PHASE 4: Drop delegate for drag & drop reordering
-                        .onDrop(of: [.text], delegate: VideoDropDelegate(
-                            wallpaperManager: wallpaperManager,
-                            currentIndex: index,
-                            isShuffleMode: localIsShuffleMode
-                        ))
-                    }
-                }
-                .padding()
-            }
-            .onReceive(wallpaperManager.$videoFiles) { videoFiles in
-                print("🔄 ContentView recibió actualización: \(videoFiles.count) videos")
-            }
-        }
-    }
-    
     /// Vista para estado vacío
     @ViewBuilder
     private var emptyStateView: some View {
@@ -861,192 +830,6 @@ struct ContentView: View {
 
 // MARK: - Componentes de UI
 
-    /// Tarjeta de miniatura para mostrar un video en el grid
-struct VideoThumbnailCard: View {
-    let video: VideoFile
-    let isSelected: Bool
-    let isActive: Bool
-    let index: Int  // Add index for drag & drop
-    let isShuffleMode: Bool  // Add shuffle mode flag
-    let onTap: () -> Void
-    let wallpaperManager: WallpaperManager
-    
-    @State private var isHovering: Bool = false
-    @State private var isDragging: Bool = false
-    
-    var body: some View {
-        // Using GlassCard instead of HoverableGlassCard to avoid gesture conflicts with drag & drop
-        GlassCard(padding: 8, cornerRadius: 12) {
-        VStack(spacing: 8) {
-            // Contenedor de miniatura
-            ZStack {
-                // Miniatura o icono por defecto
-                if let thumbnailData = video.thumbnailData, let nsImage = NSImage(data: thumbnailData) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 160, height: 90)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 160, height: 90)
-                        .overlay {
-                            Image(systemName: "video.slash")
-                                .font(.title2)
-                                .foregroundColor(.secondary)
-                        }
-                }
-                
-                // Video preview overlay on hover (with delay to allow drag to start)
-                if isHovering && !isDragging, video.bookmarkData != nil {
-                    VideoPreviewPlayer(video: video, bookmarkActor: wallpaperManager.bookmarkActor)
-                        .frame(width: 160, height: 90)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .transition(.opacity.animation(.easeInOut(duration: 0.2)))
-                        .allowsHitTesting(false) // Don't interfere with drag gestures
-                }
-                
-                // Indicadores superpuestos
-                VStack {
-                    HStack {
-                        Spacer()
-                        if isActive {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.white, .green)
-                                .font(.title3)
-                                .shadow(radius: 2)
-                        }
-                        if video.bookmarkData != nil {
-                            Image(systemName: "bookmark.fill")
-                                .foregroundColor(.blue)
-                                .font(.caption)
-                                .shadow(radius: 2)
-                        }
-                    }
-                    Spacer()
-                    
-                    // Bottom row: play indicator (left) and checkbox (right)
-                    HStack {
-                        // Indicador de reproducción si es el video activo
-                        if isActive {
-                            Image(systemName: "play.circle.fill")
-                                .foregroundStyle(.white, .blue)
-                                .font(.title2)
-                                .shadow(radius: 2)
-                        }
-                        
-                        Spacer()
-                        
-                        // Checkbox para aleatoriedad en bottom-right
-                        Toggle(isOn: Binding(
-                            get: { video.isEnabledForRandomPlay },
-                            set: { _ in wallpaperManager.toggleVideoRandomPlayEnabled(video) }
-                        )) {
-                            EmptyView()
-                        }
-                        .toggleStyle(.checkbox)
-                        .frame(width: 24, height: 24)
-                        .padding(8)
-                        .background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .accessibilityIdentifier("videoToggle_\(video.id)")
-                        .allowsHitTesting(true)
-                    }
-                }
-                .padding(6)
-            }
-            // Fix for binding synchronization bug: Force view recreation when video state changes
-            // by using .id() modifier. This ensures SwiftUI refreshes the view when the underlying
-            // video object in the array is mutated by toggleVideoRandomPlayEnabled().
-            .id(video.id)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
-            )
-            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-            
-            // Información del video
-            VStack(spacing: 2) {
-                Text(video.name)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 160)
-                
-                Text(video.url.lastPathComponent)
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: 160)
-            }
-            }
-         }
-        .onDrag {
-            // Drag & drop enabled in both modes (Playlist and Shuffle)
-            // User can organize library regardless of playback mode
-            
-            // Hide preview during drag
-            self.isDragging = true
-            self.isHovering = false
-            
-            print("📦 Drag started from card: index=\(index), video=\(video.name)")
-            
-            // Use NSString for better NSItemProvider compatibility
-            let indexString = "\(index)" as NSString
-            let provider = NSItemProvider(object: indexString)
-            
-            // Reset dragging state after drag ends
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.isDragging = false
-            }
-            
-            return provider
-        }
-        .onTapGesture {
-            onTap()
-        }
-        .contextMenu {
-            Button(NSLocalizedString("set_as_wallpaper", comment: "Set as wallpaper"), systemImage: "pin.fill") {
-                wallpaperManager.setAsCurrentWallpaper(video: video)
-            }
-            
-            Divider()
-            
-            Button(video.isEnabledForRandomPlay ? NSLocalizedString("disable_for_random", comment: "Disable for random rotation") : NSLocalizedString("enable_for_random", comment: "Enable for random rotation"), 
-                   systemImage: video.isEnabledForRandomPlay ? "minus.circle" : "plus.circle") {
-                wallpaperManager.toggleVideoRandomPlayEnabled(video)
-            }
-            
-            Divider()
-            
-            Button(NSLocalizedString("delete_button", comment: "Delete"), systemImage: "trash", role: .destructive) {
-                wallpaperManager.removeVideo(video)
-            }
-        }
-        .onAppear {
-            print("🔍 VideoThumbnailCard apareció: \(video.name) (ID: \(video.id))")
-        }
-        .onContinuousHover { phase in
-            switch phase {
-            case .active:
-                // Show preview immediately on hover (no delay needed)
-                // .onDrag only activates when user actually drags, not on hover
-                if !isDragging {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isHovering = true
-                    }
-                }
-            case .ended:
-                // Hide preview when hover ends
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isHovering = false
-                }
-            }
-        }
-    }
-}
-
 // Mantenemos VideoRowView por compatibilidad (por si se usa en otro lugar)
 struct VideoRowView: View {
     let video: VideoFile
@@ -1099,6 +882,181 @@ struct VideoRowView: View {
 
 /// Drop delegate for reordering videos via drag and drop
 /// Active in both Playlist and Shuffle modes for library organization
+// MARK: - Library Row Resolution Badge
+
+/// On-demand resolution badge for a library-rail card.
+///
+/// `VideoFile` does not persist the video's real pixel dimensions (its stored
+/// thumbnail is a fixed 120x80 clamp, not representative), and per design.md
+/// this change does not touch `WallpaperManager`/persistence to add a new
+/// stored field. Instead this reads the natural size directly from the
+/// video's `AVAsset` track each time the row appears, purely for display; the
+/// badge is simply omitted while loading or if it cannot be read.
+private struct LibraryRowResolutionBadge: View {
+    let video: VideoFile
+    let bookmarkActor: BookmarkActor
+
+    @State private var resolutionText: String?
+
+    var body: some View {
+        Group {
+            if let resolutionText {
+                Text(resolutionText)
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.black.opacity(0.5), in: Capsule())
+                    .foregroundStyle(.white)
+            }
+        }
+        .task(id: video.id) {
+            resolutionText = nil
+            guard let bookmarkData = video.bookmarkData else { return }
+            do {
+                let url = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
+                guard await bookmarkActor.startAccessingSecurityScopedResource(url: url) else { return }
+                defer { Task { await bookmarkActor.stopAccessingSecurityScopedResource(url: url) } }
+
+                let asset = AVURLAsset(url: url)
+                guard let track = try await asset.loadTracks(withMediaType: .video).first else { return }
+                let naturalSize = try await track.load(.naturalSize)
+                let transform = try await track.load(.preferredTransform)
+                let size = naturalSize.applying(transform)
+                let width = Int(abs(size.width))
+                let height = Int(abs(size.height))
+                if width > 0 && height > 0 {
+                    resolutionText = "\(width)×\(height)"
+                }
+            } catch {
+                // Best-effort presentation-only badge; silently omit on failure.
+            }
+        }
+    }
+}
+
+// MARK: - Live Main-Window Preview Player
+
+/// Full-bleed, muted, looping live preview of the active wallpaper video shown
+/// in the main window's `videoPreviewLayer`.
+///
+/// Mirrors `DesktopVideoWindowMejorada.setupPlayer(with:preloadedAsset:)`'s
+/// `AVQueuePlayer` + `AVPlayerLooper` + `AVPlayerLayer` pattern (muted,
+/// `.resizeAspectFill`) rather than embedding that `NSWindow` subclass
+/// directly, since it is tied to desktop-wallpaper window management. Updates
+/// the player item whenever `video` changes.
+struct LiveVideoPreviewView: NSViewRepresentable {
+    let video: VideoFile
+    let bookmarkActor: BookmarkActor
+
+    func makeNSView(context: Context) -> NSView {
+        let containerView = VideoPreviewContainerView()
+        containerView.wantsLayer = true
+        containerView.layer = CALayer()
+        containerView.layer?.backgroundColor = CGColor.black
+        configurePlayer(for: video, in: containerView, coordinator: context.coordinator)
+        return containerView
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard context.coordinator.currentVideoID != video.id else { return }
+        configurePlayer(for: video, in: nsView, coordinator: context.coordinator)
+    }
+
+    private func configurePlayer(for video: VideoFile, in containerView: NSView, coordinator: Coordinator) {
+        coordinator.currentVideoID = video.id
+        coordinator.teardown()
+
+        guard let bookmarkData = video.bookmarkData else { return }
+
+        Task {
+            do {
+                let resolvedURL = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
+                let accessGranted = await bookmarkActor.startAccessingSecurityScopedResource(url: resolvedURL)
+                guard accessGranted else { return }
+
+                await MainActor.run {
+                    guard coordinator.currentVideoID == video.id else {
+                        // A newer video was selected while resolving; drop this stale result.
+                        Task { await bookmarkActor.stopAccessingSecurityScopedResource(url: resolvedURL) }
+                        return
+                    }
+
+                    let playerItem = AVPlayerItem(url: resolvedURL)
+                    let queuePlayer = AVQueuePlayer(playerItem: playerItem)
+                    queuePlayer.volume = 0
+                    queuePlayer.isMuted = true
+
+                    let looper = AVPlayerLooper(player: queuePlayer, templateItem: playerItem)
+
+                    let playerLayer = AVPlayerLayer(player: queuePlayer)
+                    playerLayer.videoGravity = .resizeAspectFill
+                    playerLayer.frame = containerView.bounds
+                    containerView.layer?.addSublayer(playerLayer)
+                    (containerView as? VideoPreviewContainerView)?.playerLayer = playerLayer
+
+                    coordinator.player = queuePlayer
+                    coordinator.looper = looper
+                    coordinator.playerLayer = playerLayer
+                    coordinator.bookmarkActor = bookmarkActor
+                    coordinator.resolvedURL = resolvedURL
+
+                    queuePlayer.play()
+                }
+            } catch {
+                print("❌ LiveVideoPreviewView: Failed to resolve bookmark: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.teardown()
+    }
+
+    final class Coordinator {
+        var currentVideoID: UUID?
+        var player: AVQueuePlayer?
+        var looper: AVPlayerLooper?
+        var playerLayer: AVPlayerLayer?
+        var bookmarkActor: BookmarkActor?
+        var resolvedURL: URL?
+
+        func teardown() {
+            player?.pause()
+            player?.removeAllItems()
+            looper?.disableLooping()
+            looper = nil
+            player = nil
+            playerLayer?.removeFromSuperlayer()
+            playerLayer = nil
+
+            if let resolvedURL = resolvedURL, let bookmarkActor = bookmarkActor {
+                Task { await bookmarkActor.stopAccessingSecurityScopedResource(url: resolvedURL) }
+            }
+            resolvedURL = nil
+        }
+    }
+}
+
+/// Backing view for `LiveVideoPreviewView` that keeps its `AVPlayerLayer`
+/// filling the view's bounds across AppKit-driven resizes (window resize,
+/// split-view/rail changes) that don't go through SwiftUI's `updateNSView`.
+/// `updateNSView` only re-runs when this representable's own inputs change,
+/// not merely because the host window resized, so relying on it to keep the
+/// layer's frame in sync left stale (non-fullscreen) video during a resize.
+/// Overriding `layout()` lets AppKit itself keep the layer's frame current.
+final class VideoPreviewContainerView: NSView {
+    var playerLayer: AVPlayerLayer?
+
+    override func layout() {
+        super.layout()
+        playerLayer?.frame = bounds
+    }
+}
+
 // MARK: - Video Preview Player
 /// Component that displays a looping video preview on hover
 struct VideoPreviewPlayer: NSViewRepresentable {

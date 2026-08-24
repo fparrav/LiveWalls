@@ -6,7 +6,7 @@
 set -e
 
 PROJECT_NAME="LiveWalls"
-WORKSPACE_DIR="/Users/felipe/source-code/swift/LiveWalls"
+WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${WORKSPACE_DIR}/build"
 DERIVED_DATA_DIR="${BUILD_DIR}/DerivedData"
 

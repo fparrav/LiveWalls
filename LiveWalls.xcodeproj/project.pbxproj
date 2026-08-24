@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		61D705F2786D39DF9CC2FA97 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE659E300FC697EC0C200769 /* GlassCard.swift */; };
+		30ACE1B98B2F445396A38243 /* WindowAccessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A647D9281A53467CB8244436 /* WindowAccessor.swift */; };
+		1293B5974B65412593AF0B40 /* MarqueeText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80AC59EBEB664B1FAD06E31B /* MarqueeText.swift */; };
 		1A2B3C4D5E6F7890ABCD1234 /* PersistenceActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */; };
 		1E989763C576060F77A4B154 /* PlaybackHealthChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D8281213FF821B3EB49E72 /* PlaybackHealthChecker.swift */; };
 		2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */; };
@@ -76,6 +78,8 @@
 
 /* Begin PBXFileReference section */
 		BE659E300FC697EC0C200769 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		A647D9281A53467CB8244436 /* WindowAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAccessor.swift; sourceTree = "<group>"; };
+		80AC59EBEB664B1FAD06E31B /* MarqueeText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarqueeText.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActor.swift; sourceTree = "<group>"; };
 		2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActorTests.swift; sourceTree = "<group>"; };
 		30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaybackHealthCheckerTests.swift; sourceTree = "<group>"; };
@@ -294,7 +298,9 @@
 				A9D8281213FF821B3EB49E72 /* PlaybackHealthChecker.swift */,
 				412CE12ADD8B4EED8D0A5283 /* VideoPreloader.swift */,
 			
-				BE659E300FC697EC0C200769 /* GlassCard.swift */,);
+				BE659E300FC697EC0C200769 /* GlassCard.swift */,
+				A647D9281A53467CB8244436 /* WindowAccessor.swift */,
+			80AC59EBEB664B1FAD06E31B /* MarqueeText.swift */,);
 			path = LiveWalls;
 			sourceTree = "<group>";
 		};
@@ -487,7 +493,9 @@
 				55846EBE2EBF778A00E46C3B /* WindowCreationCoordinator.swift in Sources */,
 				72BF47E36CA54AACAFD3EFEC /* VideoPreloader.swift in Sources */,
 			
-				61D705F2786D39DF9CC2FA97 /* GlassCard.swift in Sources */,);
+				61D705F2786D39DF9CC2FA97 /* GlassCard.swift in Sources */,
+				30ACE1B98B2F445396A38243 /* WindowAccessor.swift in Sources */,
+			1293B5974B65412593AF0B40 /* MarqueeText.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 	AAAA11112222333344440005 /* Sources */ = {
@@ -705,8 +713,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LiveWalls/LiveWalls.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 202511111819;
 				DEAD_CODE_STRIPPING = YES;
@@ -743,8 +751,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LiveWalls/LiveWalls.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 202511111819;
 				DEAD_CODE_STRIPPING = YES;

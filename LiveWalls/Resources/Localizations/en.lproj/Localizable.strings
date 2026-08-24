@@ -69,6 +69,7 @@
 "playback_mode_picker" = "Playback Mode";
 "mute_button" = "Mute";
 "unmute_button" = "Unmute";
+"on_screen_badge" = "ON SCREEN";
 
 /* Settings - Information */
 "videos_saved" = "Videos saved: %d";

@@ -232,11 +232,10 @@ public class DesktopVideoWindowMejorada: NSWindow {
                         newPlayerItem.canUseNetworkResourcesForLiveStreamingWhilePaused = false
                         
                         let newQueuePlayer = AVQueuePlayer(playerItem: newPlayerItem)
-                        
+
                         // Optimized configuration for background playback
-                        newQueuePlayer.volume = 0.0
                         newQueuePlayer.automaticallyWaitsToMinimizeStalling = false
-                        newQueuePlayer.isMuted = true
+                        Self.applyMuteSetting(to: newQueuePlayer)
                         
                         // PHASE 2: Set up AVPlayerLooper for seamless looping (replaces manual seek)
                         let newLooper = AVPlayerLooper(player: newQueuePlayer, templateItem: newPlayerItem)
@@ -352,7 +351,26 @@ public class DesktopVideoWindowMejorada: NSWindow {
         memoryLogger.info("✅ Reproducción activada exitosamente")
         return true
     }
-    
+
+    /// Applies the user's "MuteVideo" preference (`UserDefaults` key
+    /// `"MuteVideo"`) to a player: `true` means silence the wallpaper,
+    /// `false` lets it play at full volume. Shared by initial setup and by
+    /// `updateMuteSetting()` so a later preference change can be applied to
+    /// an already-playing wallpaper without needing to reload it.
+    private static func applyMuteSetting(to player: AVQueuePlayer) {
+        let isMuted = UserDefaults.standard.bool(forKey: "MuteVideo")
+        player.isMuted = isMuted
+        player.volume = isMuted ? 0.0 : 1.0
+    }
+
+    /// Re-reads the "MuteVideo" preference and applies it to the currently
+    /// playing wallpaper, so toggling mute in the UI takes effect immediately
+    /// instead of only on the next video/window setup.
+    public func updateMuteSetting() {
+        guard let player = player else { return }
+        Self.applyMuteSetting(to: player)
+    }
+
     /// Muestra una imagen estática como placeholder mientras se carga el video
     private func showStaticPlaceholder(from url: URL) {
         guard let contentView = self.contentView else { return }

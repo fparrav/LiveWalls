@@ -97,7 +97,7 @@ import XCTest
         }
         
         // MARK: - Tests consolidados con identificadores de accesibilidad
-        
+
          /// Test de diagnóstico: verificar qué elementos encuentra XCTest
          /// Útil para debugging cuando los tests fallan
          func testDiagnosticUIHierarchy() {
@@ -232,14 +232,45 @@ import XCTest
         /// Test de estado inicial del picker (Playlist por defecto)
         func testPlaybackModePickerReflectsCurrentState() {
             ensureAutoChangeEnabled()
-            
+
             let picker = app.segmentedControls["bottom_bar_mode_picker"]
             XCTAssertTrue(picker.waitForExistence(timeout: 3), "El picker de modo de reproducción debería existir")
-            
+
             let playlistButton = picker.buttons.element(boundBy: 0)
             XCTAssertTrue(playlistButton.waitForExistence(timeout: 3), "El segmento Playlist debería existir")
-            
+
             // Por defecto debería estar en modo Playlist
             XCTAssertEqual(playlistButton.value as? String, "1", "Por defecto debería estar en modo Playlist")
+        }
+
+        // MARK: - Mute control and library-card actions (relocated from the dead sidebar)
+
+        /// Test de existencia del control de silencio en el pill de transporte flotante.
+        /// Reemplaza al antiguo `sidebar_mute_button`, ahora retirado junto con `sidebarView`.
+        func testMuteControlExists() {
+            let muteButton = app.buttons["main_transport_mute_button"]
+            XCTAssertTrue(muteButton.waitForExistence(timeout: 3), "El botón de silencio en el pill de transporte debería existir")
+        }
+
+        /// Test de las acciones por tarjeta en la biblioteca (establecer como fondo,
+        /// eliminar, incluir en aleatorio, reordenar) cuando hay al menos un video
+        /// importado. Si la biblioteca está vacía se omite el test en lugar de
+        /// fallar, igual que el resto de los tests de este archivo que dependen
+        /// de contenido de biblioteca.
+        func testLibraryCardActionsExistWhenVideoPresent() throws {
+            let rail = revealLibraryRailIfNeeded()
+
+            let firstRow = rail.otherElements
+                .matching(NSPredicate(format: "identifier BEGINSWITH 'library_row_'"))
+                .firstMatch
+            guard firstRow.waitForExistence(timeout: 2) else {
+                throw XCTSkip("No hay videos en la biblioteca para verificar las acciones por tarjeta")
+            }
+
+            let rowID = firstRow.identifier
+            XCTAssertTrue(rail.buttons["\(rowID)_set_wallpaper_button"].exists, "La acción 'establecer como fondo' debería existir")
+            XCTAssertTrue(rail.buttons["\(rowID)_delete_button"].exists, "La acción 'eliminar' debería existir")
+            XCTAssertTrue(rail.buttons["\(rowID)_shuffle_toggle"].exists, "El control 'incluir en aleatorio' debería existir")
+            XCTAssertTrue(rail.images["\(rowID)_reorder_handle"].exists, "El control para reordenar debería existir")
         }
     }

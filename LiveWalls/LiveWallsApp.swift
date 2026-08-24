@@ -42,7 +42,8 @@ struct LiveWallsApp: App {
                     }
                 }
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
+        .windowStyle(.hiddenTitleBar)
         .defaultPosition(.center)
         
         MenuBarExtra("Live Walls", image: "statusbar-icon") {
@@ -50,11 +51,20 @@ struct LiveWallsApp: App {
                 .environmentObject(wallpaperManager)
                 .environmentObject(launchManager)
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
         
         WindowGroup(id: "about") {
             AboutView()
         }
+        // Without this, the WindowGroup opens at its own default system size
+        // (larger than `AboutView`'s fixed 360x420 content) and only shrinks
+        // to fit *after* `AboutView`'s `WindowAccessor` callback runs on the
+        // next run-loop turn -- visible as a plain opaque rectangle bleeding
+        // past the rounded glass card until then, and the size mismatch also
+        // interferes with how the `.regularMaterial` blur composites against
+        // the window backing. Sizing the window to its content up front (the
+        // way the scene is declared, not as an AppKit post-fix) avoids both.
+        .windowResizability(.contentSize)
     }
     
     init() {

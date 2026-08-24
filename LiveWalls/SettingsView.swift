@@ -6,7 +6,11 @@ import CoreGraphics
 struct SettingsView: View {
     @EnvironmentObject var wallpaperManager: WallpaperManager
     @EnvironmentObject var launchManager: LaunchManager
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
+    /// Closes the panel. Called instead of a `.sheet`'s automatic dismissal
+    /// now that this view is presented as a floating glass panel (in
+    /// `ContentView`'s `floatingControlsLayer`) rather than a modal sheet.
+    let onClose: () -> Void
     // Current version for display
     private let currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
     
@@ -42,7 +46,8 @@ struct SettingsView: View {
     private let minIntervalMinutes = 1
     private let maxIntervalMinutes = 120
 
-    init() {
+    init(onClose: @escaping () -> Void) {
+        self.onClose = onClose
         // Cargar valores actuales de UserDefaults
         let autoStart = UserDefaults.standard.bool(forKey: "AutoStartWallpaper")
         let mute = UserDefaults.standard.bool(forKey: "MuteVideo")
@@ -85,6 +90,11 @@ struct SettingsView: View {
             bottomButtonsView
         }
         .frame(width: 480, height: 600)
+        // Now presented as a floating glass panel over the video preview
+        // (see `ContentView.settingsPanel`) rather than a modal `.sheet`, so
+        // it needs its own opaque-reading background instead of relying on
+        // the sheet's native chrome.
+        .glassDarkSurface()
         .onAppear {
             loadCurrentSettings()
         }
@@ -171,6 +181,18 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.bordered)
+
+                Button(action: {
+                    NSApp.activate(ignoringOtherApps: true)
+                    openWindow(id: "about")
+                }) {
+                    HStack {
+                        Image(systemName: "info.circle")
+                        Text(NSLocalizedString("about", comment: "About"))
+                    }
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("settings_about_button")
             }
         }
     }
@@ -291,7 +313,6 @@ struct SettingsView: View {
                 actionButtonsView
             }
             .padding(16)
-            .background(Color(NSColor.windowBackgroundColor))
         }
     }
     
@@ -1181,23 +1202,9 @@ struct SettingsView: View {
         }
     }
     
-    /// Cierra la ventana de configuración
+    /// Closes the settings panel.
     private func closeWindow() {
-        DispatchQueue.main.async {
-            // Look for the settings window
-            if let window = NSApp.windows.first(where: { window in
-                window.contentView?.subviews.contains { view in
-                    String(describing: type(of: view)).contains("SettingsView")
-                } ?? false
-            }) {
-                window.close()
-                print("✅ Settings window closed")
-            } else {
-                // Fallback: use SwiftUI dismiss
-                dismiss()
-                print("✅ Settings view closed with dismiss")
-            }
-        }
+        onClose()
     }
     
     // MARK: - Progress Sheet
@@ -1243,7 +1250,7 @@ struct SettingsView: View {
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         let wallpaperManager = WallpaperManager()
-        SettingsView()
+        SettingsView(onClose: {})
             .environmentObject(wallpaperManager)
             .environmentObject(LaunchManager())
     }

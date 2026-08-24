@@ -69,6 +69,7 @@
 "playback_mode_picker" = "Modo de Reproducción";
 "mute_button" = "Silenciar";
 "unmute_button" = "Activar Audio";
+"on_screen_badge" = "EN PANTALLA";
 
 /* Configuraciones - Información */
 "videos_saved" = "Videos guardados: %d";

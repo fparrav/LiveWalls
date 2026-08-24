@@ -1720,6 +1720,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     func stopWallpaperSafe() {
         stopWallpaper()
     }
+
+    /// Re-applies the "MuteVideo" preference to every currently active
+    /// desktop wallpaper window, so toggling mute from the main window's
+    /// transport pill takes effect immediately on whatever is already
+    /// playing, instead of only on the next video/window setup.
+    func applyMuteSettingToActiveWindows() {
+        for instance in desktopVideoInstances {
+            instance.window.updateMuteSetting()
+        }
+    }
     
     /// Función para pruebas: establecer wallpaper estático manualmente
     func testStaticWallpaper() async {

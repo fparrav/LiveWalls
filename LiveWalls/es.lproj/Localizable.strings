@@ -15,6 +15,9 @@
 "stop_button" = "Detener";
 "set_as_wallpaper" = "Establecer como Wallpaper";
 "delete_button" = "Eliminar";
+"mute_button" = "Silenciar";
+"unmute_button" = "Activar sonido";
+"on_screen_badge" = "EN PANTALLA";
 
 /* Status Messages */
 "active_wallpaper" = "Activo: %@";
