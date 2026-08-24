@@ -224,3 +224,8 @@ plans/.chunkhound.json
 .claude/
 # Local Pi runtime state
 .atl/
+
+# Local build artifacts
+build_debug/
+build_release/
+default.profraw
