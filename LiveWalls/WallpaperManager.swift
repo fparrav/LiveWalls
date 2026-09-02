@@ -34,6 +34,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Private Properties
     private let appLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManager")
+    // Task 1.3: dedicated retained-level logger for recovery decision/outcome (complements RecoveryTelemetry file)
+    private let recoveryDecisionLogger = Logger(subsystem: "com.livewalls.app", category: "RecoveryDecision")
+    // Task 1.5: per-window render-advance probes + aggregate observable
+    private var renderAdvanceProbes: [RenderAdvanceProbe] = []
+    private var renderAdvancePollTask: Task<Void, Never>?
+    @Published private(set) var renderAdvanceState: RenderAdvanceVerdict = .idle
     private var desktopVideoInstances: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)] = []
     private let notificationManager: NotificationManager
     private var currentStaticWallpaperURL: URL?
@@ -95,6 +101,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
       private let throttleManager = ThrottleManager() // FASE 2: Throttling para eventos frecuentes
       // NOTE: PlaybackTelemetry integration pending - add to Xcode project target first
       // private let playbackTelemetry = PlaybackTelemetry() // PHASE 7: Production telemetry
+      private let recoveryTelemetry = RecoveryTelemetry() // Task 1.1: Durable recovery-lifecycle telemetry
       private var activeSecurityScopedURLs: Set<String> = []
       private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
     
@@ -174,7 +181,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
          setupTerminationHandling()
          setupFullscreenDetection()
          setupAppActivationNotifications()
-         
+
+         // Task 1.1: Initialize durable recovery telemetry writer
+         Task { [recoveryTelemetry] in
+             await recoveryTelemetry.configure()
+         }
+
          // Intentar auto‑inicio cuando el estado esté listo (sin depender de delays fijos)
          attemptAutoStart()
          
@@ -914,6 +926,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     self.appLogger.info("⏹️ Deteniendo wallpaper")
                     self.stopAutoChangeTimer()
                     self.stopStaticFrameUpdateTimer()
+                    // Task 1.5: stop the render-advance probes — playback no longer expected.
+                    Task { await self.stopRenderAdvanceProbes() }
                     self.destroyAllDesktopWindows {
                         self.isPlayingWallpaper = false
                     }
@@ -1015,6 +1029,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             desktopVideoInstances = desktopWindows
             appLogger.info("✅ Creadas \(createdWindows.count) ventanas de escritorio de forma asíncrona")
         }
+
+        // Task 1.5: (re)start the render-advance probes for the freshly created windows.
+        await startRenderAdvanceProbes()
     }
     
     /// Destruye todas las ventanas de escritorio
@@ -1915,7 +1932,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Pauses video players during fullscreen to save resources
     private func pauseVideoPlayersForFullscreen() async {
         appLogger.info("⏸️ Pausing video players for fullscreen")
-        
+
+        // Task 1.5: playback paused for fullscreen — stop the probes so a paused
+        // (legitimately non-advancing) player is not misread as a stall.
+        await stopRenderAdvanceProbes()
+
         for (window, _) in desktopVideoInstances {
             if let playerLayer = window.currentPlayerLayer {
                 playerLayer.player?.pause()
@@ -1926,34 +1947,109 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Resumes video players after fullscreen
     private func resumeVideoPlayersFromFullscreen() async {
         appLogger.info("▶️ Resuming video players after fullscreen")
-        
+
         for (window, _) in desktopVideoInstances {
             if let playerLayer = window.currentPlayerLayer {
                 playerLayer.player?.play()
             }
         }
+
+        // Task 1.5: playback resumed — restart the probes.
+        await startRenderAdvanceProbes()
+    }
+
+    // MARK: - Task 1.5: Render-advance probe lifecycle + observable signal
+
+    /// Starts one `RenderAdvanceProbe` per active desktop window plus a poll loop that
+    /// publishes the aggregate verdict to `renderAdvanceState` and feeds each transition
+    /// to the durable telemetry store. Idempotent: a running probe set is torn down first.
+    /// Only runs while playback is expected (called on window creation / fullscreen exit).
+    func startRenderAdvanceProbes() async {
+        await stopRenderAdvanceProbes()
+
+        let windows = desktopVideoInstances.map { $0.window }
+        guard !windows.isEmpty else { return }
+
+        renderAdvanceProbes = await RenderAdvanceProbe.startProbes(for: windows)
+        appLogger.debug("🔬 RenderAdvanceProbes iniciados para \(windows.count) ventana(s)")
+
+        renderAdvancePollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(2.5))
+                } catch {
+                    break
+                }
+                guard let self else { break }
+                let probes = self.renderAdvanceProbes
+                guard !probes.isEmpty else { break }
+
+                let aggregate: RenderAdvanceVerdict
+                if await RenderAdvanceProbe.anyStalled(probes) {
+                    aggregate = .stalled
+                } else if await RenderAdvanceProbe.allAdvancing(probes) {
+                    aggregate = .advancing
+                } else {
+                    aggregate = .unknown
+                }
+
+                guard self.renderAdvanceState != aggregate else { continue }
+                self.renderAdvanceState = aggregate
+
+                let verdictString: String
+                switch aggregate {
+                case .idle: verdictString = "idle"
+                case .advancing: verdictString = "advancing"
+                case .stalled: verdictString = "stalled"
+                case .unknown: verdictString = "unknown"
+                }
+                self.recoveryDecisionLogger.error("🔬 Render-advance aggregate → \(verdictString)")
+                await self.recoveryTelemetry.recordProbeState(verdictString)
+            }
+        }
+    }
+
+    /// Stops and clears all render-advance probes and the poll loop; resets the
+    /// observable signal to `.idle`. Safe to call when nothing is running.
+    func stopRenderAdvanceProbes() async {
+        renderAdvancePollTask?.cancel()
+        renderAdvancePollTask = nil
+        if !renderAdvanceProbes.isEmpty {
+            await RenderAdvanceProbe.stopProbes(renderAdvanceProbes)
+            renderAdvanceProbes = []
+        }
+        if renderAdvanceState != .idle {
+            renderAdvanceState = .idle
+        }
     }
 
     @objc private func willSleep(notification: NSNotification) {
+        // Task 1.2: record suspend-observed marker at the top so it fires even if later logic bails
+        Task { [recoveryTelemetry] in await recoveryTelemetry.recordSuspend() }
         appLogger.info("💤 El sistema va a suspenderse. Deteniendo temporalmente el wallpaper.")
         // No es necesario detenerlo explícitamente, el sistema lo pausa.
         // Si se detiene aquí, isPlayingWallpaper sería falso al despertar.
     }
 
     @objc private func didWake(notification: NSNotification) {
+        // Task 1.2: record wake-observed marker at the top so it fires even if later logic bails
+        Task { [recoveryTelemetry] in await recoveryTelemetry.recordWake() }
         appLogger.info("🌅 El sistema se ha despertado.")
         // Si el wallpaper estaba activo antes de suspender, lo reiniciamos.
         if isPlayingWallpaper {
             appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
+            // Task 1.3: retained-level (eviction-resistant) recovery-decision log
+            recoveryDecisionLogger.error("🛠️ Recovery decision: wake-triggered rebuild (wallpaper was active before suspend).")
             // Restart wallpaper with clean state
             Task {
                 // Wait for system to stabilize
                 try? await Task.sleep(for: .milliseconds(500))
-                
+
                 // Verificar que aún tenemos un video actual
-                guard let currentVideo = self.currentVideo else { 
+                guard let currentVideo = self.currentVideo else {
                     await MainActor.run {
                         self.appLogger.error("❌ No hay video actual al despertar")
+                        self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (no current video after wake).")
                     }
                     return
                 }
@@ -1968,18 +2064,21 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                             guard let accessibleURL = await self.resolveBookmark(for: currentVideo) else {
                                 await MainActor.run {
                                     self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
+                                    self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (bookmark resolution failed after wake).")
                                     self.isPlayingWallpaper = false
                                 }
                                 return
                             }
-                            
+
                             // Crear ventanas de forma asíncrona sin bloquear main thread
                             await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
-                            
+
                             await MainActor.run {
                                 self.isPlayingWallpaper = true
                                 self.startAutoChangeTimerIfNeeded()
                                 self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
+                                // Task 1.3: retained-level recovery-outcome log (success path)
+                                self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (windows recreated, playback active).")
                             }
                         }
                     }
@@ -2254,7 +2353,11 @@ extension WallpaperManager {
                 
                 if !isHealthy {
                     self.appLogger.warning("⚠️ ensurePlaying: verificación de salud falló, reiniciando...")
+                    // Task 1.3: retained-level recovery decision + telemetry
+                    self.recoveryDecisionLogger.error("🛠️ Recovery decision: health-check detected stall/unhealthy, triggering rebuild.")
+                    Task { [self] in await self.recoveryTelemetry.recordRecoverAttempted(reason: "health-check-unhealthy") }
                     self.startWallpaperSafe()
+                    // Outcome for this path is logged by task 2.4 (probe-based recovery with bounded retry).
                 } else {
                     self.appLogger.debug("✅ ensurePlaying: reproducción verificada como saludable")
                 }

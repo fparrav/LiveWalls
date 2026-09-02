@@ -7,6 +7,7 @@ import AVFoundation
 import os.log
 import Foundation
 import AppKit
+import os
 
 // Specific logger for memory debugging
 private let memoryLogger = Logger(subsystem: "com.livewalls.app", category: "MemoryManagement")
@@ -107,6 +108,9 @@ public class DesktopVideoWindowMejorada: NSWindow {
 
     // Definition of playerItem property
     private var playerItem: AVPlayerItem?
+
+    // Task 1.6: Debug stall simulation — per-window frozen time override
+    private var debugFrozenTime: CMTime?
     
     // FASE 5.1: Garantizar Player Ready antes de Transición
     /// Indica si el reproductor está completamente configurado y listo para reproducir
@@ -144,7 +148,21 @@ public class DesktopVideoWindowMejorada: NSWindow {
         if let staticImageURL = staticImageURL {
             showStaticPlaceholder(from: staticImageURL)
         }
-        
+
+        // Task 1.6: Observe debug stall simulation notifications
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(captureDebugTime),
+            name: RecoveryDebugNotificationCenter.captureTimeNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(clearDebugTime),
+            name: RecoveryDebugNotificationCenter.clearTimeNotification,
+            object: nil
+        )
+
         Task {
             await setupPlayer(with: videoURL, preloadedAsset: preloadedAsset)
         }
@@ -526,9 +544,15 @@ public class DesktopVideoWindowMejorada: NSWindow {
 
     // MARK: - Public API para acceso al reproductor
     
-    /// Gets the current video playback time
-    /// - Returns: Current CMTime of the player or nil if no active player
+    /// Gets the current video playback time.
+    /// - Returns: Current CMTime of the player or nil if no active player.
+    /// When the stall simulation is active (Task 1.6), returns the frozen time
+    /// captured at enable, so the probe sees "no advance, no wrap".
     public func getCurrentTime() -> CMTime? {
+        // Task 1.6: Inert when off — fast guard, zero overhead when simulating is disabled
+        if RecoveryDebugFlags.isSimulatingStall, let frozen = debugFrozenTime {
+            return frozen
+        }
         return player?.currentTime()
     }
     
@@ -679,5 +703,19 @@ public class DesktopVideoWindowMejorada: NSWindow {
           
           memoryLogger.debug("✅ Window updated for Space change")
       }
+
+    @objc private func captureDebugTime() {
+        // Task 1.6: Capture current player time for stall simulation
+        if let currentTime = player?.currentTime() {
+            debugFrozenTime = currentTime
+            memoryLogger.info("🧹 RecoveryDebug: captured time \(String(format: "%.2f", currentTime.seconds))s for stall simulation")
+        }
+    }
+
+    @objc private func clearDebugTime() {
+        // Task 1.6: Clear frozen time, returning to real time
+        debugFrozenTime = nil
+        memoryLogger.info("🧹 RecoveryDebug: cleared frozen time")
+    }
 }
 
