@@ -119,11 +119,155 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
      private let shuffleHistoryMaxSize = 5
      private let shuffleModeKey = "ShuffleModeEnabled"
      
-     // Actor to serialize wallpaper operations
+     // MARK: - Operation Mutex (Task 2.1 / design D4)
+
+    /// Thrown when the wallpaper-operation mutex cannot be acquired within the
+    /// configured timeout. Distinct from the operation's own errors so callers
+    /// can log/recover specifically about the lock vs. the work.
+    struct WallpaperOperationTimeoutError: Error, CustomStringConvertible {
+        let timeout: Duration
+        var description: String {
+            return "Wallpaper operation timed out waiting for exclusive access after \(timeout)"
+        }
+    }
+
+    /// Serializes wallpaper operations (start/stop/rebuild). Real async mutex:
+    /// if a caller is in flight, subsequent callers wait in FIFO order; the wait
+    /// is bounded by `timeout`, and the lock is always released — on success,
+    /// on operation `throw`, on timeout, and on caller cancellation.
     private actor WallpaperOperationActor {
-        func withExclusiveAccess<T>(@_implicitSelfCapture operation: () async throws -> T) async rethrows -> T {
+        private var isBusy: Bool = false
+        // FIFO queue of pending waiters. The pair is (id, continuation) so a
+        // timeout or cancellation can locate and remove the *right* entry
+        // without disturbing the rest of the queue.
+        private var waiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>)] = []
+
+        /// Default timeout for lock acquisition. Long enough to cover the
+        /// slowest legitimate wallpaper rebuild (window teardown + recreate +
+        /// static-frame apply) on real hardware; short enough that a wedged
+        /// recovery cannot stall the UI indefinitely.
+        static let defaultTimeout: Duration = .seconds(20)
+
+        /// Runs `operation` while holding the wallpaper-operation mutex.
+        ///
+        /// Semantics:
+        /// - FIFO: callers are admitted in the order they called `acquire()`.
+        /// - Bounded: if the lock is not acquired within `timeout`, throws
+        ///   `WallpaperOperationTimeoutError`. The pending caller is removed
+        ///   from the queue and resumed so no continuation leaks.
+        /// - Bounded-cleanup: if the calling Task is cancelled while waiting,
+        ///   the continuation is removed from the queue and resumed with
+        ///   `CancellationError`; if cancelled while holding the lock, the
+        ///   lock is still released (via `defer`).
+        /// - No double-resume: the queued continuation is resumed exactly once
+        ///   (by the next release, by timeout, or by cancellation), whichever
+        ///   happens first.
+        func withExclusiveAccess<T>(
+            timeout: Duration = WallpaperOperationActor.defaultTimeout,
+            @_implicitSelfCapture operation: () async throws -> T
+        ) async throws -> T {
+            try await acquire(timeout: timeout)
+            // Guaranteed release on every exit path (success, throw, cancel).
+            defer { release() }
             return try await operation()
         }
+
+        // MARK: - Internal acquire / release
+
+        private func acquire(timeout: Duration) async throws {
+            // Fast path: uncontended. Checking + flipping `isBusy` happens in
+            // a single actor hop, so no two callers can both win this branch.
+            if !isBusy {
+                isBusy = true
+                requestedTimeout = timeout
+                return
+            }
+
+            // Slow path: park a CheckedContinuation in `waiters` and wait
+            // for one of three things to resume it — the lock becoming free
+            // (via `release`), the timeout elapsing, or the calling Task
+            // being cancelled. Whichever fires first wins; the others are
+            // observed to be no-ops by `timeOutWaiter` / `cancelWaiter`
+            // because the entry has already been removed from `waiters`.
+            let waiterID = UUID()
+            requestedTimeout = timeout
+
+            // We need the timeout arm to be cancellable so that if the
+            // caller wins (lock released, or cancellation) we don't keep a
+            // sleeping Task around until the original timeout fires.
+            let timeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: timeout)
+                await self?.timeOutWaiter(id: waiterID)
+            }
+
+            do {
+                try await withTaskCancellationHandler {
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                        // Appending and observing `isBusy` are both inside
+                        // the actor, so no other caller can sneak past us
+                        // between the fast-path miss above and this append.
+                        self.waiters.append((id: waiterID, continuation: continuation))
+                    }
+                } onCancel: {
+                    Task { await self.cancelWaiter(id: waiterID) }
+                }
+            } catch {
+                // Whether we lost by timeout or by cancellation, the spawned
+                // timeout arm is no longer needed — cancel it so it does not
+                // linger until `timeout` elapses against an empty queue.
+                timeoutTask.cancel()
+                throw error
+            }
+            timeoutTask.cancel()
+
+            // After the continuation returns successfully, the lock is ours.
+            // From the caller's perspective `acquire()` is "done"; we don't
+            // need to touch `isBusy` here because either we just won the
+            // fast path (set it true) or `release()` handed it to us (it
+            // stays true across the hand-off, by design).
+        }
+
+        private func release() {
+            // FIFO: hand the lock to the next waiter if any; otherwise free it.
+            if !waiters.isEmpty {
+                let next = waiters.removeFirst()
+                // `isBusy` stays true across the hand-off — the next caller's
+                // `acquire()` returned via this continuation and observes it
+                // already set, so it proceeds straight into its operation.
+                next.continuation.resume()
+            } else {
+                isBusy = false
+            }
+        }
+
+        /// Resume a queued waiter with `WallpaperOperationTimeoutError` if it
+        /// is still parked. Idempotent — if the waiter already resumed (e.g.
+        /// the lock was released first, or the caller was cancelled), this
+        /// is a no-op so the continuation is never double-resumed.
+        private func timeOutWaiter(id: UUID) async {
+            guard let index = waiters.firstIndex(where: { $0.id == id }) else {
+                return // already resumed (lock released or cancelled)
+            }
+            let entry = waiters.remove(at: index)
+            entry.continuation.resume(throwing: WallpaperOperationTimeoutError(timeout: requestedTimeout))
+        }
+
+        /// Resume a queued waiter with `CancellationError` if it is still
+        /// parked. Idempotent — if the waiter already resumed (e.g. the lock
+        /// was released first, or the timeout fired first), this is a no-op
+        /// so the continuation is never double-resumed.
+        private func cancelWaiter(id: UUID) async {
+            guard let index = waiters.firstIndex(where: { $0.id == id }) else {
+                return // already resumed (lock released or timed out)
+            }
+            let entry = waiters.remove(at: index)
+            entry.continuation.resume(throwing: CancellationError())
+        }
+
+        // The most recently requested acquisition timeout, used to label the
+        // error returned on timeout. Tracked so we don't need a separate
+        // parameter on every helper method.
+        private var requestedTimeout: Duration = WallpaperOperationActor.defaultTimeout
     }
 
     /// Schedule setting the static wallpaper with debouncing to avoid hammering NSWorkspace
@@ -852,72 +996,84 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         Task {
-            await wallpaperOperationActor.withExclusiveAccess {
-                await MainActor.run {
-                    self.appLogger.info("▶️ Iniciando wallpaper: \(currentVideo.name)")
-                }
-                
-                let resolvedURL = await self.resolveBookmark(for: currentVideo)
-                guard let accessibleURL = resolvedURL else {
+            do {
+                try await wallpaperOperationActor.withExclusiveAccess {
                     await MainActor.run {
-                        self.notificationManager.showError(message: "No se pudo acceder al archivo de video")
+                        self.appLogger.info("▶️ Iniciando wallpaper: \(currentVideo.name)")
                     }
-                    return
-                }
-                
-                 // Fase 1: Generar frame estático en background sin bloquear inicio del video
-                 // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
-                 // para evitar deadlocks causados por Task.detached anidado
-                  Task.detached { [weak self] in
-                      guard let self = self else { return }
-                      if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
-                          // Ejecutar en main thread sin await para evitar deadlock
-                          DispatchQueue.main.async {
-                              _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                              self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
-                              // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
-                          }
-                      } else {
-                          DispatchQueue.main.async {
-                              self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
-                          }
-                      }
-                  }
-                
-                 // Crear ventanas de forma asíncrona sin bloquear en frame estático
-                 await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
-                 
-                 await MainActor.run {
-                     self.isPlayingWallpaper = true
-                     self.startAutoChangeTimerIfNeeded()
-                 }
 
-                  // PHASE 6: Programar verificaciones de salud post-arranque con intervalos optimizados
-                   // Intervals: 1.0s, 5.0s, 15.0s, 120.0s (120s para estado estable)
-                   await self.scheduledHealthCheckManager.scheduleHealthChecks(
-                       action: { [weak self] in
-                           await MainActor.run { [weak self] in
-                               self?.ensurePlaying(reason: "post-start scheduled check")
-                           }
-                       },
-                       intervals: [1.0, 5.0, 15.0, 120.0]
-                   )
-                  
-                  // Precargar el siguiente video para transiciones instantáneas
-                  if let nextVideo = self.getNextVideoInQueue() {
-                      if let nextURL = await self.resolveBookmark(for: nextVideo) {
-                          await self.videoPreloader.preload(videoURL: nextURL)
+                    let resolvedURL = await self.resolveBookmark(for: currentVideo)
+                    guard let accessibleURL = resolvedURL else {
+                        await MainActor.run {
+                            self.notificationManager.showError(message: "No se pudo acceder al archivo de video")
+                        }
+                        return
+                    }
+
+                     // Fase 1: Generar frame estático en background sin bloquear inicio del video
+                     // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
+                     // para evitar deadlocks causados por Task.detached anidado
+                      Task.detached { [weak self] in
+                          guard let self = self else { return }
+                          if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
+                              // Ejecutar en main thread sin await para evitar deadlock
+                              DispatchQueue.main.async {
+                                  _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                                  self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
+                                  // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
+                              }
+                          } else {
+                              DispatchQueue.main.async {
+                                  self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
+                              }
+                          }
                       }
-                  }
-             }
+
+                     // Crear ventanas de forma asíncrona sin bloquear en frame estático
+                     await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+
+                     await MainActor.run {
+                         self.isPlayingWallpaper = true
+                         self.startAutoChangeTimerIfNeeded()
+                     }
+
+                      // PHASE 6: Programar verificaciones de salud post-arranque con intervalos optimizados
+                       // Intervals: 1.0s, 5.0s, 15.0s, 120.0s (120s para estado estable)
+                       await self.scheduledHealthCheckManager.scheduleHealthChecks(
+                           action: { [weak self] in
+                               await MainActor.run { [weak self] in
+                                   self?.ensurePlaying(reason: "post-start scheduled check")
+                               }
+                           },
+                           intervals: [1.0, 5.0, 15.0, 120.0]
+                       )
+
+                      // Precargar el siguiente video para transiciones instantáneas
+                      if let nextVideo = self.getNextVideoInQueue() {
+                          if let nextURL = await self.resolveBookmark(for: nextVideo) {
+                              await self.videoPreloader.preload(videoURL: nextURL)
+                          }
+                      }
+                }
+            } catch {
+                // Task 2.1: lock acquisition failed (timeout or cancellation).
+                // The lock guarantees bounded, non-latching behavior, but the
+                // caller still has to honor that — log loudly so an ignored
+                // start isn't silently dropped. Full error routing for every
+                // trigger is the responsibility of task 2.2.
+                await MainActor.run {
+                    self.appLogger.error("⏱️ No se pudo iniciar wallpaper: lock no adquirido (\(error))")
+                }
+            }
          }
-     }
-    
+    }
+
     /// Stops wallpaper playback
     func stopWallpaper() {
         Task {
-            await wallpaperOperationActor.withExclusiveAccess {
-                await MainActor.run {
+            do {
+                try await wallpaperOperationActor.withExclusiveAccess {
+                    await MainActor.run {
                     // Cancel pending static apply tasks
                     pendingStaticApplyWorkItem?.cancel()
                     pendingStaticApplyWorkItem = nil
@@ -932,10 +1088,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                         self.isPlayingWallpaper = false
                     }
                 }
+                }
+            } catch {
+                // Task 2.1: lock acquisition failed (timeout or cancellation).
+                // The lock guarantees bounded, non-latching behavior, but the
+                // caller still has to honor that — log loudly so an ignored
+                // stop isn't silently dropped. Full error routing for every
+                // trigger is the responsibility of task 2.2.
+                await MainActor.run {
+                    self.appLogger.error("⏱️ No se pudo detener wallpaper: lock no adquirido (\(error))")
+                }
             }
         }
     }
-    
+
     /// Alterna entre iniciar/detener el wallpaper
     func toggleWallpaper() {
         if isPlayingWallpaper {
