@@ -15,7 +15,7 @@ Ordered by delivery phase (A → B → C). Phase A is independently shippable an
 ## 2. Phase B — Self-heal correctness (the actual fix)
 
 - [x] 2.1 Make `WallpaperOperationActor.withExclusiveAccess` a real async mutex with a timeout and guaranteed release (design D4), replacing the no-op.
-- [ ] 2.2 Route all rebuild triggers through the exclusive lock: `didWake`, `didBecomeActive`, `activeSpaceDidChange`, the scheduled health checks, and manual changes; remove `didWake`'s bypass of the actor.
+- [x] 2.2 Route all rebuild triggers through the exclusive lock: `didWake`, `didBecomeActive`, `activeSpaceDidChange`, the scheduled health checks, and manual changes; remove `didWake`'s bypass of the actor.
 - [ ] 2.3 Replace the latching boolean gates (`isEnsurePlayingRunning`, `isChangingVideo`, `isTransitioning`) with a guarded operation that always releases on every exit path with a timeout; queue user video-changes that arrive during a recovery instead of silently dropping them (design D5).
 - [ ] 2.4 Switch the health check to the probe-based judgment from 1.4 (design D2), with a bounded, escalating retry policy that stops and logs after the attempts are exhausted.
 - [ ] 2.5 On a confirmed stall or wake, perform a full fresh rebuild (design D3): new `AVQueuePlayer` + `AVPlayerLooper` + freshly attached `AVPlayerLayer`, then `orderOut → orderFront → orderBack` + a brief settle + a first-frame probe before declaring success; retry sparingly and ensure no stale frozen window remains stacked on any display.

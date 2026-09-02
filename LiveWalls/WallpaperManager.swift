@@ -137,10 +137,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// on operation `throw`, on timeout, and on caller cancellation.
     private actor WallpaperOperationActor {
         private var isBusy: Bool = false
-        // FIFO queue of pending waiters. The pair is (id, continuation) so a
-        // timeout or cancellation can locate and remove the *right* entry
-        // without disturbing the rest of the queue.
-        private var waiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>)] = []
+        // FIFO queue of pending waiters. Each entry stores the waiter's id,
+        // its continuation, and the requested timeout (so the timeout error
+        // carries the correct duration even when multiple waiters are queued).
+        private var waiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>, timeout: Duration)] = []
 
         /// Default timeout for lock acquisition. Long enough to cover the
         /// slowest legitimate wallpaper rebuild (window teardown + recreate +
@@ -179,7 +179,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             // a single actor hop, so no two callers can both win this branch.
             if !isBusy {
                 isBusy = true
-                requestedTimeout = timeout
                 return
             }
 
@@ -190,7 +189,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             // observed to be no-ops by `timeOutWaiter` / `cancelWaiter`
             // because the entry has already been removed from `waiters`.
             let waiterID = UUID()
-            requestedTimeout = timeout
 
             // We need the timeout arm to be cancellable so that if the
             // caller wins (lock released, or cancellation) we don't keep a
@@ -206,7 +204,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                         // Appending and observing `isBusy` are both inside
                         // the actor, so no other caller can sneak past us
                         // between the fast-path miss above and this append.
-                        self.waiters.append((id: waiterID, continuation: continuation))
+                        // Store timeout per-waiter so each error carries its own duration.
+                        self.waiters.append((id: waiterID, continuation: continuation, timeout: timeout))
                     }
                 } onCancel: {
                     Task { await self.cancelWaiter(id: waiterID) }
@@ -249,7 +248,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 return // already resumed (lock released or cancelled)
             }
             let entry = waiters.remove(at: index)
-            entry.continuation.resume(throwing: WallpaperOperationTimeoutError(timeout: requestedTimeout))
+            entry.continuation.resume(throwing: WallpaperOperationTimeoutError(timeout: entry.timeout))
         }
 
         /// Resume a queued waiter with `CancellationError` if it is still
@@ -263,11 +262,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             let entry = waiters.remove(at: index)
             entry.continuation.resume(throwing: CancellationError())
         }
-
-        // The most recently requested acquisition timeout, used to label the
-        // error returned on timeout. Tracked so we don't need a separate
-        // parameter on every helper method.
-        private var requestedTimeout: Duration = WallpaperOperationActor.defaultTimeout
     }
 
     /// Schedule setting the static wallpaper with debouncing to avoid hammering NSWorkspace
@@ -987,7 +981,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     // MARK: - Wallpaper Control
-    
+
     /// Starts wallpaper playback safely
     func startWallpaperSafe() {
         guard let currentVideo = currentVideo else {
@@ -1379,19 +1373,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
          }
          
          appLogger.info("🔄 Cambiando automáticamente a: \(nextVideo.name)")
-         
-         // Enforce single change at a time
-         guard !isChangingVideo else {
-             appLogger.warning("⚠️ Cambio de video ya en progreso - ignorando")
-             return
-         }
-         isChangingVideo = true
-         defer { isChangingVideo = false }
-         
-         if isPlayingWallpaper {
-             await changeToNextVideoWithTransition(to: nextVideo)
-         } else {
-             await setActiveVideo(nextVideo)
+
+         // Task 2.3: route video change through exclusive lock to replace
+         // latching boolean; callers now wait in FIFO instead of being
+         // silently dropped when a previous change is in flight.
+         do {
+             try await wallpaperOperationActor.withExclusiveAccess {
+                 if isPlayingWallpaper {
+                     await changeToNextVideoWithTransition(to: nextVideo)
+                 } else {
+                     await setActiveVideo(nextVideo)
+                 }
+             }
+         } catch {
+             appLogger.error("⏱️ Cambio automático de wallpaper falló: lock no adquirido (\(error))")
          }
      }
     
@@ -2206,47 +2201,56 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
             // Task 1.3: retained-level (eviction-resistant) recovery-decision log
             recoveryDecisionLogger.error("🛠️ Recovery decision: wake-triggered rebuild (wallpaper was active before suspend).")
-            // Restart wallpaper with clean state
+            // Restart wallpaper with clean state via exclusive lock
             Task {
-                // Wait for system to stabilize
-                try? await Task.sleep(for: .milliseconds(500))
+                do {
+                    try await wallpaperOperationActor.withExclusiveAccess {
+                        // Wait for system to stabilize
+                        try? await Task.sleep(for: .milliseconds(500))
 
-                // Verificar que aún tenemos un video actual
-                guard let currentVideo = self.currentVideo else {
-                    await MainActor.run {
-                        self.appLogger.error("❌ No hay video actual al despertar")
-                        self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (no current video after wake).")
-                    }
-                    return
-                }
-                
-                await MainActor.run {
-                    // CRITICAL: Destroy old windows first to prevent zombie windows
-                    self.appLogger.info("🧹 Limpiando ventanas antes de reiniciar")
-                    self.destroyAllDesktopWindows {
-                        // After cleanup, restart wallpaper
-                        Task {
-                            // Pre-resolver el bookmark para reducir latencia
-                            guard let accessibleURL = await self.resolveBookmark(for: currentVideo) else {
-                                await MainActor.run {
-                                    self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
-                                    self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (bookmark resolution failed after wake).")
-                                    self.isPlayingWallpaper = false
-                                }
-                                return
-                            }
-
-                            // Crear ventanas de forma asíncrona sin bloquear main thread
-                            await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
-
+                        // Verificar que aún tenemos un video actual
+                        guard let currentVideo = self.currentVideo else {
                             await MainActor.run {
-                                self.isPlayingWallpaper = true
-                                self.startAutoChangeTimerIfNeeded()
-                                self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
-                                // Task 1.3: retained-level recovery-outcome log (success path)
-                                self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (windows recreated, playback active).")
+                                self.appLogger.error("❌ No hay video actual al despertar")
+                                self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (no current video after wake).")
                             }
+                            return
                         }
+
+                        // CRITICAL: Destroy old windows first to prevent zombie windows
+                        // Wait for teardown to complete so rebuild doesn't race with
+                        // the async window-close + security-scoped-release path.
+                        self.appLogger.info("🧹 Limpiando ventanas antes de reiniciar")
+                        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                            self.destroyAllDesktopWindows { cont.resume() }
+                        }
+
+                        // Pre-resolver el bookmark para reducir latencia
+                        guard let accessibleURL = await self.resolveBookmark(for: currentVideo) else {
+                            await MainActor.run {
+                                self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
+                                self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (bookmark resolution failed after wake).")
+                                self.isPlayingWallpaper = false
+                            }
+                            return
+                        }
+
+                        // Crear ventanas de forma asíncrona sin bloquear main thread
+                        await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+
+                        await MainActor.run {
+                            self.isPlayingWallpaper = true
+                            self.startAutoChangeTimerIfNeeded()
+                            self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
+                            // Task 1.3: retained-level recovery-outcome log (success path)
+                            self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (windows recreated, playback active).")
+                        }
+                    }
+                } catch {
+                    // Task 2.1/2.2: lock acquisition failed (timeout or cancellation).
+                    await MainActor.run {
+                        self.appLogger.error("⏱️ No se pudo reiniciar wallpaper tras wake: lock no adquirido (\(error))")
+                        self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (lock acquisition failed: \(error)).")
                     }
                 }
             }
@@ -2283,13 +2287,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     await self.updateWindowVisibilityForSpaces()
                 } else {
                     self.appLogger.info("⚠️ Windows unhealthy - triggering recreation")
-                    // Primera reactivación inmediata
+                    // Primera reactivación inmediata (ensurePlaying internally routes rebuild through lock)
                     self.ensurePlaying(reason: "Space change - throttled")
-                    
+
                     // Un único retry tras 200ms para garantizar reproducción
                     try? await Task.sleep(for: .milliseconds(200))
                     self.ensurePlaying(reason: "Space change - retry")
-                    
+
                     // Actualizar frame estático en background (no bloquear)
                     await self.updateStaticFrameOnSpaceChange()
                 }
@@ -2509,25 +2513,26 @@ extension WallpaperManager {
             // Lanzar verificación de salud de forma asíncrona sin bloquear main thread
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                
+
                 // Usar PlaybackHealthChecker para verificación asíncrona
                 let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
                     windows: self.desktopVideoInstances,
                     currentVideo: self.currentVideo,
                     bookmarkActor: self.bookmarkActor
                 )
-                
+
                 if !isHealthy {
                     self.appLogger.warning("⚠️ ensurePlaying: verificación de salud falló, reiniciando...")
                     // Task 1.3: retained-level recovery decision + telemetry
                     self.recoveryDecisionLogger.error("🛠️ Recovery decision: health-check detected stall/unhealthy, triggering rebuild.")
                     Task { [self] in await self.recoveryTelemetry.recordRecoverAttempted(reason: "health-check-unhealthy") }
+                    // startWallpaperSafe() ya serializa el rebuild vía withExclusiveAccess;
+                    // el re-check de salud post-lock es responsabilidad de 2.4.
                     self.startWallpaperSafe()
-                    // Outcome for this path is logged by task 2.4 (probe-based recovery with bounded retry).
                 } else {
                     self.appLogger.debug("✅ ensurePlaying: reproducción verificada como saludable")
                 }
-                
+
                 // FASE 5: Liberar gate al finalizar
                 self.isEnsurePlayingRunning = false
             }
