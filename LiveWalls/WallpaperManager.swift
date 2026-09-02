@@ -59,14 +59,63 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private var transitionDuration: TimeInterval = 1.0  // Reducido de 2.0s a 1.0s para transiciones más rápidas
     private var transitionType: TransitionManager.TransitionType = .crossfade
     
-    // FASE 5.3: Flag para prevenir transiciones concurrentes
-    private var isTransitioning = false
-    
-     // FASE 5: Concurrency gate para ensurePlaying()
-     private var isEnsurePlayingRunning = false
+    // FASE 5.3: Transition concurrency prevention — latching boolean removed (task 2.3).
+    // Transitions are now serialized by the exclusive lock in WallpaperOperationActor.
+
+     // FASE 5: Rate limiting for ensurePlaying() only (latching boolean removed in task 2.3)
      private var lastEnsurePlayingTime: Date?
-     private let ensurePlayingMinInterval: TimeInterval = 2.0 // PHASE 6: Increased from 500ms to 2.0s for reduced CPU usage
-    
+     private let ensurePlayingMinInterval: TimeInterval = 2.0
+
+    // MARK: - Wallpaper change serialization (Task 2.3)
+
+    /// Hard timeout for a guarded wallpaper operation. Set above the lock's
+    /// acquire timeout (20s) so lock contention is reported first; this is the
+    /// backstop that guarantees the in-flight guard is released even if the
+    /// operation itself stalls (design D5).
+    static let operationGuardTimeout: Duration = .seconds(25)
+
+    /// A user-initiated wallpaper change (next / previous) that arrived while an
+    /// operation was already running. Coalesced (last-one-wins) and applied once
+    /// the guard clears — never dropped (design D5). Stored as an intent, not a
+    /// resolved video, so the drain re-resolves against fresh state.
+    private enum PendingWallpaperChange {
+        case next
+        case previous
+    }
+    private var pendingWallpaperChange: PendingWallpaperChange? = nil
+
+    /// True while a guarded wallpaper operation is running. Set on entry to
+    /// `applyGuardedWallpaperChange`, cleared in its `defer` on every exit path
+    /// (success, throw, or timeout) — it can never latch.
+    private var wallpaperOperationInFlight = false
+
+    /// Runs `operation` on the main actor with a hard timeout. If `timeout`
+    /// elapses first the operation task is cancelled, its wind-down is awaited
+    /// (so nothing is abandoned mid-flight), and `WallpaperOperationTimeoutError`
+    /// is thrown. If the operation finishes first the timer is cancelled and the
+    /// call returns immediately.
+    private func withOperationTimeout(
+        _ timeout: Duration,
+        operation: @escaping @MainActor () async -> Void
+    ) async throws {
+        let opTask = Task { @MainActor in await operation() }
+        let timeoutTask = Task { () -> Bool in
+            do {
+                try await Task.sleep(for: timeout)
+            } catch {
+                return false // cancelled — the operation finished first
+            }
+            opTask.cancel()
+            return true // timed out
+        }
+        // Wait for the operation (or its cancelled wind-down) to complete.
+        await opTask.value
+        timeoutTask.cancel()
+        if await timeoutTask.value {
+            throw WallpaperOperationTimeoutError(timeout: timeout)
+        }
+    }
+
     // MARK: - Background color windows for transitions
     private var backgroundColorWindows: [NSWindow] = []
     
@@ -108,7 +157,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - Synchronization to prevent crashes
     private let wallpaperOperationQueue = DispatchQueue(label: "com.livewalls.wallpaperQueue", attributes: .concurrent)
     private let wallpaperOperationActor = WallpaperOperationActor()
-    private var isChangingVideo = false
     private var isApplyingStaticWallpaper = false
     private var pendingStaticApplyWorkItem: DispatchWorkItem?
      private var isCleaningUp = false
@@ -1374,32 +1422,74 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
          
          appLogger.info("🔄 Cambiando automáticamente a: \(nextVideo.name)")
 
-         // Task 2.3: route video change through exclusive lock to replace
-         // latching boolean; callers now wait in FIFO instead of being
-         // silently dropped when a previous change is in flight.
+         // Task 2.3: auto-change tick — if a guarded operation is already
+         // running (e.g. a wake / health-check rebuild), skip this tick; the
+         // timer fires again shortly. Only user-initiated changes get queued
+         // (see nextWallpaper / previousWallpaper).
+         guard !wallpaperOperationInFlight else {
+             appLogger.debug("⏭️ Cambio automático omitido — operación en progreso")
+             return
+         }
+         await applyGuardedWallpaperChange(to: nextVideo, restartTimerAfter: false)
+     }
+
+     /// Runs a wallpaper change under the exclusive lock (design D4) with a hard
+     /// timeout and a guaranteed guard release on every exit path (design D5).
+     /// When the guard clears, any user change queued while this one ran is
+     /// drained.
+     /// - Parameter restartTimerAfter: `true` for manual next/previous changes
+     ///   (they reset the auto-change cadence); `false` for the auto-change tick.
+     private func applyGuardedWallpaperChange(to video: VideoFile, restartTimerAfter: Bool) async {
+         guard !wallpaperOperationInFlight else {
+             appLogger.warning("⚠️ applyGuardedWallpaperChange invocado con operación en curso — ignorando")
+             return
+         }
+
+         wallpaperOperationInFlight = true
+         defer {
+             wallpaperOperationInFlight = false
+             // Drain at most one queued change per release; further requests
+             // re-enqueue and drain on the next release (bounded).
+             if let pending = pendingWallpaperChange {
+                 pendingWallpaperChange = nil
+                 appLogger.debug("📤 Drenando cambio de wallpaper encolado: \(String(describing: pending))")
+                 Task { await self.drainPendingWallpaperChange(pending) }
+             }
+         }
+
          do {
              try await wallpaperOperationActor.withExclusiveAccess {
-                 if isPlayingWallpaper {
-                     await changeToNextVideoWithTransition(to: nextVideo)
-                 } else {
-                     await setActiveVideo(nextVideo)
+                 // Task 2.3: hard timeout inside the lock so a stalled operation
+                 // cannot hold the mutex forever (design D5).
+                 try await self.withOperationTimeout(Self.operationGuardTimeout) { @MainActor in
+                     if self.isPlayingWallpaper {
+                         await self.changeToNextVideoWithTransition(to: video)
+                     } else {
+                         await self.setActiveVideo(video)
+                     }
                  }
              }
+             if restartTimerAfter {
+                 restartAutoChangeTimerIfNeeded()
+             }
          } catch {
-             appLogger.error("⏱️ Cambio automático de wallpaper falló: lock no adquirido (\(error))")
+             appLogger.error("⏱️ Cambio de wallpaper falló (\(video.name)): \(error)")
          }
      }
-    
+
+     /// Re-runs a queued user change with fresh state. Delegating back to the
+     /// public entry points keeps the shuffle/playlist resolution in one place.
+     private func drainPendingWallpaperChange(_ pending: PendingWallpaperChange) async {
+         switch pending {
+         case .next:
+             await nextWallpaper()
+         case .previous:
+             await previousWallpaper()
+         }
+     }
+
     /// Changes to the next video without crossfade (instant switch)
     private func changeToNextVideoWithTransition(to nextVideo: VideoFile) async {
-        guard !isTransitioning else {
-            appLogger.warning("⚠️ Transición ya en progreso - ignorando solicitud")
-            return
-        }
-        
-        isTransitioning = true
-        defer { isTransitioning = false }
-        
         appLogger.info("🔄 Cambiando sin transición a: \(nextVideo.name)")
         
         // Ensure we have a current video selected
@@ -1555,18 +1645,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
              appLogger.info("🔍 DEBUG - [\(idx)]: \(video.name) (id: \(video.id.uuidString.prefix(8))...)")
          }
          
-         guard !isChangingVideo else {
-             appLogger.warning("⚠️ Cambio de wallpaper ya en progreso (manual) - ignorando")
-             return
-         }
-         isChangingVideo = true
-         defer { isChangingVideo = false }
-         
          guard enabledVideos.count > 1 else {
              appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio manual (count: \(enabledVideos.count))")
              return
          }
-         
+
+         // Task 2.3: if a guarded operation is running, queue the intent and
+         // return BEFORE touching shuffle history — the drain re-resolves the
+         // target with fresh state once the guard clears (design D5).
+         if wallpaperOperationInFlight {
+             pendingWallpaperChange = .next
+             appLogger.debug("📥 Siguiente wallpaper encolado — operación en progreso")
+             return
+         }
+
          // Determine next video based on shuffle mode
          var nextVideo: VideoFile?
          if self.isShuffleMode {
@@ -1595,18 +1687,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
              appLogger.warning("⚠️ Siguiente video es el mismo que el actual - ignorando")
              return
          }
-         
+
          appLogger.info("🔄 Cambiando manualmente (modo \(self.isShuffleMode ? "shuffle" : "playlist")) a: \(nextVideo.name)")
-         
-         if isPlayingWallpaper {
-             await changeToNextVideoWithTransition(to: nextVideo)
-             // Reiniciar timer después de cambio manual
-             await MainActor.run {
-                 self.restartAutoChangeTimerIfNeeded()
-             }
-         } else {
-             await setActiveVideo(nextVideo)
-         }
+
+         await applyGuardedWallpaperChange(to: nextVideo, restartTimerAfter: true)
      }
 
     /// Manually changes to the previous wallpaper.
@@ -1620,15 +1704,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
 
         appLogger.info("🔍 DEBUG previousWallpaper() - Videos habilitados: \(enabledVideos.count), Shuffle: \(self.isShuffleMode)")
 
-        guard !isChangingVideo else {
-            appLogger.warning("⚠️ Cambio de wallpaper ya en progreso (manual) - ignorando")
-            return
-        }
-        isChangingVideo = true
-        defer { isChangingVideo = false }
-
         guard enabledVideos.count > 1 else {
             appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para retroceder")
+            return
+        }
+
+        // Task 2.3: queue the intent and return BEFORE mutating shuffleHistory —
+        // the drain re-resolves with fresh state once the guard clears (design D5).
+        if wallpaperOperationInFlight {
+            pendingWallpaperChange = .previous
+            appLogger.debug("📥 Wallpaper anterior encolado — operación en progreso")
             return
         }
 
@@ -1667,15 +1752,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
 
         appLogger.info("🔄 Retrocediendo manualmente (modo \(self.isShuffleMode ? "shuffle" : "playlist")) a: \(previousVideo.name)")
 
-        if isPlayingWallpaper {
-            await changeToNextVideoWithTransition(to: previousVideo)
-            // Reiniciar timer después de cambio manual
-            await MainActor.run {
-                self.restartAutoChangeTimerIfNeeded()
-            }
-        } else {
-            await setActiveVideo(previousVideo)
-        }
+        await applyGuardedWallpaperChange(to: previousVideo, restartTimerAfter: true)
     }
 
     /// Comprueba si el botón "Siguiente Wallpaper" debe estar habilitado
@@ -2472,14 +2549,9 @@ extension WallpaperManager {
     /// FASE 5: Optimizado con concurrency gate y rate limiting
     func ensurePlaying(reason: String) {
         appLogger.info("🩺 ensurePlaying() invocado: \(reason)")
-        
-        // FASE 5: Concurrency gate - prevenir ejecuciones concurrentes
-        guard !isEnsurePlayingRunning else {
-            appLogger.debug("⏭️ ensurePlaying: ya ejecutándose, saltando invocación (\(reason))")
-            return
-        }
-        
-        // FASE 5: Rate limiting - prevenir ejecuciones demasiado frecuentes
+
+        // Rate limiting - prevenir ejecuciones demasiado frecuentes
+        // Task 2.3: removed latching boolean; lock now serializes rebuilds.
         if let lastTime = lastEnsurePlayingTime {
             let elapsed = Date().timeIntervalSince(lastTime)
             if elapsed < self.ensurePlayingMinInterval {
@@ -2487,15 +2559,11 @@ extension WallpaperManager {
                 return
             }
         }
-        
-        // Marcar timestamp y flag
         lastEnsurePlayingTime = Date()
-        isEnsurePlayingRunning = true
-        
+
         // Necesitamos datos mínimos
         guard currentVideo != nil else {
             appLogger.debug("ℹ️ No currentVideo disponible")
-            isEnsurePlayingRunning = false
             return
         }
 
@@ -2504,13 +2572,11 @@ extension WallpaperManager {
         if !isPlayingWallpaper && shouldAutoStart {
             appLogger.info("▶️ ensurePlaying: no isPlaying, auto‑inicio activo → startWallpaperSafe()")
             startWallpaperSafe()
-            isEnsurePlayingRunning = false
             return
         }
 
         // Si se supone que está reproduciendo, validar de forma asíncrona
         if isPlayingWallpaper {
-            // Lanzar verificación de salud de forma asíncrona sin bloquear main thread
             Task { @MainActor [weak self] in
                 guard let self else { return }
 
@@ -2532,13 +2598,9 @@ extension WallpaperManager {
                 } else {
                     self.appLogger.debug("✅ ensurePlaying: reproducción verificada como saludable")
                 }
-
-                // FASE 5: Liberar gate al finalizar
-                self.isEnsurePlayingRunning = false
             }
         } else {
             appLogger.debug("ℹ️ ensurePlaying: isPlayingWallpaper=false y auto‑inicio desactivado")
-            isEnsurePlayingRunning = false
         }
     }
     
