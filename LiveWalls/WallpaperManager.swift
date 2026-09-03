@@ -1021,12 +1021,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         guard enabledVideos.count > 1 else {
             return enabledVideos.first
         }
-        
+
+        // Never hand back the video that is already playing: a manual "next"
+        // that returns the current video makes `nextWallpaper()` no-op, and an
+        // auto-change tick would just re-select the same clip. Fall back to the
+        // full set only in the degenerate case where excluding it leaves nothing.
+        let currentID = currentVideo?.id
+        let poolWithoutCurrent = enabledVideos.filter { $0.id != currentID }
+        let selectionPool = poolWithoutCurrent.isEmpty ? enabledVideos : poolWithoutCurrent
+
         // If we have at least 6 enabled videos, use history to avoid repeating recent videos
         if enabledVideos.count >= 6 {
             // Filter out videos in shuffle history
-            let availableVideos = enabledVideos.filter { video in !self.shuffleHistory.contains(video.id) }
-            
+            let availableVideos = selectionPool.filter { video in !self.shuffleHistory.contains(video.id) }
+
             if let randomVideo = availableVideos.randomElement() {
                 // Update shuffle history
                 shuffleHistory.append(randomVideo.id)
@@ -1039,7 +1047,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 // All available videos are in history, clear history and try again
                 appLogger.debug("🔄 Shuffle history full, clearing and retrying")
                 shuffleHistory.removeAll()
-                if let randomVideo = enabledVideos.randomElement() {
+                if let randomVideo = selectionPool.randomElement() {
                     shuffleHistory.append(randomVideo.id)
                     appLogger.debug("🎲 Shuffled to: \(randomVideo.name) (history cleared)")
                     return randomVideo
@@ -1048,7 +1056,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         } else {
             // Fewer than 6 videos: use circular fallback to avoid immediate repeats
             // Get videos not in recent history (if any)
-            let availableVideos = enabledVideos.filter { video in !self.shuffleHistory.contains(video.id) }
+            let availableVideos = selectionPool.filter { video in !self.shuffleHistory.contains(video.id) }
             if !availableVideos.isEmpty, let randomVideo = availableVideos.randomElement() {
                 shuffleHistory.append(randomVideo.id)
                 if shuffleHistory.count > shuffleHistoryMaxSize {
@@ -1058,7 +1066,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 return randomVideo
             } else {
                 // All in history, fall back to random
-                if let randomVideo = enabledVideos.randomElement() {
+                if let randomVideo = selectionPool.randomElement() {
                     shuffleHistory.append(randomVideo.id)
                     if shuffleHistory.count > shuffleHistoryMaxSize {
                         shuffleHistory.removeFirst()
