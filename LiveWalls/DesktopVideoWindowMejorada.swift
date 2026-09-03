@@ -96,6 +96,12 @@ public class DesktopVideoWindowMejorada: NSWindow {
 
     private var videoURL: URL
     private var urlSecurityScoped: URL?
+
+    /// Stable identifier of the display this window was created for (Task 2.9).
+    /// Used by the display-scoped fresh rebuild to tear down and recreate only
+    /// the windows on the stalled display. `0` if the screen reported no
+    /// `NSScreenNumber` (should not happen for a real attached display).
+    public let displayID: CGDirectDisplayID
     private var playerItemStatusObserver: NSKeyValueObservation?  // PHASE 2: Only status observer kept (for error detection)
     // PHASE 2: REMOVED playerRateObserver and playerItemDidPlayToEndObserver (handled by AVPlayerLooper)
     private var isClosing: Bool = false
@@ -135,6 +141,7 @@ public class DesktopVideoWindowMejorada: NSWindow {
         self.videoURL = videoURL
         self.urlSecurityScoped = nil
         self.startPaused = startPaused
+        self.displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
         let contentRect = screen.frame
         super.init(
             contentRect: contentRect,

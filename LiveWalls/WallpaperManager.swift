@@ -138,6 +138,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
 
     var testRecoveryAttempts: Int { self.recoveryAttempts }
     var testRecoveryExhausted: Bool { self.recoveryExhausted }
+
+    // MARK: - Test seams (Task 2.9 — display-scoped fresh rebuild)
+
+    /// When non-nil, `attemptBoundedRecovery` uses this set instead of computing
+    /// `stalledDisplayIDs()` from the live probes (which need real windows). An
+    /// empty set means "no subset stalled → global rebuild".
+    var testStalledDisplayIDsOverride: Set<CGDirectDisplayID>?
+
+    /// When non-nil, `performFreshRebuild` uses this as the set of live display
+    /// IDs instead of reading `desktopVideoInstances` (which is empty in a
+    /// headless test), so the scoped-vs-global decision can be exercised in CI.
+    var testLiveDisplayIDsOverride: Set<CGDirectDisplayID>?
+
+    /// Records the `targetDisplays` value each `performFreshRebuild` call resolved
+    /// to (after the `perDisplayRecovery` / `bookmarkRefCount` gating): `nil` for a
+    /// global rebuild, a non-empty set for a display-scoped one. One entry per
+    /// attempt, in order.
+    private(set) var testRebuildTargetsSeen: [Set<CGDirectDisplayID>?] = []
     #endif
 
     /// Backoff schedule actually used by `attemptBoundedRecovery` — the production
@@ -1296,18 +1314,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - Desktop Windows Management
     
     /// Crea ventanas de video para todas las pantallas de forma asíncrona
-    private func createDesktopWindows(for video: VideoFile, accessibleURL: URL) async {
-        // Limpiar instancias previas
-        if !desktopVideoInstances.isEmpty {
+    /// - Parameter onlyScreens: Task 2.9 — when non-nil, this is a display-scoped
+    ///   rebuild: the existing instances are left in place and windows are created
+    ///   only for the given screens and *appended*. When nil, every previous window
+    ///   is closed and the instance list is replaced (the pre-2.9 behavior).
+    private func createDesktopWindows(for video: VideoFile, accessibleURL: URL, onlyScreens: [NSScreen]? = nil) async {
+        let isScoped = onlyScreens != nil
+
+        // Limpiar instancias previas (solo en un rebuild global)
+        if !isScoped, !desktopVideoInstances.isEmpty {
             appLogger.warning("⚠️ Limpiando ventanas previas antes de crear nuevas")
             for (window, _) in desktopVideoInstances {
                 window.close()
             }
             desktopVideoInstances.removeAll()
         }
-        
-        let screens = NSScreen.screens
-        
+
+        let screens = onlyScreens ?? NSScreen.screens
+
         // FASE 5: Métricas de rendimiento - timestamp inicio
         let startTime = Date()
         
@@ -1339,8 +1363,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             let desktopWindows = createdWindows.map { window in
                 (window: window as! DesktopVideoWindowMejorada, accessibleURL: accessibleURL)
             }
-            desktopVideoInstances = desktopWindows
-            appLogger.info("✅ Creadas \(createdWindows.count) ventanas de escritorio de forma asíncrona")
+            if isScoped {
+                desktopVideoInstances.append(contentsOf: desktopWindows)
+                appLogger.info("✅ Creadas \(createdWindows.count) ventana(s) de escritorio (rebuild por pantalla)")
+            } else {
+                desktopVideoInstances = desktopWindows
+                appLogger.info("✅ Creadas \(createdWindows.count) ventanas de escritorio de forma asíncrona")
+            }
         }
 
         // Task 1.5: (re)start the render-advance probes for the freshly created windows.
@@ -1382,6 +1411,33 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         // Ejecutar completion cuando todas las ventanas estén cerradas
+        group.notify(queue: .main) {
+            completion()
+        }
+    }
+
+    /// Task 2.9 — destroys only the desktop windows whose `displayID` is in
+    /// `displayIDs`, leaving every other instance in place and untouched. Does
+    /// NOT release the shared security-scoped URL: the surviving windows still
+    /// need it and the replacement windows will reuse the same still-valid URL,
+    /// so the ref-count must stay above zero throughout a display-scoped rebuild.
+    private func destroyDesktopWindows(displayIDs: Set<CGDirectDisplayID>, completion: @escaping () -> Void) {
+        let toDestroy = desktopVideoInstances.filter { displayIDs.contains($0.window.displayID) }
+        guard !toDestroy.isEmpty else {
+            completion()
+            return
+        }
+
+        appLogger.info("🧹 Destruyendo \(toDestroy.count) ventana(s) de escritorio en pantalla(s) \(displayIDs.map(String.init).joined(separator: ", "))")
+        desktopVideoInstances.removeAll { displayIDs.contains($0.window.displayID) }
+
+        let group = DispatchGroup()
+        for (window, _) in toDestroy {
+            group.enter()
+            window.close {
+                group.leave()
+            }
+        }
         group.notify(queue: .main) {
             completion()
         }
@@ -1463,12 +1519,53 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     ///
     /// - Parameter reason: Short identifier used for telemetry + logs.
     /// - Returns: `true` if first-frame probe confirmed advancing render, `false` otherwise.
-    func performFreshRebuild(reason: String) async -> Bool {
+    /// Task 2.9 — resolves whether a rebuild should be display-scoped and to which
+    /// displays. Returns `nil` for a global rebuild (every display), or the set of
+    /// display IDs to rebuild in isolation. Pure so it can be unit-tested without
+    /// any windows.
+    /// - A scoped rebuild requires both kill-switches on (`perDisplayRecovery` and
+    ///   `bookmarkRefCount` — the scoped path keeps the shared security-scoped URL
+    ///   alive by ref-count), a non-empty request, and that the request is a
+    ///   *strict subset* of the live displays (there must be at least one healthy
+    ///   display left untouched, otherwise a global rebuild is simpler and safe).
+    static func resolveRebuildScope(
+        requested: Set<CGDirectDisplayID>?,
+        liveDisplays: Set<CGDirectDisplayID>,
+        perDisplayEnabled: Bool,
+        refCountEnabled: Bool
+    ) -> Set<CGDirectDisplayID>? {
+        guard perDisplayEnabled, refCountEnabled,
+              let req = requested, !req.isEmpty else { return nil }
+        let intersect = req.intersection(liveDisplays)
+        guard !intersect.isEmpty, intersect != liveDisplays else { return nil }
+        return intersect
+    }
+
+    func performFreshRebuild(reason: String, targetDisplays: Set<CGDirectDisplayID>? = nil) async -> Bool {
         self.recoveryDecisionLogger.error("🛠️ performFreshRebuild start — reason: \(reason)")
 
         guard let video = self.currentVideo else {
             self.recoveryDecisionLogger.fault("❌ performFreshRebuild aborted — no current video.")
             return false
+        }
+
+        // Task 2.9 — decide global vs display-scoped rebuild.
+        var liveDisplays = Set(self.desktopVideoInstances.map { $0.window.displayID })
+        #if DEBUG
+        if let liveOverride = self.testLiveDisplayIDsOverride { liveDisplays = liveOverride }
+        #endif
+        let scopedTargets = Self.resolveRebuildScope(
+            requested: targetDisplays,
+            liveDisplays: liveDisplays,
+            perDisplayEnabled: RecoveryDebugFlags.perDisplayRecovery,
+            refCountEnabled: RecoveryDebugFlags.bookmarkRefCount
+        )
+        #if DEBUG
+        self.testRebuildTargetsSeen.append(scopedTargets)
+        #endif
+
+        if let scoped = scopedTargets {
+            return await self.performDisplayScopedRebuild(reason: reason, targetDisplays: scoped, video: video)
         }
 
         // 1) Teardown — destroy every old window and wait for close completion
@@ -1544,8 +1641,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// window shows forward advance or wrap between the two samples. A single
     /// sample is not enough because playback may legitimately start from 0
     /// and the first sample may be a valid pre-advance baseline.
-    private func verifyFirstFrameProbe() async -> Bool {
-        let windows = self.desktopVideoInstances.map { $0.window }
+    /// - Parameter onlyDisplays: Task 2.9 — when non-nil, only the windows on
+    ///   those displays are probed (used by a display-scoped rebuild so a still-
+    ///   stalled healthy display cannot mask the freshly rebuilt one, and vice
+    ///   versa).
+    private func verifyFirstFrameProbe(onlyDisplays: Set<CGDirectDisplayID>? = nil) async -> Bool {
+        let windows: [DesktopVideoWindowMejorada] = self.desktopVideoInstances
+            .filter { onlyDisplays == nil || onlyDisplays!.contains($0.window.displayID) }
+            .map { $0.window }
         guard !windows.isEmpty else { return false }
 
         let sample1: [CMTime?] = await self.sampleCurrentTimes(on: windows)
@@ -1573,6 +1676,99 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
 
+    /// Task 2.9 — the set of display IDs whose render-advance probe currently
+    /// reports `.stalled`. `renderAdvanceProbes` is kept index-aligned with
+    /// `desktopVideoInstances` (both are rebuilt together by
+    /// `startRenderAdvanceProbes()`), so `zip` maps a stalled probe back to its
+    /// window's display.
+    private func stalledDisplayIDs() async -> Set<CGDirectDisplayID> {
+        #if DEBUG
+        if let override = self.testStalledDisplayIDsOverride { return override }
+        #endif
+        var stalled: Set<CGDirectDisplayID> = []
+        for (probe, instance) in zip(self.renderAdvanceProbes, self.desktopVideoInstances) {
+            if await probe.currentVerdict == .stalled {
+                stalled.insert(instance.window.displayID)
+            }
+        }
+        return stalled
+    }
+
+    /// Task 2.9 — display-scoped fresh rebuild: tears down and recreates only the
+    /// windows on `targetDisplays`, leaving every other display's window instance
+    /// (and its AVQueuePlayer / AVPlayerLooper / AVPlayerLayer) untouched. Skips
+    /// `BookmarkActor.reconcile()` and reuses the surviving windows' still-valid
+    /// security-scoped URL so the shared ref-count never drops to zero. The
+    /// first-frame probe is scoped to the rebuilt windows only.
+    private func performDisplayScopedRebuild(
+        reason: String,
+        targetDisplays: Set<CGDirectDisplayID>,
+        video: VideoFile
+    ) async -> Bool {
+        self.recoveryDecisionLogger.error("🛠️ performDisplayScopedRebuild — reason: \(reason), displays: \(targetDisplays.map(String.init).joined(separator: ", "))")
+
+        // Reuse a surviving window's security-scoped URL — it is still valid and
+        // still needed, so we must NOT release it or drain the ref-count here.
+        let survivorURL = self.desktopVideoInstances
+            .first { !targetDisplays.contains($0.window.displayID) }?
+            .accessibleURL
+
+        // 1) Teardown only the target windows (no security-scoped release).
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            self.destroyDesktopWindows(displayIDs: targetDisplays) { cont.resume() }
+        }
+        try? await Task.sleep(for: .milliseconds(300))
+
+        #if DEBUG
+        if let hook = self.testFreshRebuildVerifyHook {
+            let advancing = await hook(reason, self.recoveryAttempts)
+            self.recoveryDecisionLogger.error("🧪 performDisplayScopedRebuild TEST HOOK — reason: \(reason), attempt: \(self.recoveryAttempts), advancing: \(advancing)")
+            await self.recoveryTelemetry.recordVerifyResult(advancing: advancing, detail: "test-hook display-scoped rebuild (\(reason))")
+            return advancing
+        }
+        #endif
+
+        // 2) Resolve the URL to build against — prefer the surviving one; if every
+        //    window happened to be a target, fall back to a fresh bookmark resolve.
+        let accessibleURL: URL
+        if let survivorURL {
+            accessibleURL = survivorURL
+        } else if let resolved = await self.resolveBookmark(for: video) {
+            accessibleURL = resolved
+        } else {
+            self.recoveryDecisionLogger.fault("❌ performDisplayScopedRebuild aborted — no usable security-scoped URL.")
+            return false
+        }
+
+        // 3) Recreate windows only for the target screens; append to the instance list.
+        let targetScreens = NSScreen.screens.filter { targetDisplays.contains($0.displayID) }
+        guard !targetScreens.isEmpty else {
+            self.recoveryDecisionLogger.fault("❌ performDisplayScopedRebuild aborted — target display(s) no longer attached.")
+            return false
+        }
+        await self.createDesktopWindows(for: video, accessibleURL: accessibleURL, onlyScreens: targetScreens)
+
+        // 4) orderOut → orderFront → orderBack for the rebuilt windows only.
+        for (window, _) in self.desktopVideoInstances where targetDisplays.contains(window.displayID) {
+            window.orderOut(nil)
+            window.orderFront(nil)
+            window.orderBack(nil)
+        }
+
+        // 5) Settle.
+        try? await Task.sleep(for: .milliseconds(400))
+
+        // 6) First-frame probe scoped to the rebuilt windows.
+        let advancing = await self.verifyFirstFrameProbe(onlyDisplays: targetDisplays)
+        if advancing {
+            self.recoveryDecisionLogger.error("✅ performDisplayScopedRebuild OK — first-frame probe confirmed advancing on rebuilt display(s).")
+        } else {
+            self.recoveryDecisionLogger.fault("❌ performDisplayScopedRebuild failed — first-frame probe saw no advance on rebuilt display(s).")
+        }
+        await self.recoveryTelemetry.recordVerifyResult(advancing: advancing, detail: "display-scoped first-frame probe (\(reason))")
+        return advancing
+    }
+
     /// Attempts a bounded, escalating recovery when health check reports unhealthy.
     /// Uses the render-advance probe as primary signal (design D2).
     /// - Parameter reason: Reason for the recovery attempt (for logging/telemetry).
@@ -1584,6 +1780,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         self.isRecoveryInProgress = true
         defer { self.isRecoveryInProgress = false }
+
+        // Task 2.9 — capture which displays are stalled once, before the first
+        // teardown removes the probes. Every `attemptBoundedRecovery` trigger is a
+        // stall-type event (wake goes straight to `performFreshRebuild`), so a
+        // stall confined to a subset should rebuild only that subset. The
+        // global-vs-scoped gating happens inside `performFreshRebuild`.
+        let stalledDisplays = await self.stalledDisplayIDs()
+        if !stalledDisplays.isEmpty {
+            self.appLogger.info("🖥️ Recovery: displays reportando stall → \(stalledDisplays.map(String.init).joined(separator: ", "))")
+        }
 
         // Loop through attempts (replaces recursion)
         let backoffSchedule = self.effectiveRecoveryBackoff
@@ -1611,7 +1817,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 // Task 2.5 path: full fresh rebuild with first-frame probe.
                 do {
                     freshOK = try await self.wallpaperOperationActor.withExclusiveAccess {
-                        await self.performFreshRebuild(reason: reason)
+                        await self.performFreshRebuild(
+                            reason: reason,
+                            targetDisplays: stalledDisplays.isEmpty ? nil : stalledDisplays
+                        )
                     }
                 } catch {
                     self.appLogger.error("⏱️ Recovery attempt \(self.recoveryAttempts) no pudo adquirir lock: \(error)")
@@ -3019,6 +3228,16 @@ extension WallpaperManager {
             self.autoChangeInterval = originalInterval
             self.saveAutoChangeSettings()
         }
+    }
+}
+
+// MARK: - Display identity helper (Task 2.9)
+
+extension NSScreen {
+    /// The `CGDirectDisplayID` for this screen, or `0` if the device description
+    /// has no `NSScreenNumber` (should not happen for an attached display).
+    var displayID: CGDirectDisplayID {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
     }
 }
 

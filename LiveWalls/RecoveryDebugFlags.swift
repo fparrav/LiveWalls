@@ -111,12 +111,31 @@ struct RecoveryDebugFlags {
         }
     }
 
+    private static let perDisplayRecoveryKey = "RecoveryDebug.PerDisplayRecovery"
+
+    /// Incremento 2.9: display-scoped fresh rebuild (design D3).
+    /// ON (true) = a stall confined to a subset of displays rebuilds only those windows,
+    /// leaving the healthy displays' player/looper/layer untouched; OFF = every recovery
+    /// rebuilds all displays (the pre-2.9 behavior). Also forced OFF when `bookmarkRefCount`
+    /// is disabled, since the scoped path depends on per-URL ref-counting.
+    static var perDisplayRecovery: Bool {
+        get {
+            let obj = UserDefaults.standard.object(forKey: perDisplayRecoveryKey)
+            return obj == nil ? true : UserDefaults.standard.bool(forKey: perDisplayRecoveryKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: perDisplayRecoveryKey)
+            logger.warning("🧪 RecoveryDebugFlags.perDisplayRecovery → \(newValue ? "ENABLED (fix)" : "DISABLED (always rebuild all displays)")")
+        }
+    }
+
     /// Resets all 2.8 kill-switches to their defaults (ON). Useful for tests.
     static func resetAllKillSwitches() {
         UserDefaults.standard.removeObject(forKey: probeBasedHealthJudgmentKey)
         UserDefaults.standard.removeObject(forKey: fullFreshRebuildKey)
         UserDefaults.standard.removeObject(forKey: bookmarkRefCountKey)
         UserDefaults.standard.removeObject(forKey: staticApplyOffMainKey)
+        UserDefaults.standard.removeObject(forKey: perDisplayRecoveryKey)
         logger.warning("🧪 RecoveryDebugFlags: all kill-switches reset to defaults (ON)")
     }
 }
