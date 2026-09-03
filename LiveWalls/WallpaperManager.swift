@@ -173,9 +173,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
       // NOTE: PlaybackTelemetry integration pending - add to Xcode project target first
       // private let playbackTelemetry = PlaybackTelemetry() // PHASE 7: Production telemetry
       private let recoveryTelemetry = RecoveryTelemetry() // Task 1.1: Durable recovery-lifecycle telemetry
-      private var activeSecurityScopedURLs: Set<String> = []
+      // Task 2.6 / D6: BookmarkActor is now the single source of truth for
+      // security-scoped access tracking (ref-count). The old local mirror
+      // `activeSecurityScopedURLs` has been removed.
       private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
-    
+
     // MARK: - Synchronization to prevent crashes
     private let wallpaperOperationQueue = DispatchQueue(label: "com.livewalls.wallpaperQueue", attributes: .concurrent)
     private let wallpaperOperationActor = WallpaperOperationActor()
@@ -1190,17 +1192,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             // Resolver bookmark de forma asíncrona usando BookmarkActor
             let url = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
             
-            // Iniciar acceso security-scoped usando BookmarkActor
+            // Iniciar acceso security-scoped usando BookmarkActor (ref-count, single source of truth)
             let started = await bookmarkActor.startAccessingSecurityScopedResource(url: url)
             guard started else {
                 appLogger.error("❌ No se pudo iniciar acceso security-scoped para: \(video.name)")
                 return nil
             }
-            
-            // Registrar URL activa en el conjunto local (para compatibilidad)
-            let normalizedPath = url.path
-            activeSecurityScopedURLs.insert(normalizedPath)
-            
+
+            // Task 2.6 / D6: no local mirror — BookmarkActor tracks the ref-count internally.
             appLogger.info("✅ Bookmark resuelto y acceso iniciado: \(video.name)")
             return url
             
@@ -1305,21 +1304,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     // MARK: - Security-Scoped Resource Management
-    
-    /// Detiene el acceso security-scoped de forma segura
+
+    /// Detiene el acceso security-scoped delegando al BookmarkActor (única fuente de verdad).
+    /// - Task 2.6 / D6: eliminado el espejo local; BookmarkActor hace ref-count y double-stop safe.
     @MainActor
     private func safeStopSecurityScopedAccess(for url: URL) {
-        let normalizedPath = url.path
-        if activeSecurityScopedURLs.contains(normalizedPath) {
-            activeSecurityScopedURLs.remove(normalizedPath)
-            
-            // Usar BookmarkActor para detener acceso
-            Task {
-                await bookmarkActor.stopAccessingSecurityScopedResource(url: url)
-            }
-            
-            appLogger.debug("🔓 Liberado acceso security-scoped: \(normalizedPath)")
+        // Delegamos al actor. Double-stop es no-op silencioso por contrato.
+        Task {
+            await self.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
         }
+        appLogger.debug("🔓 Stop security-scoped solicitado al BookmarkActor: \(url.path)")
     }
     
     // MARK: - New Robust Auto Change Timer
@@ -1403,6 +1397,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             // give AVFoundation a moment to fully release the previous item/looper
             try? await Task.sleep(for: .milliseconds(300))
         }
+
+        // 1.5) Task 2.6 / D6: drain security-scoped state to zero before the new
+        //     resolveBookmark/start cycle. Idempotent; rebuild will re-acquire
+        //     cleanly without depending on whatever state the previous rebuild left behind.
+        await self.bookmarkActor.reconcile()
 
         // 2) Resolve bookmark — abort if it can't be resolved (file gone / perms revoked).
         guard let accessibleURL = await self.resolveBookmark(for: video) else {
@@ -1807,11 +1806,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                             group.leave()
                             return
                         }
-                        // Release bookmark off-main to avoid stalling UI
+                        // Release bookmark off-main to avoid stalling UI (ref-count decrement en BookmarkActor)
                         await self.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
-                        _ = await MainActor.run { [weak self] in
-                            self?.activeSecurityScopedURLs.remove(url.path)
-                        }
+                        // Task 2.6 / D6: removed local mirror removal; BookmarkActor owns the state.
                         group.leave()
                     }
                 }
@@ -2693,14 +2690,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         appLogger.info("🧹 Cleaning up all resources")
         stopAutoChangeTimer()
         cleanupBackgroundColorWindows()
-        
+
         // Close all windows and release resources
         for (window, accessibleURL) in desktopVideoInstances {
             window.close()
             safeStopSecurityScopedAccess(for: accessibleURL)
         }
         desktopVideoInstances.removeAll()
-        activeSecurityScopedURLs.removeAll()
+        // Task 2.6 / D6: drain remaining security-scoped accesses via the actor.
+        Task { [bookmarkActor] in await bookmarkActor.stopAllSecurityScopedAccess() }
     }
 }
 
