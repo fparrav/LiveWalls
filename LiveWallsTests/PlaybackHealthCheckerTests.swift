@@ -6,22 +6,22 @@ import AVFoundation
 /// Verifica que las comprobaciones de salud de reproducción se ejecuten de forma asíncrona sin bloquear el main thread
 @MainActor
 final class PlaybackHealthCheckerTests: XCTestCase {
-    
+
     var playbackHealthChecker: PlaybackHealthChecker!
     var bookmarkActor: BookmarkActor!
-    
+
     override func setUp() async throws {
         playbackHealthChecker = PlaybackHealthChecker()
         bookmarkActor = BookmarkActor()
     }
-    
+
     override func tearDown() async throws {
         playbackHealthChecker = nil
         bookmarkActor = nil
     }
-    
+
     // MARK: - Test 1: Verificar que checkPlaybackHealth no bloquea main thread
-    
+
     /// Verifica que checkPlaybackHealth se ejecuta de forma asíncrona sin bloquear el main thread
     func testCheckPlaybackHealthDoesNotBlockMainThread() async throws {
         // Given: Un video de prueba con bookmark data simulado
@@ -32,19 +32,20 @@ final class PlaybackHealthCheckerTests: XCTestCase {
             thumbnailData: nil,
             bookmarkData: Data() // Bookmark simulado
         )
-        
+
         // When: Ejecutamos checkPlaybackHealth y medimos responsividad del main thread
         let startTime = Date()
-        
+
         // Lanzar tarea que debe completarse rápidamente si es asíncrona
         let task = Task {
             let _ = await playbackHealthChecker.checkPlaybackHealth(
                 windows: [],
                 currentVideo: testVideo,
-                bookmarkActor: bookmarkActor
+                bookmarkActor: bookmarkActor,
+                renderAdvanceVerdict: .unknown
             )
         }
-        
+
         // El main thread debe seguir respondiendo durante la operación
         // Realizar una operación rápida en main thread para verificar responsividad
         var mainThreadResponseTime: TimeInterval = 0
@@ -54,18 +55,18 @@ final class PlaybackHealthCheckerTests: XCTestCase {
             _ = 1 + 1
             mainThreadResponseTime = Date().timeIntervalSince(measureStart)
         }
-        
+
         // Esperar a que termine la tarea
         _ = await task.value
         let duration = Date().timeIntervalSince(startTime)
-        
+
         // Then: No debe bloquear main thread y debe completarse en tiempo razonable
         XCTAssertLessThan(mainThreadResponseTime, 0.05, "Main thread debe responder rápidamente (< 50ms)")
         XCTAssertLessThan(duration, 1.0, "checkPlaybackHealth no debe tomar más de 1 segundo para ventanas vacías")
     }
-    
+
     // MARK: - Test 2: Verificar que detecta necesidad de reinicio
-    
+
     /// Verifica que checkPlaybackHealth detecta cuando es necesario reiniciar la reproducción
     func testCheckPlaybackHealthRestartsPlaybackWhenNeeded() async throws {
         // Given: Un video de prueba sin ventanas (simula reproducción detenida)
@@ -76,14 +77,15 @@ final class PlaybackHealthCheckerTests: XCTestCase {
             thumbnailData: nil,
             bookmarkData: Data()
         )
-        
+
         // When: Verificamos salud de reproducción con 0 ventanas
         let healthStatus = await playbackHealthChecker.checkPlaybackHealth(
             windows: [],
             currentVideo: testVideo,
-            bookmarkActor: bookmarkActor
+            bookmarkActor: bookmarkActor,
+            renderAdvanceVerdict: .unknown
         )
-        
+
         // Then: Debe detectar que no hay reproducción activa
         XCTAssertFalse(healthStatus, "checkPlaybackHealth debe retornar false cuando no hay ventanas")
     }
@@ -107,19 +109,22 @@ final class PlaybackHealthCheckerTests: XCTestCase {
          async let check1 = playbackHealthChecker.checkPlaybackHealth(
              windows: [],
              currentVideo: testVideo,
-             bookmarkActor: bookmarkActor
+             bookmarkActor: bookmarkActor,
+                    renderAdvanceVerdict: .unknown
          )
          
          async let check2 = playbackHealthChecker.checkPlaybackHealth(
              windows: [],
              currentVideo: testVideo,
-             bookmarkActor: bookmarkActor
+             bookmarkActor: bookmarkActor,
+                    renderAdvanceVerdict: .unknown
          )
          
          async let check3 = playbackHealthChecker.checkPlaybackHealth(
              windows: [],
              currentVideo: testVideo,
-             bookmarkActor: bookmarkActor
+             bookmarkActor: bookmarkActor,
+                    renderAdvanceVerdict: .unknown
          )
          
          // Esperar a que todas completen
@@ -224,7 +229,8 @@ final class PlaybackHealthCheckerTests: XCTestCase {
                let _ = await playbackHealthChecker.checkPlaybackHealth(
                    windows: [],
                    currentVideo: testVideo,
-                   bookmarkActor: bookmarkActor
+                   bookmarkActor: bookmarkActor,
+                    renderAdvanceVerdict: .unknown
                )
                checkCount += 1
                
@@ -287,7 +293,8 @@ final class PlaybackHealthCheckerTests: XCTestCase {
                let _ = await playbackHealthChecker.checkPlaybackHealth(
                    windows: [],
                    currentVideo: testVideo,
-                   bookmarkActor: bookmarkActor
+                   bookmarkActor: bookmarkActor,
+                    renderAdvanceVerdict: .unknown
                )
            }
            
@@ -321,7 +328,8 @@ final class PlaybackHealthCheckerTests: XCTestCase {
                    let result = await self.playbackHealthChecker.checkPlaybackHealth(
                        windows: [],
                        currentVideo: testVideo,
-                       bookmarkActor: self.bookmarkActor
+                       bookmarkActor: self.bookmarkActor,
+                    renderAdvanceVerdict: .unknown
                    )
                    return result
                }
@@ -361,13 +369,129 @@ final class PlaybackHealthCheckerTests: XCTestCase {
            let healthStatus = await playbackHealthChecker.checkPlaybackHealth(
                windows: [],
                currentVideo: testVideo,
-               bookmarkActor: bookmarkActor
+               bookmarkActor: bookmarkActor,
+                    renderAdvanceVerdict: .unknown
            )
            
            // Result should be a boolean (true = healthy, false = needs attention)
            XCTAssertFalse(healthStatus, "Empty windows should indicate unhealthy state")
        }
+
+       // MARK: - Task 2.4: Probe-based Health Check Tests (Design D2)
+
+   /// Task 2.4: Verdict .advancing → healthy even if timeControlStatus is not .playing
+   func testProbeAdvancingReturnsHealthy() async throws {
+       // Given: A video with windows, but probe says advancing
+       let testURL = URL(fileURLWithPath: "/test/video.mp4")
+       let testVideo = VideoFile(
+           url: testURL,
+           name: "Test Video",
+           thumbnailData: nil,
+           bookmarkData: Data()
+       )
+
+       let testScreen = NSScreen.main ?? NSScreen()
+       let window = DesktopVideoWindowMejorada(screen: testScreen, videoURL: testURL, startPaused: true)
+
+       defer { window.close() }
+
+       // When: Check health with probe verdict .advancing
+       let healthStatus = await playbackHealthChecker.checkPlaybackHealth(
+           windows: [(window, testURL)],
+           currentVideo: testVideo,
+           bookmarkActor: bookmarkActor,
+           renderAdvanceVerdict: .advancing
+       )
+
+       // Then: Should return true (healthy) because probe is primary signal
+       XCTAssertTrue(healthStatus, "Probe .advancing should return healthy regardless of decoder status")
    }
+
+   /// Task 2.4: Verdict .stalled → unhealthy
+   func testProbeStalledReturnsUnhealthy() async throws {
+       // Given: A video with windows, but probe says stalled
+       let testURL = URL(fileURLWithPath: "/test/video.mp4")
+       let testVideo = VideoFile(
+           url: testURL,
+           name: "Test Video",
+           thumbnailData: nil,
+           bookmarkData: Data()
+       )
+
+       let testScreen = NSScreen.main ?? NSScreen()
+       let window = DesktopVideoWindowMejorada(screen: testScreen, videoURL: testURL, startPaused: true)
+
+       defer { window.close() }
+
+       // When: Check health with probe verdict .stalled
+       let healthStatus = await playbackHealthChecker.checkPlaybackHealth(
+           windows: [(window, testURL)],
+           currentVideo: testVideo,
+           bookmarkActor: bookmarkActor,
+           renderAdvanceVerdict: .stalled
+       )
+
+       // Then: Should return false (unhealthy) — confirmed stall triggers recovery
+       XCTAssertFalse(healthStatus, "Probe .stalled should return unhealthy to trigger recovery")
+   }
+
+   /// Task 2.4: Verdict .unknown → falls back to timeControlStatus/rate
+   func testProbeUnknownFallsBackToTimeControlStatus() async throws {
+       // Given: A video with windows, probe verdict .unknown
+       let testURL = URL(fileURLWithPath: "/test/video.mp4")
+       let testVideo = VideoFile(
+           url: testURL,
+           name: "Test Video",
+           thumbnailData: nil,
+           bookmarkData: Data()
+       )
+
+       let testScreen = NSScreen.main ?? NSScreen()
+       let window = DesktopVideoWindowMejorada(screen: testScreen, videoURL: testURL, startPaused: true)
+
+       defer { window.close() }
+
+       // When: Check health with probe verdict .unknown (no baseline yet)
+       let healthStatus = await playbackHealthChecker.checkPlaybackHealth(
+           windows: [(window, testURL)],
+           currentVideo: testVideo,
+           bookmarkActor: bookmarkActor,
+           renderAdvanceVerdict: .unknown
+       )
+
+       // Then: Should fall back to timeControlStatus/rate (window is paused at start, so unhealthy)
+       // Note: Window starts paused, so timeControlStatus should be nil/paused, rate = 0
+       XCTAssertFalse(healthStatus, "Probe .unknown should fall back to timeControlStatus/rate")
+   }
+
+   /// Task 2.4: Verdict .idle → falls back to timeControlStatus/rate
+   func testProbeIdleFallsBackToTimeControlStatus() async throws {
+       // Given: A video with windows, probe verdict .idle
+       let testURL = URL(fileURLWithPath: "/test/video.mp4")
+       let testVideo = VideoFile(
+           url: testURL,
+           name: "Test Video",
+           thumbnailData: nil,
+           bookmarkData: Data()
+       )
+
+       let testScreen = NSScreen.main ?? NSScreen()
+       let window = DesktopVideoWindowMejorada(screen: testScreen, videoURL: testURL, startPaused: true)
+
+       defer { window.close() }
+
+       // When: Check health with probe verdict .idle
+       let healthStatus = await playbackHealthChecker.checkPlaybackHealth(
+           windows: [(window, testURL)],
+           currentVideo: testVideo,
+           bookmarkActor: bookmarkActor,
+           renderAdvanceVerdict: .idle
+       )
+
+       // Then: Should fall back to timeControlStatus/rate
+       XCTAssertFalse(healthStatus, "Probe .idle should fall back to timeControlStatus/rate")
+   }
+}
  
  
  

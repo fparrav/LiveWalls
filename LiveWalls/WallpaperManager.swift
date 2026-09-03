@@ -89,6 +89,28 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// (success, throw, or timeout) — it can never latch.
     private var wallpaperOperationInFlight = false
 
+    // MARK: - Bounded Recovery Retry Policy (Task 2.4 / Design D2)
+
+    /// Count of consecutive recovery attempts for the current stall episode.
+    /// Reset to 0 on any healthy check (ensurePlaying / didWake success).
+    private var recoveryAttempts: Int = 0
+
+    /// Maximum number of recovery attempts before giving up and logging.
+    private let maxRecoveryAttempts = 3
+
+    /// Escalating backoff for each attempt (index = attempt number).
+    /// Attempt 1: immediate, Attempt 2: 3s, Attempt 3: 10s.
+    private let recoveryBackoff: [Duration] = [.seconds(0), .seconds(3), .seconds(10)]
+
+    /// True once max attempts are exhausted and the "exhausted" log/telemetry has
+    /// been emitted. Prevents spamming the durable log when triggers keep firing
+    /// (e.g., external monitor genuinely off). Reset alongside recoveryAttempts.
+    private var recoveryExhausted: Bool = false
+
+    /// Guard to prevent concurrent recovery loops. Two `ensurePlaying` unhealthy
+    /// triggers could otherwise start parallel loops during the ~4s+ awaits.
+    private var isRecoveryInProgress: Bool = false
+
     /// Runs `operation` on the main actor with a hard timeout. If `timeout`
     /// elapses first the operation task is cancelled, its wind-down is awaited
     /// (so nothing is abandoned mid-flight), and `WallpaperOperationTimeoutError`
@@ -1340,11 +1362,76 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             appLogger.debug("💡 No se reinicia timer: no está activo")
             return
         }
-        
+
         appLogger.info("🔄 Reiniciando timer después de cambio manual")
         startAutoChangeTimerIfNeeded()
     }
-    
+
+    /// Attempts a bounded, escalating recovery when health check reports unhealthy.
+    /// Uses the render-advance probe as primary signal (design D2).
+    /// - Parameter reason: Reason for the recovery attempt (for logging/telemetry).
+    private func attemptBoundedRecovery(reason: String) async {
+        // Guard against concurrent recovery loops (e.g., multiple ensurePlaying unhealthy triggers)
+        guard !self.isRecoveryInProgress else {
+            self.appLogger.debug("⏭️ Recovery ya en progreso — ignorando disparo concurrente")
+            return
+        }
+        self.isRecoveryInProgress = true
+        defer { self.isRecoveryInProgress = false }
+
+        // Loop through attempts (replaces recursion)
+        while self.recoveryAttempts < self.maxRecoveryAttempts {
+            let backoff = self.recoveryBackoff[min(self.recoveryAttempts, self.recoveryBackoff.count - 1)]
+            if backoff > .seconds(0) {
+                self.appLogger.info("⏳ Recovery attempt \(self.recoveryAttempts + 1)/\(self.maxRecoveryAttempts): waiting \(backoff) before rebuild...")
+                do {
+                    try await Task.sleep(for: backoff)
+                } catch {
+                    self.appLogger.debug("⏭️ Recovery backoff cancelled")
+                    return
+                }
+            }
+
+            self.recoveryAttempts += 1
+            self.appLogger.info("🛠️ Recovery attempt \(self.recoveryAttempts)/\(self.maxRecoveryAttempts) started. Reason: \(reason)")
+            await self.recoveryTelemetry.recordRecoverAttempted(reason: reason)
+
+            // Perform rebuild via startWallpaperSafe (which serializes via the lock)
+            // Note: Task 2.5 will replace this with a full fresh rebuild.
+            self.startWallpaperSafe()
+
+            // Wait a moment for the rebuild to settle
+            try? await Task.sleep(for: .seconds(2))
+
+            // Re-evaluate health once with current probe state
+            let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
+                windows: self.desktopVideoInstances,
+                currentVideo: self.currentVideo,
+                bookmarkActor: self.bookmarkActor,
+                renderAdvanceVerdict: self.renderAdvanceState
+            )
+
+            if isHealthy {
+                self.appLogger.info("✅ Recovery attempt \(self.recoveryAttempts) succeeded — health restored")
+                self.recoveryAttempts = 0
+                self.recoveryExhausted = false
+                await self.recoveryTelemetry.recordRecoverOutcome(success: true, reason: reason)
+                return
+            }
+
+            self.appLogger.warning("⚠️ Recovery attempt \(self.recoveryAttempts) did not restore health — next attempt")
+            await self.recoveryTelemetry.recordRecoverOutcome(success: false, reason: "rebuild-unhealthy")
+            // Loop continues for next attempt
+        }
+
+        // All attempts exhausted — log once (no spam on subsequent triggers)
+        if !self.recoveryExhausted {
+            self.recoveryExhausted = true
+            self.recoveryDecisionLogger.fault("🛑 Recovery exhausted after \(self.maxRecoveryAttempts) attempts — stopping. Reason: \(reason)")
+            await self.recoveryTelemetry.recordRecoverOutcome(success: false, reason: "max-attempts-exhausted")
+        }
+    }
+
     // MARK: - Static Frame Update Timer
     
 
@@ -2318,6 +2405,8 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                         await MainActor.run {
                             self.isPlayingWallpaper = true
                             self.startAutoChangeTimerIfNeeded()
+                            self.recoveryAttempts = 0  // Reset recovery counter on successful wake rebuild
+                            self.recoveryExhausted = false  // Reset exhausted flag on successful wake rebuild
                             self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
                             // Task 1.3: retained-level recovery-outcome log (success path)
                             self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (windows recreated, playback active).")
@@ -2580,23 +2669,25 @@ extension WallpaperManager {
             Task { @MainActor [weak self] in
                 guard let self else { return }
 
-                // Usar PlaybackHealthChecker para verificación asíncrona
+                // Usar PlaybackHealthChecker para verificación asíncrona (probe-based, design D2)
                 let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
                     windows: self.desktopVideoInstances,
                     currentVideo: self.currentVideo,
-                    bookmarkActor: self.bookmarkActor
+                    bookmarkActor: self.bookmarkActor,
+                    renderAdvanceVerdict: self.renderAdvanceState
                 )
 
                 if !isHealthy {
                     self.appLogger.warning("⚠️ ensurePlaying: verificación de salud falló, reiniciando...")
                     // Task 1.3: retained-level recovery decision + telemetry
                     self.recoveryDecisionLogger.error("🛠️ Recovery decision: health-check detected stall/unhealthy, triggering rebuild.")
-                    Task { [self] in await self.recoveryTelemetry.recordRecoverAttempted(reason: "health-check-unhealthy") }
-                    // startWallpaperSafe() ya serializa el rebuild vía withExclusiveAccess;
-                    // el re-check de salud post-lock es responsabilidad de 2.4.
-                    self.startWallpaperSafe()
+                    // Task 2.4: bounded, escalating retry policy instead of single rebuild
+                    Task { [self] in await self.attemptBoundedRecovery(reason: "health-check-unhealthy") }
                 } else {
                     self.appLogger.debug("✅ ensurePlaying: reproducción verificada como saludable")
+                    // Reset recovery state on healthy check
+                    self.recoveryAttempts = 0
+                    self.recoveryExhausted = false
                 }
             }
         } else {
