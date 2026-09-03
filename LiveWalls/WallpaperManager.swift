@@ -1367,6 +1367,118 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         startAutoChangeTimerIfNeeded()
     }
 
+    // MARK: - Task 2.5: Full Fresh Rebuild (Design D3)
+
+    /// Performs a full fresh rebuild (design D3): destroys old windows, resolves
+    /// the bookmark, creates new windows with brand-new AVQueuePlayer + AVPlayerLooper
+    /// + AVPlayerLayer per display, runs an orderFront→orderBack cycle for proper
+    /// z-order/space settling, then probes for first-frame advance to confirm the
+    /// pipeline is actually rendering.
+    ///
+    /// Differs from `startWallpaperSafe`/`changeToNextVideo` in that it does NOT
+    /// reuse any existing playback state. Every AVQueuePlayer is allocated fresh,
+    /// so a wedged AVPlayerLooper / stale AVPlayerItem cannot survive the rebuild.
+    ///
+    /// Caller responsibilities (must hold the wallpaper operation lock):
+    /// - Caller has verified `currentVideo != nil`.
+    /// - Caller will record `recoverOutcome` / `verifyResult` based on the return.
+    ///
+    /// - Parameter reason: Short identifier used for telemetry + logs.
+    /// - Returns: `true` if first-frame probe confirmed advancing render, `false` otherwise.
+    func performFreshRebuild(reason: String) async -> Bool {
+        self.recoveryDecisionLogger.error("🛠️ performFreshRebuild start — reason: \(reason)")
+
+        guard let video = self.currentVideo else {
+            self.recoveryDecisionLogger.fault("❌ performFreshRebuild aborted — no current video.")
+            return false
+        }
+
+        // 1) Teardown — destroy every old window and wait for close completion
+        //    (the close callback chain releases security-scoped access).
+        if !self.desktopVideoInstances.isEmpty {
+            self.appLogger.info("🧹 Teardown de \(self.desktopVideoInstances.count) ventana(s) previa(s)")
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                self.destroyAllDesktopWindows { cont.resume() }
+            }
+            // give AVFoundation a moment to fully release the previous item/looper
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+
+        // 2) Resolve bookmark — abort if it can't be resolved (file gone / perms revoked).
+        guard let accessibleURL = await self.resolveBookmark(for: video) else {
+            self.recoveryDecisionLogger.fault("❌ performFreshRebuild aborted — bookmark could not be resolved.")
+            self.isPlayingWallpaper = false
+            return false
+        }
+
+        // 3) Create brand-new windows. createDesktopWindows already invokes
+        //    startRenderAdvanceProbes() at the end, which allocates one
+        //    RenderAdvanceProbe per window — fresh AVQueuePlayer / looper / layer
+        //    on the window side, fresh probe on the manager side.
+        await self.createDesktopWindows(for: video, accessibleURL: accessibleURL)
+
+        // 4) orderOut → orderFront → orderBack per window (design D3): the orderOut
+        //    fully detaches the window from the window server's Space association
+        //    before re-adding it, which is the part that unsticks a compositor that
+        //    stayed wedged across a wake / display reconfiguration; orderFront then
+        //    orderBack restores the desktop-level z-order behind the icon layer.
+        for (window, _) in self.desktopVideoInstances {
+            window.orderOut(nil)
+            window.orderFront(nil)
+            window.orderBack(nil)
+        }
+
+        // 5) Settle — 400ms gives AVFoundation time to begin the first frame
+        //    render and stabilize the new layer ordering.
+        try? await Task.sleep(for: .milliseconds(400))
+
+        // 6) First-frame probe — sample currentTime twice with ~300ms apart and
+        //    confirm forward advance OR a wrap (which is the AVPlayerLooper
+        //    restart signature).
+        let advancing = await self.verifyFirstFrameProbe()
+
+        if advancing {
+            self.recoveryDecisionLogger.error("✅ performFreshRebuild OK — first-frame probe confirmed advancing.")
+        } else {
+            self.recoveryDecisionLogger.fault("❌ performFreshRebuild failed — first-frame probe saw no advance across \(self.desktopVideoInstances.count) window(s).")
+        }
+        await self.recoveryTelemetry.recordVerifyResult(advancing: advancing, detail: "fresh-rebuild first-frame probe (\(reason))")
+        return advancing
+    }
+
+    /// Samples each active window twice (≈300ms apart) and returns true if ANY
+    /// window shows forward advance or wrap between the two samples. A single
+    /// sample is not enough because playback may legitimately start from 0
+    /// and the first sample may be a valid pre-advance baseline.
+    private func verifyFirstFrameProbe() async -> Bool {
+        let windows = self.desktopVideoInstances.map { $0.window }
+        guard !windows.isEmpty else { return false }
+
+        let sample1: [CMTime?] = await self.sampleCurrentTimes(on: windows)
+        try? await Task.sleep(for: .milliseconds(300))
+        let sample2: [CMTime?] = await self.sampleCurrentTimes(on: windows)
+
+        for (t1, t2) in zip(sample1, sample2) {
+            guard let s1 = t1, s1.isValid, s1.seconds > 0,
+                  let s2 = t2, s2.isValid, s2.seconds > 0 else {
+                continue
+            }
+            // Forward advance > 0.05s, or wrap (decrease > 0.05s).
+            let delta = s2.seconds - s1.seconds
+            if delta > 0.05 { return true }
+            if delta < -0.05 { return true }
+        }
+        return false
+    }
+
+    /// Snapshot of each window's currentTime, hopped to main actor.
+    /// Returns an array the same length as `windows` (nil where unavailable).
+    private func sampleCurrentTimes(on windows: [DesktopVideoWindowMejorada]) async -> [CMTime?] {
+        await MainActor.run {
+            windows.map { $0.getCurrentTime() }
+        }
+    }
+
     /// Attempts a bounded, escalating recovery when health check reports unhealthy.
     /// Uses the render-advance probe as primary signal (design D2).
     /// - Parameter reason: Reason for the recovery attempt (for logging/telemetry).
@@ -1396,30 +1508,28 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             self.appLogger.info("🛠️ Recovery attempt \(self.recoveryAttempts)/\(self.maxRecoveryAttempts) started. Reason: \(reason)")
             await self.recoveryTelemetry.recordRecoverAttempted(reason: reason)
 
-            // Perform rebuild via startWallpaperSafe (which serializes via the lock)
-            // Note: Task 2.5 will replace this with a full fresh rebuild.
-            self.startWallpaperSafe()
+            // Task 2.5: full fresh rebuild under the wallpaper operation lock
+            // (avoids racing against user-driven next/previous, which is exactly
+            // what the stale-AVPlayerLooper case needs).
+            let freshOK: Bool
+            do {
+                freshOK = try await self.wallpaperOperationActor.withExclusiveAccess {
+                    await self.performFreshRebuild(reason: reason)
+                }
+            } catch {
+                self.appLogger.error("⏱️ Recovery attempt \(self.recoveryAttempts) no pudo adquirir lock: \(error)")
+                freshOK = false
+            }
 
-            // Wait a moment for the rebuild to settle
-            try? await Task.sleep(for: .seconds(2))
-
-            // Re-evaluate health once with current probe state
-            let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
-                windows: self.desktopVideoInstances,
-                currentVideo: self.currentVideo,
-                bookmarkActor: self.bookmarkActor,
-                renderAdvanceVerdict: self.renderAdvanceState
-            )
-
-            if isHealthy {
-                self.appLogger.info("✅ Recovery attempt \(self.recoveryAttempts) succeeded — health restored")
+            if freshOK {
+                self.appLogger.info("✅ Recovery attempt \(self.recoveryAttempts) succeeded — first-frame probe OK")
                 self.recoveryAttempts = 0
                 self.recoveryExhausted = false
                 await self.recoveryTelemetry.recordRecoverOutcome(success: true, reason: reason)
                 return
             }
 
-            self.appLogger.warning("⚠️ Recovery attempt \(self.recoveryAttempts) did not restore health — next attempt")
+            self.appLogger.warning("⚠️ Recovery attempt \(self.recoveryAttempts) failed first-frame probe — next attempt")
             await self.recoveryTelemetry.recordRecoverOutcome(success: false, reason: "rebuild-unhealthy")
             // Loop continues for next attempt
         }
@@ -2372,35 +2482,25 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                         // Wait for system to stabilize
                         try? await Task.sleep(for: .milliseconds(500))
 
-                        // Verificar que aún tenemos un video actual
-                        guard let currentVideo = self.currentVideo else {
-                            await MainActor.run {
-                                self.appLogger.error("❌ No hay video actual al despertar")
-                                self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (no current video after wake).")
+                        // Task 2.5: full fresh rebuild with first-frame probe
+                        let firstOK = await self.performFreshRebuild(reason: "wake")
+
+                        if !firstOK {
+                            // Single retry if the first-frame probe did not confirm
+                            // advance — the wake event may have arrived before the
+                            // display subsystem finished waking up.
+                            self.appLogger.warning("⚠️ Wake rebuild first-frame probe failed — single retry")
+                            try? await Task.sleep(for: .milliseconds(800))
+                            let secondOK = await self.performFreshRebuild(reason: "wake-retry")
+                            guard secondOK else {
+                                await MainActor.run {
+                                    self.appLogger.error("❌ Wake rebuild no logró reproducir tras reintento")
+                                    self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (first-frame probe failed twice).")
+                                    self.isPlayingWallpaper = false
+                                }
+                                return
                             }
-                            return
                         }
-
-                        // CRITICAL: Destroy old windows first to prevent zombie windows
-                        // Wait for teardown to complete so rebuild doesn't race with
-                        // the async window-close + security-scoped-release path.
-                        self.appLogger.info("🧹 Limpiando ventanas antes de reiniciar")
-                        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                            self.destroyAllDesktopWindows { cont.resume() }
-                        }
-
-                        // Pre-resolver el bookmark para reducir latencia
-                        guard let accessibleURL = await self.resolveBookmark(for: currentVideo) else {
-                            await MainActor.run {
-                                self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
-                                self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (bookmark resolution failed after wake).")
-                                self.isPlayingWallpaper = false
-                            }
-                            return
-                        }
-
-                        // Crear ventanas de forma asíncrona sin bloquear main thread
-                        await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
 
                         await MainActor.run {
                             self.isPlayingWallpaper = true
@@ -2409,7 +2509,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                             self.recoveryExhausted = false  // Reset exhausted flag on successful wake rebuild
                             self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
                             // Task 1.3: retained-level recovery-outcome log (success path)
-                            self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (windows recreated, playback active).")
+                            self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (first-frame probe OK).")
                         }
                     }
                 } catch {
