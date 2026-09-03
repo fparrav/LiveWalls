@@ -34,6 +34,6 @@ Ordered by delivery phase (A → B → C). Phase A is independently shippable an
 
 ## 4. Hardening & docs
 
-- [ ] 4.1 Update `AGENTS.md` "Recent Performance Improvements" with the new recovery/observability components and the recovery flags.
+- [x] 4.1 Update `AGENTS.md` "Recent Performance Improvements" with the new recovery/observability components and the recovery flags. (New "Wake-Recovery Hardening (Sep 2026)" subsection: RecoveryTelemetry, RenderAdvanceProbe, `renderAdvanceState` + `publishRenderAdvanceAggregate`, `recoveryDecisionLogger`, the real `withExclusiveAccess` mutex + lock routing, the removed latching gates + `PendingWallpaperChange` queue, `attemptBoundedRecovery`, `performFreshRebuild(targetDisplays:)` incl. per-display scoping, BookmarkActor ref-counting, off-main static apply, and every `RecoveryDebugFlags` kill-switch with its OFF behavior + the deterministic stall hook. Also corrected the stale `isEnsurePlayingRunning` references in the Concurrency / Performance-Optimizations sections.)
 - [ ] 4.2 Review/extend localized strings (10 languages) for any new user-facing or log-only messages; add none if all changes are internal.
 - [ ] 4.3 Run the full suite (`./build.sh test`) and confirm CI green before merging.
