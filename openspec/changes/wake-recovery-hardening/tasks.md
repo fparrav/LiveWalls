@@ -25,7 +25,7 @@ Ordered by delivery phase (A → B → C). Phase A is independently shippable an
 
 ## 3. Phase C — Validation & regression
 
-- [ ] 3.1 End-to-end test using the deterministic hook: drive a full recover → verify cycle in CI without a long suspend, asserting advancing output after recovery.
+- [x] 3.1 End-to-end test using the deterministic hook: drive a full recover → verify cycle in CI without a long suspend, asserting advancing output after recovery. (`LiveWallsTests/RecoveryEndToEndTest.swift` drives `attemptBoundedRecovery` → `performFreshRebuild` for real — guard, teardown, `bookmarkActor.reconcile()`, exclusive lock, escalating backoff, attempt counters, telemetry, exhaustion — with a DEBUG-only seam `testFreshRebuildVerifyHook` standing in for real window/AVPlayer creation + the first-frame probe, which cannot run headless. Covers: recover→advancing on 2nd attempt, exhaustion after max attempts, first-attempt success, concurrent-loop guard.)
 - [ ] 3.2 Multi-display test: when one display is stalled, that display recovers independently and others are unaffected.
 - [ ] 3.3 UI-responsiveness test: the status-bar panel opens and its controls respond during and after a simulated recovery; assert the static-image apply is off the main queue.
 - [ ] 3.4 No-effect-when-healthy test: an advancing video triggers no rebuild, no static-apply, and no per-frame telemetry writes.

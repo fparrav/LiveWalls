@@ -111,6 +111,44 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// triggers could otherwise start parallel loops during the ~4s+ awaits.
     private var isRecoveryInProgress: Bool = false
 
+    #if DEBUG
+    // MARK: - Test seams (Task 3.1 — deterministic E2E recover→verify in CI)
+    // These are compiled only in DEBUG and are `nil` on every path except a test
+    // that explicitly assigns them. They let a headless test drive the full
+    // bounded-recovery loop + `performFreshRebuild` orchestration (guard, teardown,
+    // `bookmarkActor.reconcile()`, exclusive lock, attempt counters, backoff,
+    // telemetry, exhaustion) while standing in for the two steps that genuinely
+    // cannot run without a display: real window/AVPlayer creation and the
+    // first-frame render probe.
+
+    /// When non-nil, `performFreshRebuild` returns this closure's verdict instead
+    /// of creating real windows and running `verifyFirstFrameProbe()`. The closure
+    /// receives the reason string and the current attempt number so a test can
+    /// simulate "still stalled on attempt 1, advancing on attempt 2".
+    var testFreshRebuildVerifyHook: ((_ reason: String, _ attempt: Int) async -> Bool)?
+
+    /// Overrides `recoveryBackoff` so a CI run of the bounded-recovery loop does
+    /// not sleep real seconds between attempts.
+    var testRecoveryBackoffOverride: [Duration]?
+
+    /// Test entry point for the private bounded-recovery loop.
+    func testDriveBoundedRecovery(reason: String) async {
+        await self.attemptBoundedRecovery(reason: reason)
+    }
+
+    var testRecoveryAttempts: Int { self.recoveryAttempts }
+    var testRecoveryExhausted: Bool { self.recoveryExhausted }
+    #endif
+
+    /// Backoff schedule actually used by `attemptBoundedRecovery` — the production
+    /// `recoveryBackoff` unless a DEBUG test overrides it.
+    private var effectiveRecoveryBackoff: [Duration] {
+        #if DEBUG
+        if let override = self.testRecoveryBackoffOverride { return override }
+        #endif
+        return self.recoveryBackoff
+    }
+
     /// Runs `operation` on the main actor with a hard timeout. If `timeout`
     /// elapses first the operation task is cancelled, its wind-down is awaited
     /// (so nothing is abandoned mid-flight), and `WallpaperOperationTimeoutError`
@@ -1449,6 +1487,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         //     cleanly without depending on whatever state the previous rebuild left behind.
         await self.bookmarkActor.reconcile()
 
+        #if DEBUG
+        // Task 3.1 test seam: stand in for real window creation + first-frame
+        // probe so the recover→verify cycle can be driven headlessly in CI.
+        if let hook = self.testFreshRebuildVerifyHook {
+            let advancing = await hook(reason, self.recoveryAttempts)
+            self.recoveryDecisionLogger.error("🧪 performFreshRebuild TEST HOOK — reason: \(reason), attempt: \(self.recoveryAttempts), advancing: \(advancing)")
+            await self.recoveryTelemetry.recordVerifyResult(advancing: advancing, detail: "test-hook fresh-rebuild (\(reason))")
+            return advancing
+        }
+        #endif
+
         // 2) Resolve bookmark — abort if it can't be resolved (file gone / perms revoked).
         guard let accessibleURL = await self.resolveBookmark(for: video) else {
             self.recoveryDecisionLogger.fault("❌ performFreshRebuild aborted — bookmark could not be resolved.")
@@ -1537,8 +1586,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         defer { self.isRecoveryInProgress = false }
 
         // Loop through attempts (replaces recursion)
+        let backoffSchedule = self.effectiveRecoveryBackoff
         while self.recoveryAttempts < self.maxRecoveryAttempts {
-            let backoff = self.recoveryBackoff[min(self.recoveryAttempts, self.recoveryBackoff.count - 1)]
+            let backoff = backoffSchedule[min(self.recoveryAttempts, backoffSchedule.count - 1)]
             if backoff > .seconds(0) {
                 self.appLogger.info("⏳ Recovery attempt \(self.recoveryAttempts + 1)/\(self.maxRecoveryAttempts): waiting \(backoff) before rebuild...")
                 do {
