@@ -351,13 +351,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 Task.detached { [weak self] in
                     guard let self else { return }
                     if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
-                        DispatchQueue.main.async {
-                            let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                            if success {
+                        // Task 2.7 / D7: setSystemStaticWallpaper now runs off-main (nonisolated async)
+                        let success = await self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                        if success {
+                            await MainActor.run {
                                 self.appLogger.info("🖼️ Frame estático generado y aplicado (debounced)")
                             }
-                            // No deletion to avoid races; keep cached
                         }
+                        // No deletion to avoid races; keep cached
                     }
                     await MainActor.run {
                         self.isApplyingStaticWallpaper = false
@@ -847,47 +848,65 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Sets a static image as system wallpaper for all screens
-    /// - Parameter imageURL: URL of the image to set as wallpaper
-    /// - Returns: true if set correctly on at least one screen
-    /// - Note: Fase 1 - Aplicación ÚNICA sin delays redundantes para optimizar rendimiento
+    /// Sets a static image as system wallpaper for all screens.
+    /// - Task 2.7 / D7: the loop over screens is a slow synchronous system call;
+    ///   it runs off-main so the main run loop (MenuBarExtra, transport pill, etc.)
+    ///   is never starved during recovery.
+    /// - Returns: true if set correctly on at least one screen.
     @discardableResult
-    private func setSystemStaticWallpaper(imageURL: URL) -> Bool {
-        var success = false
-        
-        // Verify that the file exists before trying to set it
+    nonisolated private func setSystemStaticWallpaper(imageURL: URL) async -> Bool {
+        // 1. File-exists check runs off-main (I/O)
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
-            appLogger.error("❌ Wallpaper file does not exist: \(imageURL.path)")
+            await MainActor.run {
+                self.appLogger.error("❌ Wallpaper file does not exist: \(imageURL.path)")
+            }
             return false
         }
-        
-        appLogger.info("🖼️ Setting static wallpaper (ONCE): \(imageURL.lastPathComponent)")
-        
-        // FASE 1: Aplicar UNA SOLA VEZ - eliminar delays redundantes
-        // Apply to all screens
-        for screen in NSScreen.screens {
-            do {
-                try NSWorkspace.shared.setDesktopImageURL(
-                    imageURL,
-                    for: screen,
-                    options: [
-                        .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
-                        .allowClipping: true
-                    ]
-                )
-                success = true
-                appLogger.info("✅ Static wallpaper set on screen: \(screen.localizedName)")
-            } catch {
-                appLogger.error("❌ Error setting static wallpaper on \(screen.localizedName): \(error.localizedDescription)")
+
+        await MainActor.run {
+            self.appLogger.info("🖼️ Setting static wallpaper (ONCE): \(imageURL.lastPathComponent)")
+        }
+
+        // 2. Capture NSScreen.screens on the main actor (thread-safe per screen)
+        let screens = await MainActor.run { NSScreen.screens }
+
+        // 3. Loop `setDesktopImageURL` on a detached utility task — off-main, so
+        //    the main run loop never stalls waiting on the synchronous call.
+        let success = await Task.detached(priority: .utility) {
+            var ok = false
+            var errors: [String] = []
+            for screen in screens {
+                do {
+                    try NSWorkspace.shared.setDesktopImageURL(
+                        imageURL,
+                        for: screen,
+                        options: [
+                            .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
+                            .allowClipping: true
+                        ]
+                    )
+                    ok = true
+                } catch {
+                    errors.append("\(screen.localizedName): \(error.localizedDescription)")
+                }
+            }
+            return (ok: ok, errors: errors)
+        }.value
+
+        // 4. Mutate currentStaticWallpaperURL back on the main actor, and log any errors.
+        if success.ok {
+            await MainActor.run {
+                self.currentStaticWallpaperURL = imageURL
+                self.appLogger.info("📋 Current static wallpaper updated: \(imageURL.lastPathComponent)")
             }
         }
-        
-        if success {
-            currentStaticWallpaperURL = imageURL
-            appLogger.info("📋 Current static wallpaper updated: \(imageURL.lastPathComponent)")
+        for err in success.errors {
+            await MainActor.run {
+                self.appLogger.error("❌ Error setting static wallpaper on \(err)")
+            }
         }
-        
-        return success
+
+        return success.ok
     }
     
      /// Gets the next video in the queue (after current video)
@@ -1077,19 +1096,19 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     }
 
                      // Fase 1: Generar frame estático en background sin bloquear inicio del video
-                     // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
-                     // para evitar deadlocks causados por Task.detached anidado
+                     // Task 2.7 / D7: setSystemStaticWallpaper ahora corre fuera del main queue
                       Task.detached { [weak self] in
                           guard let self = self else { return }
                           if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
-                              // Ejecutar en main thread sin await para evitar deadlock
-                              DispatchQueue.main.async {
-                                  _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                                  self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
-                                  // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
+                              let success = await self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                              if success {
+                                  await MainActor.run {
+                                      self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
+                                  }
                               }
+                              // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
                           } else {
-                              DispatchQueue.main.async {
+                              await MainActor.run {
                                   self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
                               }
                           }
@@ -1567,17 +1586,18 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
          // Generar nuevo frame para el Space actual en background (no bloquear)
-         // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
-         // para evitar deadlocks
+         // Task 2.7 / D7: setSystemStaticWallpaper ahora corre fuera del main queue
          Task.detached { [weak self] in
              guard let self = self else { return }
-             
+
              if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL, timeOffset: currentVideoTime) {
-                 DispatchQueue.main.async {
-                     _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                     self.appLogger.info("🔄 Frame estático actualizado por cambio de Space - tiempo: \(currentVideoTime.map { "\(CMTimeGetSeconds($0))s" } ?? "inicial")")
+                 let success = await self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                 if success {
+                     await MainActor.run {
+                         self.appLogger.info("🔄 Frame estático actualizado por cambio de Space - tiempo: \(currentVideoTime.map { "\(CMTimeGetSeconds($0))s" } ?? "inicial")")
+                     }
                  }
-                 
+
                  // Limpiar archivo temporal
                  try? FileManager.default.removeItem(at: staticImageURL)
              }
@@ -2197,7 +2217,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         if let staticImageURL = await generateStaticWallpaperFrame(for: accessibleURL) {
             appLogger.info("✅ Frame estático generado: \(staticImageURL.path)")
             
-            let success = setSystemStaticWallpaper(imageURL: staticImageURL)
+            let success = await self.setSystemStaticWallpaper(imageURL: staticImageURL)
             if success {
                 appLogger.info("✅ PRUEBA EXITOSA: Wallpaper estático establecido")
                 // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes

@@ -20,7 +20,7 @@ Ordered by delivery phase (A → B → C). Phase A is independently shippable an
 - [x] 2.4 Switch the health check to the probe-based judgment from 1.4 (design D2), with a bounded, escalating retry policy that stops and logs after the attempts are exhausted.
 - [x] 2.5 On a confirmed stall or wake, perform a full fresh rebuild (design D3): new `AVQueuePlayer` + `AVPlayerLooper` + freshly attached `AVPlayerLayer`, then `orderOut → orderFront → orderBack` + a brief settle + a first-frame probe before declaring success; retry sparingly and ensure no stale frozen window remains stacked on any display.
 - [x] 2.6 Make `BookmarkActor` the single source of truth for security-scoped access with per-URL ref-counting, a `reconcile()` that runs once at start of a rebuild, and a fixed `stopAllSecurityScopedAccess` that uses the resolved URL directly instead of `URL(string:)` (design D6).
-- [ ] 2.7 Offload the slow static-image apply (`NSWorkspace.setDesktopImageURL`) and any other long synchronous system calls invoked by recovery off the main queue (design D7).
+- [x] 2.7 Offload the slow static-image apply (`NSWorkspace.setDesktopImageURL`) and any other long synchronous system calls invoked by recovery off the main queue (design D7).
 - [ ] 2.8 Add per-increment debug flags / a kill-switch with sane defaults so each increment rolls back independently without a relaunch.
 
 ## 3. Phase C — Validation & regression
