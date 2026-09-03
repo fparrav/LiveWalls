@@ -156,6 +156,21 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// global rebuild, a non-empty set for a display-scoped one. One entry per
     /// attempt, in order.
     private(set) var testRebuildTargetsSeen: [Set<CGDirectDisplayID>?] = []
+
+    // MARK: - Test seams (Task 3.3 — static-apply is off the main queue)
+
+    /// When non-nil, `setSystemStaticWallpaper` invokes this right before the
+    /// `NSWorkspace.setDesktopImageURL` loop, passing whether it is currently on
+    /// the main thread. Returning `true` makes the method skip the real system
+    /// call (so a headless test does not change the host's desktop) and report
+    /// success. A test uses it to assert the loop runs off-main when
+    /// `staticApplyOffMain` is enabled, and on-main when it is disabled.
+    var testStaticApplyProbe: (@Sendable (_ onMainThread: Bool) -> Bool)?
+
+    /// Test entry point for the private `setSystemStaticWallpaper`.
+    func testApplyStaticWallpaper(imageURL: URL) async -> Bool {
+        await self.setSystemStaticWallpaper(imageURL: imageURL)
+    }
     #endif
 
     /// Backoff schedule actually used by `attemptBoundedRecovery` — the production
@@ -937,6 +952,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // 2. Capture NSScreen.screens on the main actor (thread-safe per screen)
         let screens = await MainActor.run { NSScreen.screens }
 
+        #if DEBUG
+        let staticApplyProbe = await MainActor.run { self.testStaticApplyProbe }
+        #endif
+
         // 3. Loop `setDesktopImageURL` over the screens.
         //    Task 2.8 / D9: kill-switch `staticApplyOffMain`.
         //    ON (default) = run on a detached utility task, off-main, so the main
@@ -945,6 +964,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         let success: (ok: Bool, errors: [String])
         if RecoveryDebugFlags.staticApplyOffMain {
             success = await Task.detached(priority: .utility) {
+                #if DEBUG
+                // `pthread_main_np()` has no async-context restriction (unlike
+                // `Thread.isMainThread`) and answers exactly what we assert here.
+                if let probe = staticApplyProbe, probe(pthread_main_np() != 0) {
+                    return (ok: true, errors: [])
+                }
+                #endif
                 var ok = false
                 var errors: [String] = []
                 for screen in screens {
@@ -966,6 +992,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             }.value
         } else {
             success = await MainActor.run {
+                #if DEBUG
+                // `pthread_main_np()` has no async-context restriction (unlike
+                // `Thread.isMainThread`) and answers exactly what we assert here.
+                if let probe = staticApplyProbe, probe(pthread_main_np() != 0) {
+                    return (ok: true, errors: [])
+                }
+                #endif
                 var ok = false
                 var errors: [String] = []
                 for screen in NSScreen.screens {
