@@ -35,8 +35,9 @@ final class RenderAdvanceProbeTests: XCTestCase {
     func testMonotonicForwardAdvanceReturnsAdvancing() async throws {
         await probe.startEvaluating(timeSource: { CMTime(seconds: 0, preferredTimescale: 600) })
 
-        // Baseline
-        _ = await probe.evaluateSample(currentTime: CMTime(seconds: 0.0, preferredTimescale: 600))
+        // Baseline — must be a strictly positive time; the probe treats a
+        // non-positive playhead as "no valid time yet" (see test 5).
+        _ = await probe.evaluateSample(currentTime: CMTime(seconds: 0.5, preferredTimescale: 600))
 
         let v1 = await probe.evaluateSample(currentTime: CMTime(seconds: 1.0, preferredTimescale: 600))
         XCTAssertEqual(v1, .advancing, "Forward advance should classify as advancing")
@@ -127,8 +128,8 @@ final class RenderAdvanceProbeTests: XCTestCase {
     func testAdvancingResetsNoProgressCounter() async throws {
         await probe.startEvaluating(timeSource: { CMTime(seconds: 0, preferredTimescale: 600) })
 
-        // Baseline
-        _ = await probe.evaluateSample(currentTime: CMTime(seconds: 0.0, preferredTimescale: 600))
+        // Baseline — strictly positive (a non-positive playhead is "no valid time yet").
+        _ = await probe.evaluateSample(currentTime: CMTime(seconds: 0.5, preferredTimescale: 600))
 
         // Advance
         let vAdv = await probe.evaluateSample(currentTime: CMTime(seconds: 1.0, preferredTimescale: 600))
@@ -179,6 +180,10 @@ final class RenderAdvanceProbeTests: XCTestCase {
         // Scenario A: No hook — advancing times → probe sees advancing
         let probeA = RenderAdvanceProbe(sampleInterval: 2.5, stalledThreshold: 3)
         await probeA.startEvaluating(timeSource: { CMTime(seconds: 0, preferredTimescale: 600) })
+
+        // Establish a baseline first — the first valid sample is always .unknown.
+        let vBaseA = await probeA.evaluateSample(currentTime: CMTime(seconds: 1.0, preferredTimescale: 600))
+        XCTAssertEqual(vBaseA, .unknown)
 
         let vAdvancing = await probeA.evaluateSample(currentTime: CMTime(seconds: 2.0, preferredTimescale: 600))
         XCTAssertEqual(vAdvancing, .advancing,
