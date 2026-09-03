@@ -76,7 +76,7 @@ final class RecoveryPerDisplayTests: XCTestCase {
     // MARK: - End-to-end wiring through the bounded-recovery loop
 
     private func makeManager() -> WallpaperManager {
-        let manager = WallpaperManager()
+        let manager = WallpaperManager(loadPersistedData: false)
         manager.currentVideo = VideoFile(
             url: URL(fileURLWithPath: "/tmp/per-display-dummy.mp4"),
             name: "Per-Display Dummy",

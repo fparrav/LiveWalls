@@ -7,7 +7,10 @@ final class ShuffleModeTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        wallpaperManager = WallpaperManager()
+        // loadPersistedData: false — the background persistence load otherwise
+        // races the first `await` in each test body and overwrites the
+        // videoFiles / currentVideo the test sets up.
+        wallpaperManager = WallpaperManager(loadPersistedData: false)
         // Clear UserDefaults for each test
         UserDefaults.standard.removeObject(forKey: "ShuffleModeEnabled")
     }

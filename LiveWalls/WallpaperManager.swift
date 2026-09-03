@@ -427,21 +427,32 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     // MARK: - Initialization
-     override init() {
+     override convenience init() {
+         self.init(loadPersistedData: true)
+     }
+
+     /// - Parameter loadPersistedData: when `false`, skips the background load of
+     ///   persisted videos / current video / auto-change settings from
+     ///   `PersistenceActor`. Headless tests pass `false` so that async load
+     ///   cannot overwrite the `videoFiles` / `currentVideo` the test sets up —
+     ///   it otherwise races the first `await` in the test body.
+     init(loadPersistedData: Bool = true) {
          self.notificationManager = NotificationManager.shared
          super.init()
-         
+
          appLogger.info("\(NSLocalizedString("initializing_wallpaper_manager", comment: "Initializing WallpaperManager"), privacy: .public)")
-         
+
          // Load shuffle mode from UserDefaults
          self.isShuffleMode = userDefaults.bool(forKey: shuffleModeKey)
-         
+
          // Cargar configuración en background usando PersistenceActor (NO bloquear init)
-         Task.detached { [weak self] in
-             guard let self else { return }
-             await self.loadDataInBackground()
+         if loadPersistedData {
+             Task.detached { [weak self] in
+                 guard let self else { return }
+                 await self.loadDataInBackground()
+             }
          }
-         
+
          loadTransitionSettings()
          setupScreenChangeNotifications()
          setupWorkspaceNotifications()

@@ -24,7 +24,7 @@ import AVFoundation
 final class RecoveryEndToEndTest: XCTestCase {
 
     private func makeManagerWithStalledVideo() -> WallpaperManager {
-        let manager = WallpaperManager()
+        let manager = WallpaperManager(loadPersistedData: false)
         // A dummy current video is enough: the test seam returns before the
         // bookmark is resolved, so the bookmark data is never dereferenced.
         manager.currentVideo = VideoFile(
