@@ -78,7 +78,9 @@ Decision: (1) a small durable writer (append to a rolling file in the app's cont
 Rationale: the freeze is rare; without durability we cannot diagnose the next one, and on-demand reproduction is the only reliable way to regression-test. All three are additive and inert when healthy.
 
 ### D9 — Delivery order (phasing)
-Decision: ship **Phase A** (observability + D1 probe) first as an independent, low-risk increment; then **Phase B** (D2–D7 self-heal, ideally each behind a debug-default flag that can be rolled back); the deterministic hook (part of D8) lands with Phase A so Phase B is testable. Rationale: A alone makes the next freeze catchable; B is the actual fix; C lets us validate B deterministically.
+Decision: ship **Phase A** (observability + D1 probe) first as an independent, low-risk increment; then **Phase B** (D2–D7 self-heal); the deterministic hook (part of D8) lands with Phase A so Phase B is testable. Rationale: A alone makes the next freeze catchable; B is the actual fix; C lets us validate B deterministically.
+
+Kill-switch policy for Phase B: the **behavioral** increments each get an individual debug-default flag (default ON) so a regression rolls back at runtime without a relaunch — `probeBasedHealthJudgment` (D2 / task 2.4), `fullFreshRebuild` (D3 / task 2.5), `bookmarkRefCount` (D6 / task 2.6), `staticApplyOffMain` (D7 / task 2.7). The **structural** corrections — the real async mutex (D4 / task 2.1), routing every rebuild trigger through it (task 2.2), and replacing the latching boolean gates with a guarded operation that always releases (D5 / task 2.3) — are **permanently enabled with no kill-switch**: their only "legacy" state is the no-op mutex, the `didWake` actor bypass, and the latching gates that this change exists to remove, so a runtime toggle back to them would re-introduce the exact deadlocks and silently-dropped controls Phase B fixes. They are covered instead by the exclusive-lock timeout + guaranteed release, so a stuck operation self-clears without a flag.
 
 ## Risks / Trade-offs [Risk] → [Mitigation]
 - [Playhead wrap-detection may be OS/version-specific on `AVPlayerLooper`] → D1 keeps a CADisplayLink pixel-diff fallback; D8 telemetry + C hook validate on the target device.
@@ -96,5 +98,5 @@ Decision: ship **Phase A** (observability + D1 probe) first as an independent, l
 ## Open Questions (deferrable; do not change specs or approach)
 - Confirm `AVPlayerLooper` playhead wrap-detection is the reliable stall signal on the target OS (macOS reported 26.6); validate with the D8 hook/telemetry and switch to a pixel-diff probe only if it misfires.
 - Exact probe period and stall-threshold (default ≈2–3 s per check, N periods of no progress); tune from telemetry.
-- Whether to gate each Phase B increment behind an individual flag vs. one switch; default to per-feature flags for independent rollback.
+- ~~Whether to gate each Phase B increment behind an individual flag vs. one switch~~ → resolved (see D9): per-feature flags for the behavioral increments (2.4–2.7); the structural lock/gate corrections (2.1–2.3) stay permanently on because their legacy state is the bug being removed.
 - Whether the durable store should also capture the current window/display topology to explain "one of several displays" failures.

@@ -50,6 +50,7 @@
 		AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA11112222333344440003 /* WallpaperManagerTests.swift */; };
 		AAAA11112222333344440008 /* ContentViewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA11112222333344440004 /* ContentViewUITests.swift */; };
 		BB3C5F9A7D8E4B2C91A6E3F0 /* BookmarkActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */; };
+		AAAA1111222233334444B801 /* RecoveryKillSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111222233334444B802 /* RecoveryKillSwitchTests.swift */; };
 		E6827EA47D70ACDD0E819BAE /* PlaybackHealthCheckerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */; };
 0000000000000000AE8F4D01 /* RenderAdvanceProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000AE8F4D02 /* RenderAdvanceProbeTests.swift */; };
 		F0F0F0A12E1F4AAA00000002 /* InAppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0F0F0A02E1F4AAA00000001 /* InAppUpdater.swift */; };
@@ -87,6 +88,7 @@
 		1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActor.swift; sourceTree = "<group>"; };
 		2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActorTests.swift; sourceTree = "<group>"; };
 		30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaybackHealthCheckerTests.swift; sourceTree = "<group>"; };
+		AAAA1111222233334444B802 /* RecoveryKillSwitchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryKillSwitchTests.swift; sourceTree = "<group>"; };
 	0000000000000000AE8F4D02 /* RenderAdvanceProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderAdvanceProbeTests.swift; sourceTree = "<group>"; };
 		3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenDetector.swift; sourceTree = "<group>"; };
 		23C9D22B0E404B85A1190DCA93CFE7B8 /* BackgroundColorWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundColorWindow.swift; sourceTree = "<group>"; };
@@ -335,6 +337,7 @@
 			31D886888FCE46E6BF5230FB /* WindowLevelTests.swift */,
 			55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */,
 			CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */,
+			AAAA1111222233334444B802 /* RecoveryKillSwitchTests.swift */,
 			2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
 			AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
 			30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */,
@@ -518,6 +521,7 @@
 		buildActionMask = 2147483647;
 		files = (
 			BB3C5F9A7D8E4B2C91A6E3F0 /* BookmarkActorTests.swift in Sources */,
+			AAAA1111222233334444B801 /* RecoveryKillSwitchTests.swift in Sources */,
 			2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */,
 			55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */,
 			AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */,

@@ -870,28 +870,55 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         // 2. Capture NSScreen.screens on the main actor (thread-safe per screen)
         let screens = await MainActor.run { NSScreen.screens }
 
-        // 3. Loop `setDesktopImageURL` on a detached utility task — off-main, so
-        //    the main run loop never stalls waiting on the synchronous call.
-        let success = await Task.detached(priority: .utility) {
-            var ok = false
-            var errors: [String] = []
-            for screen in screens {
-                do {
-                    try NSWorkspace.shared.setDesktopImageURL(
-                        imageURL,
-                        for: screen,
-                        options: [
-                            .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
-                            .allowClipping: true
-                        ]
-                    )
-                    ok = true
-                } catch {
-                    errors.append("\(screen.localizedName): \(error.localizedDescription)")
+        // 3. Loop `setDesktopImageURL` over the screens.
+        //    Task 2.8 / D9: kill-switch `staticApplyOffMain`.
+        //    ON (default) = run on a detached utility task, off-main, so the main
+        //    run loop never stalls waiting on the synchronous call (design D7).
+        //    OFF = legacy behavior: run the loop synchronously on the main actor.
+        let success: (ok: Bool, errors: [String])
+        if RecoveryDebugFlags.staticApplyOffMain {
+            success = await Task.detached(priority: .utility) {
+                var ok = false
+                var errors: [String] = []
+                for screen in screens {
+                    do {
+                        try NSWorkspace.shared.setDesktopImageURL(
+                            imageURL,
+                            for: screen,
+                            options: [
+                                .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
+                                .allowClipping: true
+                            ]
+                        )
+                        ok = true
+                    } catch {
+                        errors.append("\(screen.localizedName): \(error.localizedDescription)")
+                    }
                 }
+                return (ok: ok, errors: errors)
+            }.value
+        } else {
+            success = await MainActor.run {
+                var ok = false
+                var errors: [String] = []
+                for screen in NSScreen.screens {
+                    do {
+                        try NSWorkspace.shared.setDesktopImageURL(
+                            imageURL,
+                            for: screen,
+                            options: [
+                                .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
+                                .allowClipping: true
+                            ]
+                        )
+                        ok = true
+                    } catch {
+                        errors.append("\(screen.localizedName): \(error.localizedDescription)")
+                    }
+                }
+                return (ok: ok, errors: errors)
             }
-            return (ok: ok, errors: errors)
-        }.value
+        }
 
         // 4. Mutate currentStaticWallpaperURL back on the main actor, and log any errors.
         if success.ok {
@@ -1526,17 +1553,31 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             self.appLogger.info("🛠️ Recovery attempt \(self.recoveryAttempts)/\(self.maxRecoveryAttempts) started. Reason: \(reason)")
             await self.recoveryTelemetry.recordRecoverAttempted(reason: reason)
 
-            // Task 2.5: full fresh rebuild under the wallpaper operation lock
-            // (avoids racing against user-driven next/previous, which is exactly
-            // what the stale-AVPlayerLooper case needs).
+            // Task 2.8 / D9: kill-switch for full fresh rebuild (2.5).
+            // OFF = legacy rebuild = startWallpaperSafe + 2s settle + health-check probe.
+            let useFreshRebuild = RecoveryDebugFlags.fullFreshRebuild
             let freshOK: Bool
-            do {
-                freshOK = try await self.wallpaperOperationActor.withExclusiveAccess {
-                    await self.performFreshRebuild(reason: reason)
+            if useFreshRebuild {
+                // Task 2.5 path: full fresh rebuild with first-frame probe.
+                do {
+                    freshOK = try await self.wallpaperOperationActor.withExclusiveAccess {
+                        await self.performFreshRebuild(reason: reason)
+                    }
+                } catch {
+                    self.appLogger.error("⏱️ Recovery attempt \(self.recoveryAttempts) no pudo adquirir lock: \(error)")
+                    freshOK = false
                 }
-            } catch {
-                self.appLogger.error("⏱️ Recovery attempt \(self.recoveryAttempts) no pudo adquirir lock: \(error)")
-                freshOK = false
+            } else {
+                // Legacy path: startWallpaperSafe + health-check probe (no first-frame).
+                self.startWallpaperSafe()
+                try? await Task.sleep(for: .seconds(2))
+                let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
+                    windows: self.desktopVideoInstances,
+                    currentVideo: self.currentVideo,
+                    bookmarkActor: self.bookmarkActor,
+                    renderAdvanceVerdict: self.renderAdvanceState
+                )
+                freshOK = isHealthy
             }
 
             if freshOK {
@@ -2492,48 +2533,97 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
             // Task 1.3: retained-level (eviction-resistant) recovery-decision log
             recoveryDecisionLogger.error("🛠️ Recovery decision: wake-triggered rebuild (wallpaper was active before suspend).")
-            // Restart wallpaper with clean state via exclusive lock
-            Task {
-                do {
-                    try await wallpaperOperationActor.withExclusiveAccess {
-                        // Wait for system to stabilize
-                        try? await Task.sleep(for: .milliseconds(500))
+            // Task 2.8 / D9: kill-switch for full fresh rebuild (2.5).
+            // ON (default) = Task 2.5 path: rebuild under the exclusive lock with a
+            //   first-frame probe + a single retry.
+            // OFF = legacy path: `startWallpaperSafe()` (which manages its own lock
+            //   internally) + a health-check probe. The legacy call is issued
+            //   WITHOUT holding `withExclusiveAccess` here — nesting it would invert
+            //   the lock (startWallpaperSafe spawns its own exclusive-access Task).
+            if RecoveryDebugFlags.fullFreshRebuild {
+                // Restart wallpaper with clean state via exclusive lock
+                Task {
+                    do {
+                        try await wallpaperOperationActor.withExclusiveAccess {
+                            // Wait for system to stabilize
+                            try? await Task.sleep(for: .milliseconds(500))
 
-                        // Task 2.5: full fresh rebuild with first-frame probe
-                        let firstOK = await self.performFreshRebuild(reason: "wake")
+                            // Task 2.5 path: full fresh rebuild with first-frame probe.
+                            let firstOK = await self.performFreshRebuild(reason: "wake")
 
-                        if !firstOK {
-                            // Single retry if the first-frame probe did not confirm
-                            // advance — the wake event may have arrived before the
-                            // display subsystem finished waking up.
-                            self.appLogger.warning("⚠️ Wake rebuild first-frame probe failed — single retry")
-                            try? await Task.sleep(for: .milliseconds(800))
-                            let secondOK = await self.performFreshRebuild(reason: "wake-retry")
-                            guard secondOK else {
-                                await MainActor.run {
-                                    self.appLogger.error("❌ Wake rebuild no logró reproducir tras reintento")
-                                    self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (first-frame probe failed twice).")
-                                    self.isPlayingWallpaper = false
+                            if !firstOK {
+                                // Single retry if the first-frame probe did not confirm
+                                // advance — the wake event may have arrived before the
+                                // display subsystem finished waking up.
+                                self.appLogger.warning("⚠️ Wake rebuild first-frame probe failed — single retry")
+                                try? await Task.sleep(for: .milliseconds(800))
+                                let secondOK = await self.performFreshRebuild(reason: "wake-retry")
+                                guard secondOK else {
+                                    await MainActor.run {
+                                        self.appLogger.error("❌ Wake rebuild no logró reproducir tras reintento")
+                                        self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (first-frame probe failed twice).")
+                                        self.isPlayingWallpaper = false
+                                    }
+                                    return
                                 }
-                                return
+                            }
+
+                            await MainActor.run {
+                                self.isPlayingWallpaper = true
+                                self.startAutoChangeTimerIfNeeded()
+                                self.recoveryAttempts = 0  // Reset recovery counter on successful wake rebuild
+                                self.recoveryExhausted = false  // Reset exhausted flag on successful wake rebuild
+                                self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
+                                // Task 1.3: retained-level recovery-outcome log (success path)
+                                self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (first-frame probe OK).")
                             }
                         }
-
+                    } catch {
+                        // Task 2.1/2.2: lock acquisition failed (timeout or cancellation).
                         await MainActor.run {
-                            self.isPlayingWallpaper = true
-                            self.startAutoChangeTimerIfNeeded()
-                            self.recoveryAttempts = 0  // Reset recovery counter on successful wake rebuild
-                            self.recoveryExhausted = false  // Reset exhausted flag on successful wake rebuild
-                            self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
-                            // Task 1.3: retained-level recovery-outcome log (success path)
-                            self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (first-frame probe OK).")
+                            self.appLogger.error("⏱️ No se pudo reiniciar wallpaper tras wake: lock no adquirido (\(error))")
+                            self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (lock acquisition failed: \(error)).")
                         }
                     }
-                } catch {
-                    // Task 2.1/2.2: lock acquisition failed (timeout or cancellation).
+                }
+            } else {
+                // Legacy path (kill-switch OFF). `startWallpaperSafe()` is NOT wrapped
+                // in `withExclusiveAccess` here — it acquires the lock on its own.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    self.startWallpaperSafe()
+                    try? await Task.sleep(for: .seconds(2))
+                    var healthy = await self.playbackHealthChecker.checkPlaybackHealth(
+                        windows: self.desktopVideoInstances,
+                        currentVideo: self.currentVideo,
+                        bookmarkActor: self.bookmarkActor,
+                        renderAdvanceVerdict: self.renderAdvanceState
+                    )
+                    if !healthy {
+                        self.appLogger.warning("⚠️ Wake rebuild (legacy) health-check failed — single retry")
+                        try? await Task.sleep(for: .milliseconds(800))
+                        self.startWallpaperSafe()
+                        try? await Task.sleep(for: .seconds(2))
+                        healthy = await self.playbackHealthChecker.checkPlaybackHealth(
+                            windows: self.desktopVideoInstances,
+                            currentVideo: self.currentVideo,
+                            bookmarkActor: self.bookmarkActor,
+                            renderAdvanceVerdict: self.renderAdvanceState
+                        )
+                    }
                     await MainActor.run {
-                        self.appLogger.error("⏱️ No se pudo reiniciar wallpaper tras wake: lock no adquirido (\(error))")
-                        self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (lock acquisition failed: \(error)).")
+                        if healthy {
+                            self.isPlayingWallpaper = true
+                            self.startAutoChangeTimerIfNeeded()
+                            self.recoveryAttempts = 0
+                            self.recoveryExhausted = false
+                            self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar (legacy)")
+                            self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (legacy health-check OK).")
+                        } else {
+                            self.appLogger.error("❌ Wake rebuild (legacy) no logró reproducir tras reintento")
+                            self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (legacy health-check failed twice).")
+                            self.isPlayingWallpaper = false
+                        }
                     }
                 }
             }
@@ -2787,12 +2877,16 @@ extension WallpaperManager {
             Task { @MainActor [weak self] in
                 guard let self else { return }
 
-                // Usar PlaybackHealthChecker para verificación asíncrona (probe-based, design D2)
+                // Task 2.8 / D9: kill-switch for probe-based health judgment (2.4).
+                // OFF = legacy fallback (pass .unknown to force bookmark/timeControlStatus check).
+                let probeVerdict = RecoveryDebugFlags.probeBasedHealthJudgment
+                    ? self.renderAdvanceState
+                    : .unknown
                 let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
                     windows: self.desktopVideoInstances,
                     currentVideo: self.currentVideo,
                     bookmarkActor: self.bookmarkActor,
-                    renderAdvanceVerdict: self.renderAdvanceState
+                    renderAdvanceVerdict: probeVerdict
                 )
 
                 if !isHealthy {

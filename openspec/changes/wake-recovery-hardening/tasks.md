@@ -1,6 +1,6 @@
 # Tasks: wake-recovery-hardening
 
-Ordered by delivery phase (A → B → C). Phase A is independently shippable and de-risks the rest. Each increment is behind a debug-default flag that can be disabled (see design.md §D9), so a regression rolls back without a relaunch.
+Ordered by delivery phase (A → B → C). Phase A is independently shippable and de-risks the rest. Each **behavioral** Phase B increment (2.4–2.7) is behind a debug-default flag that can be disabled (see design.md §D9), so a regression rolls back without a relaunch; the **structural** lock/gate corrections (2.1–2.3) are permanently enabled — their only legacy state is the no-op mutex / actor bypass / latching gates this change removes — and rely on the exclusive-lock timeout + guaranteed release instead.
 
 ## 1. Phase A — Observability & render-advance probe (low risk, land first)
 
@@ -21,7 +21,7 @@ Ordered by delivery phase (A → B → C). Phase A is independently shippable an
 - [x] 2.5 On a confirmed stall or wake, perform a full fresh rebuild (design D3): new `AVQueuePlayer` + `AVPlayerLooper` + freshly attached `AVPlayerLayer`, then `orderOut → orderFront → orderBack` + a brief settle + a first-frame probe before declaring success; retry sparingly and ensure no stale frozen window remains stacked on any display.
 - [x] 2.6 Make `BookmarkActor` the single source of truth for security-scoped access with per-URL ref-counting, a `reconcile()` that runs once at start of a rebuild, and a fixed `stopAllSecurityScopedAccess` that uses the resolved URL directly instead of `URL(string:)` (design D6).
 - [x] 2.7 Offload the slow static-image apply (`NSWorkspace.setDesktopImageURL`) and any other long synchronous system calls invoked by recovery off the main queue (design D7).
-- [ ] 2.8 Add per-increment debug flags / a kill-switch with sane defaults so each increment rolls back independently without a relaunch.
+- [x] 2.8 Add per-increment debug flags (default ON) for the behavioral increments so each rolls back independently without a relaunch — `probeBasedHealthJudgment` (2.4), `fullFreshRebuild` (2.5), `bookmarkRefCount` (2.6), `staticApplyOffMain` (2.7), plus `resetAllKillSwitches()`. The structural corrections 2.1–2.3 stay permanently enabled with a documented rationale (design.md §D9): a runtime toggle back to the no-op mutex / actor bypass / latching gates would re-introduce the exact bugs Phase B removes.
 
 ## 3. Phase C — Validation & regression
 

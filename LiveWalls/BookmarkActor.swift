@@ -17,6 +17,7 @@ actor BookmarkActor {
     /// - double-stop decrements only when an entry exists; an absent entry is a silent no-op.
     /// - a start-after-failure does NOT create a dangling stop: the entry is only created
     ///   if the underlying `startAccessingSecurityScopedResource()` returned true.
+    /// - Task 2.8 / D9: kill-switch `bookmarkRefCount`. OFF = legacy Set semantics (no ref-count).
     private var securityScopedAccess: [String: (url: URL, count: Int)] = [:]
     
     /// FASE 3: Cache de bookmarks resueltos para evitar resoluciones redundantes
@@ -114,32 +115,49 @@ actor BookmarkActor {
         return true
     }
 
-    /// Detiene el acceso a un security-scoped resource (con ref-count).
+    /// Detiene el acceso a un security-scoped resource.
+    /// - Task 2.8 / D9: kill-switch `bookmarkRefCount`. OFF = legacy Set semantics.
+    ///   ON (true) = ref-count por URL (como abajo). OFF = tratar como Set booleano.
     /// - Parameter url: URL del recurso. El path normalizado identifica la entrada.
     func stopAccessingSecurityScopedResource(url: URL) {
+        let useRefCount = RecoveryDebugFlags.bookmarkRefCount
         let normalizedPath = url.path
 
-        guard var entry = securityScopedAccess[normalizedPath] else {
-            // Double-stop silencioso: no hay entrada → nada que hacer.
-            logger.debug("ℹ️ stopAccessingSecurityScopedResource: sin entrada para \(normalizedPath) (double-stop safe)")
-            return
+        if useRefCount {
+            // ---- REF-COUNT PATH (Task 2.6 fix) ----
+            guard var entry = securityScopedAccess[normalizedPath] else {
+                // Double-stop silencioso: no hay entrada → nada que hacer.
+                logger.debug("ℹ️ stopAccessingSecurityScopedResource: sin entrada para \(normalizedPath) (double-stop safe)")
+                return
+            }
+
+            // Decrementar contador.
+            entry.count -= 1
+
+            if entry.count > 0 {
+                // Todavía hay referencias vivas → solo actualizamos count.
+                securityScopedAccess[normalizedPath] = entry
+                logger.debug("🔒 Acceso security-scoped REF-COUNT decrementado a \(entry.count): \(normalizedPath)")
+                return
+            }
+
+            // Count llegó a 0 → llamamos a la API del sistema SOBRE el URL GUARDADO
+            // (no reconstruido desde string) y eliminamos la entrada.
+            entry.url.stopAccessingSecurityScopedResource()
+            securityScopedAccess.removeValue(forKey: normalizedPath)
+            logger.debug("🔒 Acceso security-scoped LIBERADO (count→0): \(normalizedPath)")
+        } else {
+            // ---- LEGACY SET PATH (Task 2.6 OFF) ----
+            guard securityScopedAccess[normalizedPath] != nil else {
+                // No había entrada → doble stop silencioso.
+                logger.debug("ℹ️ stopAccessingSecurityScopedResource: sin entrada para \(normalizedPath) (double-stop safe, legacy)")
+                return
+            }
+            // Tenía entrada → liberar y borrar.
+            securityScopedAccess[normalizedPath]?.url.stopAccessingSecurityScopedResource()
+            securityScopedAccess.removeValue(forKey: normalizedPath)
+            logger.debug("🔒 Acceso security-scoped LIBERADO (legacy Set): \(normalizedPath)")
         }
-
-        // Decrementar contador.
-        entry.count -= 1
-
-        if entry.count > 0 {
-            // Todavía hay referencias vivas → solo actualizamos count.
-            securityScopedAccess[normalizedPath] = entry
-            logger.debug("🔒 Acceso security-scoped REF-COUNT decrementado a \(entry.count): \(normalizedPath)")
-            return
-        }
-
-        // Count llegó a 0 → llamamos a la API del sistema SOBRE el URL GUARDADO
-        // (no reconstruido desde string) y eliminamos la entrada.
-        entry.url.stopAccessingSecurityScopedResource()
-        securityScopedAccess.removeValue(forKey: normalizedPath)
-        logger.debug("🔒 Acceso security-scoped LIBERADO (count→0): \(normalizedPath)")
     }
 
     /// Detiene TODOS los accesos security-scoped activos (teardown forzado).
