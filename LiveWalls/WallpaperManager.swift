@@ -1962,16 +1962,6 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
          }
 
          wallpaperOperationInFlight = true
-         defer {
-             wallpaperOperationInFlight = false
-             // Drain at most one queued change per release; further requests
-             // re-enqueue and drain on the next release (bounded).
-             if let pending = pendingWallpaperChange {
-                 pendingWallpaperChange = nil
-                 appLogger.debug("📤 Drenando cambio de wallpaper encolado: \(String(describing: pending))")
-                 Task { await self.drainPendingWallpaperChange(pending) }
-             }
-         }
 
          do {
              try await wallpaperOperationActor.withExclusiveAccess {
@@ -1990,6 +1980,21 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
              }
          } catch {
              appLogger.error("⏱️ Cambio de wallpaper falló (\(video.name)): \(error)")
+         }
+
+         // Release the guard BEFORE draining so the re-entrant call can acquire it.
+         wallpaperOperationInFlight = false
+
+         // Task 2.3 (design D5): drain at most one queued user change per release,
+         // awaiting it inline so the change fully settles before this call returns.
+         // A fire-and-forget `Task` here would outlive the operation — in
+         // production it races later changes, and in tests it bleeds into the
+         // next case. Further requests re-enqueue and drain on the next release
+         // (bounded by the user's input rate).
+         if let pending = pendingWallpaperChange {
+             pendingWallpaperChange = nil
+             appLogger.debug("📤 Drenando cambio de wallpaper encolado: \(String(describing: pending))")
+             await drainPendingWallpaperChange(pending)
          }
      }
 
