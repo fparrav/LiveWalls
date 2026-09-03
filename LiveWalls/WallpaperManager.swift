@@ -171,6 +171,44 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     func testApplyStaticWallpaper(imageURL: URL) async -> Bool {
         await self.setSystemStaticWallpaper(imageURL: imageURL)
     }
+
+    // MARK: - Test seams (Task 3.4 — no-op when the video is healthy)
+
+    /// Every verdict string `publishRenderAdvanceAggregate` actually wrote to the
+    /// telemetry store, in order. A steady `.advancing` stream must append only one
+    /// entry — proof the poll does not write per-frame.
+    private(set) var testProbeStateWrites: [String] = []
+
+    /// Attaches a real desktop window to `desktopVideoInstances` so a headless test
+    /// can exercise the health-check decision path with non-empty windows.
+    func testAttachDesktopWindow(_ window: DesktopVideoWindowMejorada, url: URL) {
+        self.desktopVideoInstances.append((window: window, accessibleURL: url))
+    }
+
+    /// Runs exactly the health-check + decide-to-recover block of `ensurePlaying`
+    /// (its `if isPlayingWallpaper` branch): returns `true` if it judged playback
+    /// unhealthy and ran `attemptBoundedRecovery`, `false` if it judged playback
+    /// healthy and took no action (no rebuild, no static-apply).
+    func testRunHealthCheckDecision() async -> Bool {
+        let probeVerdict = RecoveryDebugFlags.probeBasedHealthJudgment
+            ? self.renderAdvanceState
+            : .unknown
+        let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
+            windows: self.desktopVideoInstances,
+            currentVideo: self.currentVideo,
+            bookmarkActor: self.bookmarkActor,
+            renderAdvanceVerdict: probeVerdict
+        )
+        if !isHealthy {
+            self.recoveryDecisionLogger.error("🛠️ Recovery decision: health-check detected stall/unhealthy, triggering rebuild.")
+            await self.attemptBoundedRecovery(reason: "health-check-unhealthy")
+            return true
+        } else {
+            self.recoveryAttempts = 0
+            self.recoveryExhausted = false
+            return false
+        }
+    }
     #endif
 
     /// Backoff schedule actually used by `attemptBoundedRecovery` — the production
@@ -2802,20 +2840,32 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     aggregate = .unknown
                 }
 
-                guard self.renderAdvanceState != aggregate else { continue }
-                self.renderAdvanceState = aggregate
-
-                let verdictString: String
-                switch aggregate {
-                case .idle: verdictString = "idle"
-                case .advancing: verdictString = "advancing"
-                case .stalled: verdictString = "stalled"
-                case .unknown: verdictString = "unknown"
-                }
-                self.recoveryDecisionLogger.error("🔬 Render-advance aggregate → \(verdictString)")
-                await self.recoveryTelemetry.recordProbeState(verdictString)
+                await self.publishRenderAdvanceAggregate(aggregate)
             }
         }
+    }
+
+    /// Publishes an aggregate render-advance verdict: updates the observable
+    /// `renderAdvanceState` and appends exactly ONE telemetry entry — but only on
+    /// an actual transition. A steady stream of the same verdict (a healthy video
+    /// that keeps advancing) writes nothing after the first sample, so the durable
+    /// log records lifecycle transitions, never per-poll noise (design D1 / task 3.4).
+    func publishRenderAdvanceAggregate(_ aggregate: RenderAdvanceVerdict) async {
+        guard self.renderAdvanceState != aggregate else { return }
+        self.renderAdvanceState = aggregate
+
+        let verdictString: String
+        switch aggregate {
+        case .idle: verdictString = "idle"
+        case .advancing: verdictString = "advancing"
+        case .stalled: verdictString = "stalled"
+        case .unknown: verdictString = "unknown"
+        }
+        self.recoveryDecisionLogger.error("🔬 Render-advance aggregate → \(verdictString)")
+        await self.recoveryTelemetry.recordProbeState(verdictString)
+        #if DEBUG
+        self.testProbeStateWrites.append(verdictString)
+        #endif
     }
 
     /// Stops and clears all render-advance probes and the poll loop; resets the
