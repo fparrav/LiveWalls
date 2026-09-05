@@ -6,19 +6,21 @@ import os.log
 /// Actor para realizar verificaciones de salud de reproducción de forma asíncrona y thread-safe
 /// Reemplaza verificaciones síncronas bloqueantes en ensurePlaying con operaciones asíncronas
 actor PlaybackHealthChecker {
-    
+
     private let logger = Logger(subsystem: "com.livewalls.app", category: "PlaybackHealthChecker")
-    
+
     /// Verifica el estado de salud de la reproducción de wallpaper
     /// - Parameters:
     ///   - windows: Ventanas de escritorio activas
     ///   - currentVideo: Video actual configurado
     ///   - bookmarkActor: Actor para acceso seguro a bookmarks
+    ///   - renderAdvanceVerdict: Verdicto agregado del render-advance probe (señal primaria)
     /// - Returns: true si la reproducción está saludable, false si necesita reinicio
     func checkPlaybackHealth(
         windows: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)],
         currentVideo: VideoFile?,
-        bookmarkActor: BookmarkActor
+        bookmarkActor: BookmarkActor,
+        renderAdvanceVerdict: RenderAdvanceVerdict = .unknown
     ) async -> Bool {
         logger.info("🩺 Iniciando verificación de salud de reproducción")
         
@@ -33,38 +35,55 @@ actor PlaybackHealthChecker {
             logger.warning("⚠️ No hay ventanas de escritorio creadas")
             return false
         }
-        
-        // 3. Verificar que el bookmark del video es accesible
+
+        // 3. Probe-based judgment (design D2) — renderAdvanceVerdict is the PRIMARY signal.
+        // It measures actual render progress, so it decides on its own without needing
+        // the bookmark/file checks below (a rebuild would fail anyway if the file is gone;
+        // advancing pixels mean playback is live regardless).
+        switch renderAdvanceVerdict {
+        case .advancing:
+            logger.info("✅ Verificación de salud: probe .advancing → SANO (señal primaria)")
+            return true
+        case .stalled:
+            logger.warning("⚠️ Verificación de salud: probe .stalled → NO SANO (stall confirmado)")
+            return false
+        case .unknown, .idle:
+            // Probe has no verdict yet (just after a rebuild, or playback legitimately
+            // paused) — fall back to the bookmark/file/window-state checks below.
+            logger.debug("🔍 Verificación de salud: probe \(String(describing: renderAdvanceVerdict)) → fallback a bookmark/timeControlStatus")
+        }
+
+        // 4. Fallback: verificar que el bookmark del video es accesible
         guard let bookmarkData = currentVideo.bookmarkData else {
             logger.error("❌ Video actual no tiene bookmark data: \(currentVideo.name)")
             return false
         }
-        
-        // 4. Intentar resolver bookmark de forma asíncrona
+
+        // 5. Fallback: intentar resolver bookmark de forma asíncrona
         do {
             let resolvedURL = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
-            
+
             // Verificar que el archivo existe
             let fileExists = await checkFileExists(at: resolvedURL)
             if !fileExists {
                 logger.error("❌ El archivo de video no existe: \(resolvedURL.path)")
                 return false
             }
-            
+
             logger.debug("✅ Bookmark resuelto exitosamente: \(currentVideo.name)")
         } catch {
             logger.error("❌ Error resolviendo bookmark: \(error.localizedDescription)")
             return false
         }
-        
-         // 5. Verificar estado de reproducción de las ventanas (en main thread)
+
+         // 6. Fallback: verificar estado de reproducción de las ventanas (en main thread)
          let windowStates = await MainActor.run {
              return windows.map { window, url in
                  // PHASE 6: Check timeControlStatus FIRST for accurate stall detection
                  let timeControlStatus = window.getTimeControlStatus()
                  let rate = window.getPlaybackRate() ?? 0.0
                  let isVisible = window.isVisible
-                 
+
                  // Determine if playing based on timeControlStatus (more reliable)
                  let isPlaying: Bool
                  if let status = timeControlStatus {
@@ -74,7 +93,7 @@ actor PlaybackHealthChecker {
                      // Fallback to rate if timeControlStatus unavailable
                      isPlaying = (rate > 0.0)
                  }
-                 
+
                  return (
                      isPlaying: isPlaying,
                      timeControlStatus: timeControlStatus,
@@ -84,27 +103,27 @@ actor PlaybackHealthChecker {
                  )
              }
          }
-         
+
          // Analizar estados
          let playingCount = windowStates.filter { $0.isPlaying }.count
          let visibleCount = windowStates.filter { $0.isVisible }.count
          let waitingCount = windowStates.filter { $0.timeControlStatus == .waitingToPlayAtSpecifiedRate }.count
-         
+
          logger.info("📊 Estado ventanas: \(windows.count) total, \(playingCount) reproduciendo, \(visibleCount) visibles, \(waitingCount) esperando")
-        
+
         // Si ninguna ventana está reproduciendo, la salud es negativa
         if playingCount == 0 {
             logger.warning("⚠️ Ninguna ventana está reproduciendo")
             return false
         }
-        
+
         // Si hay menos ventanas reproduciendo que pantallas disponibles
         let screenCount = await MainActor.run { NSScreen.screens.count }
         if playingCount < screenCount {
             logger.warning("⚠️ Reproduciendo en \(playingCount) de \(screenCount) pantallas")
             // Esto no es crítico si al menos una está reproduciendo
         }
-        
+
         logger.info("✅ Verificación de salud completada: reproducción saludable")
         return true
     }

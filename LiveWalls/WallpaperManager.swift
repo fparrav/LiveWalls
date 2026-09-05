@@ -34,6 +34,12 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     
     // MARK: - Private Properties
     private let appLogger = Logger(subsystem: "com.livewalls.app", category: "WallpaperManager")
+    // Task 1.3: dedicated retained-level logger for recovery decision/outcome (complements RecoveryTelemetry file)
+    private let recoveryDecisionLogger = Logger(subsystem: "com.livewalls.app", category: "RecoveryDecision")
+    // Task 1.5: per-window render-advance probes + aggregate observable
+    private var renderAdvanceProbes: [RenderAdvanceProbe] = []
+    private var renderAdvancePollTask: Task<Void, Never>?
+    @Published private(set) var renderAdvanceState: RenderAdvanceVerdict = .idle
     private var desktopVideoInstances: [(window: DesktopVideoWindowMejorada, accessibleURL: URL)] = []
     private let notificationManager: NotificationManager
     private var currentStaticWallpaperURL: URL?
@@ -53,14 +59,194 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     private var transitionDuration: TimeInterval = 1.0  // Reducido de 2.0s a 1.0s para transiciones más rápidas
     private var transitionType: TransitionManager.TransitionType = .crossfade
     
-    // FASE 5.3: Flag para prevenir transiciones concurrentes
-    private var isTransitioning = false
-    
-     // FASE 5: Concurrency gate para ensurePlaying()
-     private var isEnsurePlayingRunning = false
+    // FASE 5.3: Transition concurrency prevention — latching boolean removed (task 2.3).
+    // Transitions are now serialized by the exclusive lock in WallpaperOperationActor.
+
+     // FASE 5: Rate limiting for ensurePlaying() only (latching boolean removed in task 2.3)
      private var lastEnsurePlayingTime: Date?
-     private let ensurePlayingMinInterval: TimeInterval = 2.0 // PHASE 6: Increased from 500ms to 2.0s for reduced CPU usage
-    
+     private let ensurePlayingMinInterval: TimeInterval = 2.0
+
+    // MARK: - Wallpaper change serialization (Task 2.3)
+
+    /// Hard timeout for a guarded wallpaper operation. Set above the lock's
+    /// acquire timeout (20s) so lock contention is reported first; this is the
+    /// backstop that guarantees the in-flight guard is released even if the
+    /// operation itself stalls (design D5).
+    static let operationGuardTimeout: Duration = .seconds(25)
+
+    /// A user-initiated wallpaper change (next / previous) that arrived while an
+    /// operation was already running. Coalesced (last-one-wins) and applied once
+    /// the guard clears — never dropped (design D5). Stored as an intent, not a
+    /// resolved video, so the drain re-resolves against fresh state.
+    private enum PendingWallpaperChange {
+        case next
+        case previous
+    }
+    private var pendingWallpaperChange: PendingWallpaperChange? = nil
+
+    /// True while a guarded wallpaper operation is running. Set on entry to
+    /// `applyGuardedWallpaperChange`, cleared in its `defer` on every exit path
+    /// (success, throw, or timeout) — it can never latch.
+    private var wallpaperOperationInFlight = false
+
+    // MARK: - Bounded Recovery Retry Policy (Task 2.4 / Design D2)
+
+    /// Count of consecutive recovery attempts for the current stall episode.
+    /// Reset to 0 on any healthy check (ensurePlaying / didWake success).
+    private var recoveryAttempts: Int = 0
+
+    /// Maximum number of recovery attempts before giving up and logging.
+    private let maxRecoveryAttempts = 3
+
+    /// Escalating backoff for each attempt (index = attempt number).
+    /// Attempt 1: immediate, Attempt 2: 3s, Attempt 3: 10s.
+    private let recoveryBackoff: [Duration] = [.seconds(0), .seconds(3), .seconds(10)]
+
+    /// True once max attempts are exhausted and the "exhausted" log/telemetry has
+    /// been emitted. Prevents spamming the durable log when triggers keep firing
+    /// (e.g., external monitor genuinely off). Reset alongside recoveryAttempts.
+    private var recoveryExhausted: Bool = false
+
+    /// Guard to prevent concurrent recovery loops. Two `ensurePlaying` unhealthy
+    /// triggers could otherwise start parallel loops during the ~4s+ awaits.
+    private var isRecoveryInProgress: Bool = false
+
+    #if DEBUG
+    // MARK: - Test seams (Task 3.1 — deterministic E2E recover→verify in CI)
+    // These are compiled only in DEBUG and are `nil` on every path except a test
+    // that explicitly assigns them. They let a headless test drive the full
+    // bounded-recovery loop + `performFreshRebuild` orchestration (guard, teardown,
+    // `bookmarkActor.reconcile()`, exclusive lock, attempt counters, backoff,
+    // telemetry, exhaustion) while standing in for the two steps that genuinely
+    // cannot run without a display: real window/AVPlayer creation and the
+    // first-frame render probe.
+
+    /// When non-nil, `performFreshRebuild` returns this closure's verdict instead
+    /// of creating real windows and running `verifyFirstFrameProbe()`. The closure
+    /// receives the reason string and the current attempt number so a test can
+    /// simulate "still stalled on attempt 1, advancing on attempt 2".
+    var testFreshRebuildVerifyHook: ((_ reason: String, _ attempt: Int) async -> Bool)?
+
+    /// Overrides `recoveryBackoff` so a CI run of the bounded-recovery loop does
+    /// not sleep real seconds between attempts.
+    var testRecoveryBackoffOverride: [Duration]?
+
+    /// Test entry point for the private bounded-recovery loop.
+    func testDriveBoundedRecovery(reason: String) async {
+        await self.attemptBoundedRecovery(reason: reason)
+    }
+
+    var testRecoveryAttempts: Int { self.recoveryAttempts }
+    var testRecoveryExhausted: Bool { self.recoveryExhausted }
+
+    // MARK: - Test seams (Task 2.9 — display-scoped fresh rebuild)
+
+    /// When non-nil, `attemptBoundedRecovery` uses this set instead of computing
+    /// `stalledDisplayIDs()` from the live probes (which need real windows). An
+    /// empty set means "no subset stalled → global rebuild".
+    var testStalledDisplayIDsOverride: Set<CGDirectDisplayID>?
+
+    /// When non-nil, `performFreshRebuild` uses this as the set of live display
+    /// IDs instead of reading `desktopVideoInstances` (which is empty in a
+    /// headless test), so the scoped-vs-global decision can be exercised in CI.
+    var testLiveDisplayIDsOverride: Set<CGDirectDisplayID>?
+
+    /// Records the `targetDisplays` value each `performFreshRebuild` call resolved
+    /// to (after the `perDisplayRecovery` / `bookmarkRefCount` gating): `nil` for a
+    /// global rebuild, a non-empty set for a display-scoped one. One entry per
+    /// attempt, in order.
+    private(set) var testRebuildTargetsSeen: [Set<CGDirectDisplayID>?] = []
+
+    // MARK: - Test seams (Task 3.3 — static-apply is off the main queue)
+
+    /// When non-nil, `setSystemStaticWallpaper` invokes this right before the
+    /// `NSWorkspace.setDesktopImageURL` loop, passing whether it is currently on
+    /// the main thread. Returning `true` makes the method skip the real system
+    /// call (so a headless test does not change the host's desktop) and report
+    /// success. A test uses it to assert the loop runs off-main when
+    /// `staticApplyOffMain` is enabled, and on-main when it is disabled.
+    var testStaticApplyProbe: (@Sendable (_ onMainThread: Bool) -> Bool)?
+
+    /// Test entry point for the private `setSystemStaticWallpaper`.
+    func testApplyStaticWallpaper(imageURL: URL) async -> Bool {
+        await self.setSystemStaticWallpaper(imageURL: imageURL)
+    }
+
+    // MARK: - Test seams (Task 3.4 — no-op when the video is healthy)
+
+    /// Every verdict string `publishRenderAdvanceAggregate` actually wrote to the
+    /// telemetry store, in order. A steady `.advancing` stream must append only one
+    /// entry — proof the poll does not write per-frame.
+    private(set) var testProbeStateWrites: [String] = []
+
+    /// Attaches a real desktop window to `desktopVideoInstances` so a headless test
+    /// can exercise the health-check decision path with non-empty windows.
+    func testAttachDesktopWindow(_ window: DesktopVideoWindowMejorada, url: URL) {
+        self.desktopVideoInstances.append((window: window, accessibleURL: url))
+    }
+
+    /// Runs exactly the health-check + decide-to-recover block of `ensurePlaying`
+    /// (its `if isPlayingWallpaper` branch): returns `true` if it judged playback
+    /// unhealthy and ran `attemptBoundedRecovery`, `false` if it judged playback
+    /// healthy and took no action (no rebuild, no static-apply).
+    func testRunHealthCheckDecision() async -> Bool {
+        let probeVerdict = RecoveryDebugFlags.probeBasedHealthJudgment
+            ? self.renderAdvanceState
+            : .unknown
+        let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
+            windows: self.desktopVideoInstances,
+            currentVideo: self.currentVideo,
+            bookmarkActor: self.bookmarkActor,
+            renderAdvanceVerdict: probeVerdict
+        )
+        if !isHealthy {
+            self.recoveryDecisionLogger.error("🛠️ Recovery decision: health-check detected stall/unhealthy, triggering rebuild.")
+            await self.attemptBoundedRecovery(reason: "health-check-unhealthy")
+            return true
+        } else {
+            self.recoveryAttempts = 0
+            self.recoveryExhausted = false
+            return false
+        }
+    }
+    #endif
+
+    /// Backoff schedule actually used by `attemptBoundedRecovery` — the production
+    /// `recoveryBackoff` unless a DEBUG test overrides it.
+    private var effectiveRecoveryBackoff: [Duration] {
+        #if DEBUG
+        if let override = self.testRecoveryBackoffOverride { return override }
+        #endif
+        return self.recoveryBackoff
+    }
+
+    /// Runs `operation` on the main actor with a hard timeout. If `timeout`
+    /// elapses first the operation task is cancelled, its wind-down is awaited
+    /// (so nothing is abandoned mid-flight), and `WallpaperOperationTimeoutError`
+    /// is thrown. If the operation finishes first the timer is cancelled and the
+    /// call returns immediately.
+    private func withOperationTimeout(
+        _ timeout: Duration,
+        operation: @escaping @MainActor () async -> Void
+    ) async throws {
+        let opTask = Task { @MainActor in await operation() }
+        let timeoutTask = Task { () -> Bool in
+            do {
+                try await Task.sleep(for: timeout)
+            } catch {
+                return false // cancelled — the operation finished first
+            }
+            opTask.cancel()
+            return true // timed out
+        }
+        // Wait for the operation (or its cancelled wind-down) to complete.
+        await opTask.value
+        timeoutTask.cancel()
+        if await timeoutTask.value {
+            throw WallpaperOperationTimeoutError(timeout: timeout)
+        }
+    }
+
     // MARK: - Background color windows for transitions
     private var backgroundColorWindows: [NSWindow] = []
     
@@ -95,13 +281,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
       private let throttleManager = ThrottleManager() // FASE 2: Throttling para eventos frecuentes
       // NOTE: PlaybackTelemetry integration pending - add to Xcode project target first
       // private let playbackTelemetry = PlaybackTelemetry() // PHASE 7: Production telemetry
-      private var activeSecurityScopedURLs: Set<String> = []
+      private let recoveryTelemetry = RecoveryTelemetry() // Task 1.1: Durable recovery-lifecycle telemetry
+      // Task 2.6 / D6: BookmarkActor is now the single source of truth for
+      // security-scoped access tracking (ref-count). The old local mirror
+      // `activeSecurityScopedURLs` has been removed.
       private let resourceTrackingQueue = DispatchQueue(label: "security.resources", attributes: .concurrent)
-    
+
     // MARK: - Synchronization to prevent crashes
     private let wallpaperOperationQueue = DispatchQueue(label: "com.livewalls.wallpaperQueue", attributes: .concurrent)
     private let wallpaperOperationActor = WallpaperOperationActor()
-    private var isChangingVideo = false
     private var isApplyingStaticWallpaper = false
     private var pendingStaticApplyWorkItem: DispatchWorkItem?
      private var isCleaningUp = false
@@ -112,10 +300,148 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
      private let shuffleHistoryMaxSize = 5
      private let shuffleModeKey = "ShuffleModeEnabled"
      
-     // Actor to serialize wallpaper operations
+     // MARK: - Operation Mutex (Task 2.1 / design D4)
+
+    /// Thrown when the wallpaper-operation mutex cannot be acquired within the
+    /// configured timeout. Distinct from the operation's own errors so callers
+    /// can log/recover specifically about the lock vs. the work.
+    struct WallpaperOperationTimeoutError: Error, CustomStringConvertible {
+        let timeout: Duration
+        var description: String {
+            return "Wallpaper operation timed out waiting for exclusive access after \(timeout)"
+        }
+    }
+
+    /// Serializes wallpaper operations (start/stop/rebuild). Real async mutex:
+    /// if a caller is in flight, subsequent callers wait in FIFO order; the wait
+    /// is bounded by `timeout`, and the lock is always released — on success,
+    /// on operation `throw`, on timeout, and on caller cancellation.
     private actor WallpaperOperationActor {
-        func withExclusiveAccess<T>(@_implicitSelfCapture operation: () async throws -> T) async rethrows -> T {
+        private var isBusy: Bool = false
+        // FIFO queue of pending waiters. Each entry stores the waiter's id,
+        // its continuation, and the requested timeout (so the timeout error
+        // carries the correct duration even when multiple waiters are queued).
+        private var waiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>, timeout: Duration)] = []
+
+        /// Default timeout for lock acquisition. Long enough to cover the
+        /// slowest legitimate wallpaper rebuild (window teardown + recreate +
+        /// static-frame apply) on real hardware; short enough that a wedged
+        /// recovery cannot stall the UI indefinitely.
+        static let defaultTimeout: Duration = .seconds(20)
+
+        /// Runs `operation` while holding the wallpaper-operation mutex.
+        ///
+        /// Semantics:
+        /// - FIFO: callers are admitted in the order they called `acquire()`.
+        /// - Bounded: if the lock is not acquired within `timeout`, throws
+        ///   `WallpaperOperationTimeoutError`. The pending caller is removed
+        ///   from the queue and resumed so no continuation leaks.
+        /// - Bounded-cleanup: if the calling Task is cancelled while waiting,
+        ///   the continuation is removed from the queue and resumed with
+        ///   `CancellationError`; if cancelled while holding the lock, the
+        ///   lock is still released (via `defer`).
+        /// - No double-resume: the queued continuation is resumed exactly once
+        ///   (by the next release, by timeout, or by cancellation), whichever
+        ///   happens first.
+        func withExclusiveAccess<T>(
+            timeout: Duration = WallpaperOperationActor.defaultTimeout,
+            @_implicitSelfCapture operation: () async throws -> T
+        ) async throws -> T {
+            try await acquire(timeout: timeout)
+            // Guaranteed release on every exit path (success, throw, cancel).
+            defer { release() }
             return try await operation()
+        }
+
+        // MARK: - Internal acquire / release
+
+        private func acquire(timeout: Duration) async throws {
+            // Fast path: uncontended. Checking + flipping `isBusy` happens in
+            // a single actor hop, so no two callers can both win this branch.
+            if !isBusy {
+                isBusy = true
+                return
+            }
+
+            // Slow path: park a CheckedContinuation in `waiters` and wait
+            // for one of three things to resume it — the lock becoming free
+            // (via `release`), the timeout elapsing, or the calling Task
+            // being cancelled. Whichever fires first wins; the others are
+            // observed to be no-ops by `timeOutWaiter` / `cancelWaiter`
+            // because the entry has already been removed from `waiters`.
+            let waiterID = UUID()
+
+            // We need the timeout arm to be cancellable so that if the
+            // caller wins (lock released, or cancellation) we don't keep a
+            // sleeping Task around until the original timeout fires.
+            let timeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: timeout)
+                await self?.timeOutWaiter(id: waiterID)
+            }
+
+            do {
+                try await withTaskCancellationHandler {
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                        // Appending and observing `isBusy` are both inside
+                        // the actor, so no other caller can sneak past us
+                        // between the fast-path miss above and this append.
+                        // Store timeout per-waiter so each error carries its own duration.
+                        self.waiters.append((id: waiterID, continuation: continuation, timeout: timeout))
+                    }
+                } onCancel: {
+                    Task { await self.cancelWaiter(id: waiterID) }
+                }
+            } catch {
+                // Whether we lost by timeout or by cancellation, the spawned
+                // timeout arm is no longer needed — cancel it so it does not
+                // linger until `timeout` elapses against an empty queue.
+                timeoutTask.cancel()
+                throw error
+            }
+            timeoutTask.cancel()
+
+            // After the continuation returns successfully, the lock is ours.
+            // From the caller's perspective `acquire()` is "done"; we don't
+            // need to touch `isBusy` here because either we just won the
+            // fast path (set it true) or `release()` handed it to us (it
+            // stays true across the hand-off, by design).
+        }
+
+        private func release() {
+            // FIFO: hand the lock to the next waiter if any; otherwise free it.
+            if !waiters.isEmpty {
+                let next = waiters.removeFirst()
+                // `isBusy` stays true across the hand-off — the next caller's
+                // `acquire()` returned via this continuation and observes it
+                // already set, so it proceeds straight into its operation.
+                next.continuation.resume()
+            } else {
+                isBusy = false
+            }
+        }
+
+        /// Resume a queued waiter with `WallpaperOperationTimeoutError` if it
+        /// is still parked. Idempotent — if the waiter already resumed (e.g.
+        /// the lock was released first, or the caller was cancelled), this
+        /// is a no-op so the continuation is never double-resumed.
+        private func timeOutWaiter(id: UUID) async {
+            guard let index = waiters.firstIndex(where: { $0.id == id }) else {
+                return // already resumed (lock released or cancelled)
+            }
+            let entry = waiters.remove(at: index)
+            entry.continuation.resume(throwing: WallpaperOperationTimeoutError(timeout: entry.timeout))
+        }
+
+        /// Resume a queued waiter with `CancellationError` if it is still
+        /// parked. Idempotent — if the waiter already resumed (e.g. the lock
+        /// was released first, or the timeout fired first), this is a no-op
+        /// so the continuation is never double-resumed.
+        private func cancelWaiter(id: UUID) async {
+            guard let index = waiters.firstIndex(where: { $0.id == id }) else {
+                return // already resumed (lock released or timed out)
+            }
+            let entry = waiters.remove(at: index)
+            entry.continuation.resume(throwing: CancellationError())
         }
     }
 
@@ -134,13 +460,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 Task.detached { [weak self] in
                     guard let self else { return }
                     if let staticImageURL = await self.generateStaticWallpaperFrame(for: nextURL) {
-                        DispatchQueue.main.async {
-                            let success = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                            if success {
+                        // Task 2.7 / D7: setSystemStaticWallpaper now runs off-main (nonisolated async)
+                        let success = await self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                        if success {
+                            await MainActor.run {
                                 self.appLogger.info("🖼️ Frame estático generado y aplicado (debounced)")
                             }
-                            // No deletion to avoid races; keep cached
                         }
+                        // No deletion to avoid races; keep cached
                     }
                     await MainActor.run {
                         self.isApplyingStaticWallpaper = false
@@ -153,28 +480,44 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     // MARK: - Initialization
-     override init() {
+     override convenience init() {
+         self.init(loadPersistedData: true)
+     }
+
+     /// - Parameter loadPersistedData: when `false`, skips the background load of
+     ///   persisted videos / current video / auto-change settings from
+     ///   `PersistenceActor`. Headless tests pass `false` so that async load
+     ///   cannot overwrite the `videoFiles` / `currentVideo` the test sets up —
+     ///   it otherwise races the first `await` in the test body.
+     init(loadPersistedData: Bool = true) {
          self.notificationManager = NotificationManager.shared
          super.init()
-         
+
          appLogger.info("\(NSLocalizedString("initializing_wallpaper_manager", comment: "Initializing WallpaperManager"), privacy: .public)")
-         
+
          // Load shuffle mode from UserDefaults
          self.isShuffleMode = userDefaults.bool(forKey: shuffleModeKey)
-         
+
          // Cargar configuración en background usando PersistenceActor (NO bloquear init)
-         Task.detached { [weak self] in
-             guard let self else { return }
-             await self.loadDataInBackground()
+         if loadPersistedData {
+             Task.detached { [weak self] in
+                 guard let self else { return }
+                 await self.loadDataInBackground()
+             }
          }
-         
+
          loadTransitionSettings()
          setupScreenChangeNotifications()
          setupWorkspaceNotifications()
          setupTerminationHandling()
          setupFullscreenDetection()
          setupAppActivationNotifications()
-         
+
+         // Task 1.1: Initialize durable recovery telemetry writer
+         Task { [recoveryTelemetry] in
+             await recoveryTelemetry.configure()
+         }
+
          // Intentar auto‑inicio cuando el estado esté listo (sin depender de delays fijos)
          attemptAutoStart()
          
@@ -625,47 +968,110 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
     }
     
-    /// Sets a static image as system wallpaper for all screens
-    /// - Parameter imageURL: URL of the image to set as wallpaper
-    /// - Returns: true if set correctly on at least one screen
-    /// - Note: Fase 1 - Aplicación ÚNICA sin delays redundantes para optimizar rendimiento
+    /// Sets a static image as system wallpaper for all screens.
+    /// - Task 2.7 / D7: the loop over screens is a slow synchronous system call;
+    ///   it runs off-main so the main run loop (MenuBarExtra, transport pill, etc.)
+    ///   is never starved during recovery.
+    /// - Returns: true if set correctly on at least one screen.
     @discardableResult
-    private func setSystemStaticWallpaper(imageURL: URL) -> Bool {
-        var success = false
-        
-        // Verify that the file exists before trying to set it
+    nonisolated private func setSystemStaticWallpaper(imageURL: URL) async -> Bool {
+        // 1. File-exists check runs off-main (I/O)
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
-            appLogger.error("❌ Wallpaper file does not exist: \(imageURL.path)")
+            await MainActor.run {
+                self.appLogger.error("❌ Wallpaper file does not exist: \(imageURL.path)")
+            }
             return false
         }
-        
-        appLogger.info("🖼️ Setting static wallpaper (ONCE): \(imageURL.lastPathComponent)")
-        
-        // FASE 1: Aplicar UNA SOLA VEZ - eliminar delays redundantes
-        // Apply to all screens
-        for screen in NSScreen.screens {
-            do {
-                try NSWorkspace.shared.setDesktopImageURL(
-                    imageURL,
-                    for: screen,
-                    options: [
-                        .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
-                        .allowClipping: true
-                    ]
-                )
-                success = true
-                appLogger.info("✅ Static wallpaper set on screen: \(screen.localizedName)")
-            } catch {
-                appLogger.error("❌ Error setting static wallpaper on \(screen.localizedName): \(error.localizedDescription)")
+
+        await MainActor.run {
+            self.appLogger.info("🖼️ Setting static wallpaper (ONCE): \(imageURL.lastPathComponent)")
+        }
+
+        // 2. Capture NSScreen.screens on the main actor (thread-safe per screen)
+        let screens = await MainActor.run { NSScreen.screens }
+
+        #if DEBUG
+        let staticApplyProbe = await MainActor.run { self.testStaticApplyProbe }
+        #endif
+
+        // 3. Loop `setDesktopImageURL` over the screens.
+        //    Task 2.8 / D9: kill-switch `staticApplyOffMain`.
+        //    ON (default) = run on a detached utility task, off-main, so the main
+        //    run loop never stalls waiting on the synchronous call (design D7).
+        //    OFF = legacy behavior: run the loop synchronously on the main actor.
+        let success: (ok: Bool, errors: [String])
+        if RecoveryDebugFlags.staticApplyOffMain {
+            success = await Task.detached(priority: .utility) {
+                #if DEBUG
+                // `pthread_main_np()` has no async-context restriction (unlike
+                // `Thread.isMainThread`) and answers exactly what we assert here.
+                if let probe = staticApplyProbe, probe(pthread_main_np() != 0) {
+                    return (ok: true, errors: [])
+                }
+                #endif
+                var ok = false
+                var errors: [String] = []
+                for screen in screens {
+                    do {
+                        try NSWorkspace.shared.setDesktopImageURL(
+                            imageURL,
+                            for: screen,
+                            options: [
+                                .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
+                                .allowClipping: true
+                            ]
+                        )
+                        ok = true
+                    } catch {
+                        errors.append("\(screen.localizedName): \(error.localizedDescription)")
+                    }
+                }
+                return (ok: ok, errors: errors)
+            }.value
+        } else {
+            success = await MainActor.run {
+                #if DEBUG
+                // `pthread_main_np()` has no async-context restriction (unlike
+                // `Thread.isMainThread`) and answers exactly what we assert here.
+                if let probe = staticApplyProbe, probe(pthread_main_np() != 0) {
+                    return (ok: true, errors: [])
+                }
+                #endif
+                var ok = false
+                var errors: [String] = []
+                for screen in NSScreen.screens {
+                    do {
+                        try NSWorkspace.shared.setDesktopImageURL(
+                            imageURL,
+                            for: screen,
+                            options: [
+                                .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
+                                .allowClipping: true
+                            ]
+                        )
+                        ok = true
+                    } catch {
+                        errors.append("\(screen.localizedName): \(error.localizedDescription)")
+                    }
+                }
+                return (ok: ok, errors: errors)
             }
         }
-        
-        if success {
-            currentStaticWallpaperURL = imageURL
-            appLogger.info("📋 Current static wallpaper updated: \(imageURL.lastPathComponent)")
+
+        // 4. Mutate currentStaticWallpaperURL back on the main actor, and log any errors.
+        if success.ok {
+            await MainActor.run {
+                self.currentStaticWallpaperURL = imageURL
+                self.appLogger.info("📋 Current static wallpaper updated: \(imageURL.lastPathComponent)")
+            }
         }
-        
-        return success
+        for err in success.errors {
+            await MainActor.run {
+                self.appLogger.error("❌ Error setting static wallpaper on \(err)")
+            }
+        }
+
+        return success.ok
     }
     
      /// Gets the next video in the queue (after current video)
@@ -686,12 +1092,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         guard enabledVideos.count > 1 else {
             return enabledVideos.first
         }
-        
+
+        // Never hand back the video that is already playing: a manual "next"
+        // that returns the current video makes `nextWallpaper()` no-op, and an
+        // auto-change tick would just re-select the same clip. Fall back to the
+        // full set only in the degenerate case where excluding it leaves nothing.
+        let currentID = currentVideo?.id
+        let poolWithoutCurrent = enabledVideos.filter { $0.id != currentID }
+        let selectionPool = poolWithoutCurrent.isEmpty ? enabledVideos : poolWithoutCurrent
+
         // If we have at least 6 enabled videos, use history to avoid repeating recent videos
         if enabledVideos.count >= 6 {
             // Filter out videos in shuffle history
-            let availableVideos = enabledVideos.filter { video in !self.shuffleHistory.contains(video.id) }
-            
+            let availableVideos = selectionPool.filter { video in !self.shuffleHistory.contains(video.id) }
+
             if let randomVideo = availableVideos.randomElement() {
                 // Update shuffle history
                 shuffleHistory.append(randomVideo.id)
@@ -704,7 +1118,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 // All available videos are in history, clear history and try again
                 appLogger.debug("🔄 Shuffle history full, clearing and retrying")
                 shuffleHistory.removeAll()
-                if let randomVideo = enabledVideos.randomElement() {
+                if let randomVideo = selectionPool.randomElement() {
                     shuffleHistory.append(randomVideo.id)
                     appLogger.debug("🎲 Shuffled to: \(randomVideo.name) (history cleared)")
                     return randomVideo
@@ -713,7 +1127,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         } else {
             // Fewer than 6 videos: use circular fallback to avoid immediate repeats
             // Get videos not in recent history (if any)
-            let availableVideos = enabledVideos.filter { video in !self.shuffleHistory.contains(video.id) }
+            let availableVideos = selectionPool.filter { video in !self.shuffleHistory.contains(video.id) }
             if !availableVideos.isEmpty, let randomVideo = availableVideos.randomElement() {
                 shuffleHistory.append(randomVideo.id)
                 if shuffleHistory.count > shuffleHistoryMaxSize {
@@ -723,7 +1137,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                 return randomVideo
             } else {
                 // All in history, fall back to random
-                if let randomVideo = enabledVideos.randomElement() {
+                if let randomVideo = selectionPool.randomElement() {
                     shuffleHistory.append(randomVideo.id)
                     if shuffleHistory.count > shuffleHistoryMaxSize {
                         shuffleHistory.removeFirst()
@@ -831,7 +1245,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     }
     
     // MARK: - Wallpaper Control
-    
+
     /// Starts wallpaper playback safely
     func startWallpaperSafe() {
         guard let currentVideo = currentVideo else {
@@ -840,72 +1254,84 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
         Task {
-            await wallpaperOperationActor.withExclusiveAccess {
-                await MainActor.run {
-                    self.appLogger.info("▶️ Iniciando wallpaper: \(currentVideo.name)")
-                }
-                
-                let resolvedURL = await self.resolveBookmark(for: currentVideo)
-                guard let accessibleURL = resolvedURL else {
+            do {
+                try await wallpaperOperationActor.withExclusiveAccess {
                     await MainActor.run {
-                        self.notificationManager.showError(message: "No se pudo acceder al archivo de video")
+                        self.appLogger.info("▶️ Iniciando wallpaper: \(currentVideo.name)")
                     }
-                    return
-                }
-                
-                 // Fase 1: Generar frame estático en background sin bloquear inicio del video
-                 // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
-                 // para evitar deadlocks causados por Task.detached anidado
-                  Task.detached { [weak self] in
-                      guard let self = self else { return }
-                      if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
-                          // Ejecutar en main thread sin await para evitar deadlock
-                          DispatchQueue.main.async {
-                              _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                              self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
-                              // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
-                          }
-                      } else {
-                          DispatchQueue.main.async {
-                              self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
-                          }
-                      }
-                  }
-                
-                 // Crear ventanas de forma asíncrona sin bloquear en frame estático
-                 await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
-                 
-                 await MainActor.run {
-                     self.isPlayingWallpaper = true
-                     self.startAutoChangeTimerIfNeeded()
-                 }
 
-                  // PHASE 6: Programar verificaciones de salud post-arranque con intervalos optimizados
-                   // Intervals: 1.0s, 5.0s, 15.0s, 120.0s (120s para estado estable)
-                   await self.scheduledHealthCheckManager.scheduleHealthChecks(
-                       action: { [weak self] in
-                           await MainActor.run { [weak self] in
-                               self?.ensurePlaying(reason: "post-start scheduled check")
-                           }
-                       },
-                       intervals: [1.0, 5.0, 15.0, 120.0]
-                   )
-                  
-                  // Precargar el siguiente video para transiciones instantáneas
-                  if let nextVideo = self.getNextVideoInQueue() {
-                      if let nextURL = await self.resolveBookmark(for: nextVideo) {
-                          await self.videoPreloader.preload(videoURL: nextURL)
+                    let resolvedURL = await self.resolveBookmark(for: currentVideo)
+                    guard let accessibleURL = resolvedURL else {
+                        await MainActor.run {
+                            self.notificationManager.showError(message: "No se pudo acceder al archivo de video")
+                        }
+                        return
+                    }
+
+                     // Fase 1: Generar frame estático en background sin bloquear inicio del video
+                     // Task 2.7 / D7: setSystemStaticWallpaper ahora corre fuera del main queue
+                      Task.detached { [weak self] in
+                          guard let self = self else { return }
+                          if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL) {
+                              let success = await self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                              if success {
+                                  await MainActor.run {
+                                      self.appLogger.info("🖼️ Wallpaper estático establecido para Mission Control/Exposé")
+                                  }
+                              }
+                              // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
+                          } else {
+                              await MainActor.run {
+                                  self.appLogger.warning("⚠️ No se pudo generar wallpaper estático")
+                              }
+                          }
                       }
-                  }
-             }
+
+                     // Crear ventanas de forma asíncrona sin bloquear en frame estático
+                     await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
+
+                     await MainActor.run {
+                         self.isPlayingWallpaper = true
+                         self.startAutoChangeTimerIfNeeded()
+                     }
+
+                      // PHASE 6: Programar verificaciones de salud post-arranque con intervalos optimizados
+                       // Intervals: 1.0s, 5.0s, 15.0s, 120.0s (120s para estado estable)
+                       await self.scheduledHealthCheckManager.scheduleHealthChecks(
+                           action: { [weak self] in
+                               await MainActor.run { [weak self] in
+                                   self?.ensurePlaying(reason: "post-start scheduled check")
+                               }
+                           },
+                           intervals: [1.0, 5.0, 15.0, 120.0]
+                       )
+
+                      // Precargar el siguiente video para transiciones instantáneas
+                      if let nextVideo = self.getNextVideoInQueue() {
+                          if let nextURL = await self.resolveBookmark(for: nextVideo) {
+                              await self.videoPreloader.preload(videoURL: nextURL)
+                          }
+                      }
+                }
+            } catch {
+                // Task 2.1: lock acquisition failed (timeout or cancellation).
+                // The lock guarantees bounded, non-latching behavior, but the
+                // caller still has to honor that — log loudly so an ignored
+                // start isn't silently dropped. Full error routing for every
+                // trigger is the responsibility of task 2.2.
+                await MainActor.run {
+                    self.appLogger.error("⏱️ No se pudo iniciar wallpaper: lock no adquirido (\(error))")
+                }
+            }
          }
-     }
-    
+    }
+
     /// Stops wallpaper playback
     func stopWallpaper() {
         Task {
-            await wallpaperOperationActor.withExclusiveAccess {
-                await MainActor.run {
+            do {
+                try await wallpaperOperationActor.withExclusiveAccess {
+                    await MainActor.run {
                     // Cancel pending static apply tasks
                     pendingStaticApplyWorkItem?.cancel()
                     pendingStaticApplyWorkItem = nil
@@ -914,14 +1340,26 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     self.appLogger.info("⏹️ Deteniendo wallpaper")
                     self.stopAutoChangeTimer()
                     self.stopStaticFrameUpdateTimer()
+                    // Task 1.5: stop the render-advance probes — playback no longer expected.
+                    Task { await self.stopRenderAdvanceProbes() }
                     self.destroyAllDesktopWindows {
                         self.isPlayingWallpaper = false
                     }
                 }
+                }
+            } catch {
+                // Task 2.1: lock acquisition failed (timeout or cancellation).
+                // The lock guarantees bounded, non-latching behavior, but the
+                // caller still has to honor that — log loudly so an ignored
+                // stop isn't silently dropped. Full error routing for every
+                // trigger is the responsibility of task 2.2.
+                await MainActor.run {
+                    self.appLogger.error("⏱️ No se pudo detener wallpaper: lock no adquirido (\(error))")
+                }
             }
         }
     }
-    
+
     /// Alterna entre iniciar/detener el wallpaper
     func toggleWallpaper() {
         if isPlayingWallpaper {
@@ -946,17 +1384,14 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             // Resolver bookmark de forma asíncrona usando BookmarkActor
             let url = try await bookmarkActor.resolveBookmark(bookmarkData: bookmarkData)
             
-            // Iniciar acceso security-scoped usando BookmarkActor
+            // Iniciar acceso security-scoped usando BookmarkActor (ref-count, single source of truth)
             let started = await bookmarkActor.startAccessingSecurityScopedResource(url: url)
             guard started else {
                 appLogger.error("❌ No se pudo iniciar acceso security-scoped para: \(video.name)")
                 return nil
             }
-            
-            // Registrar URL activa en el conjunto local (para compatibilidad)
-            let normalizedPath = url.path
-            activeSecurityScopedURLs.insert(normalizedPath)
-            
+
+            // Task 2.6 / D6: no local mirror — BookmarkActor tracks the ref-count internally.
             appLogger.info("✅ Bookmark resuelto y acceso iniciado: \(video.name)")
             return url
             
@@ -969,18 +1404,24 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     // MARK: - Desktop Windows Management
     
     /// Crea ventanas de video para todas las pantallas de forma asíncrona
-    private func createDesktopWindows(for video: VideoFile, accessibleURL: URL) async {
-        // Limpiar instancias previas
-        if !desktopVideoInstances.isEmpty {
+    /// - Parameter onlyScreens: Task 2.9 — when non-nil, this is a display-scoped
+    ///   rebuild: the existing instances are left in place and windows are created
+    ///   only for the given screens and *appended*. When nil, every previous window
+    ///   is closed and the instance list is replaced (the pre-2.9 behavior).
+    private func createDesktopWindows(for video: VideoFile, accessibleURL: URL, onlyScreens: [NSScreen]? = nil) async {
+        let isScoped = onlyScreens != nil
+
+        // Limpiar instancias previas (solo en un rebuild global)
+        if !isScoped, !desktopVideoInstances.isEmpty {
             appLogger.warning("⚠️ Limpiando ventanas previas antes de crear nuevas")
             for (window, _) in desktopVideoInstances {
                 window.close()
             }
             desktopVideoInstances.removeAll()
         }
-        
-        let screens = NSScreen.screens
-        
+
+        let screens = onlyScreens ?? NSScreen.screens
+
         // FASE 5: Métricas de rendimiento - timestamp inicio
         let startTime = Date()
         
@@ -1012,9 +1453,17 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             let desktopWindows = createdWindows.map { window in
                 (window: window as! DesktopVideoWindowMejorada, accessibleURL: accessibleURL)
             }
-            desktopVideoInstances = desktopWindows
-            appLogger.info("✅ Creadas \(createdWindows.count) ventanas de escritorio de forma asíncrona")
+            if isScoped {
+                desktopVideoInstances.append(contentsOf: desktopWindows)
+                appLogger.info("✅ Creadas \(createdWindows.count) ventana(s) de escritorio (rebuild por pantalla)")
+            } else {
+                desktopVideoInstances = desktopWindows
+                appLogger.info("✅ Creadas \(createdWindows.count) ventanas de escritorio de forma asíncrona")
+            }
         }
+
+        // Task 1.5: (re)start the render-advance probes for the freshly created windows.
+        await startRenderAdvanceProbes()
     }
     
     /// Destruye todas las ventanas de escritorio
@@ -1056,23 +1505,45 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             completion()
         }
     }
+
+    /// Task 2.9 — destroys only the desktop windows whose `displayID` is in
+    /// `displayIDs`, leaving every other instance in place and untouched. Does
+    /// NOT release the shared security-scoped URL: the surviving windows still
+    /// need it and the replacement windows will reuse the same still-valid URL,
+    /// so the ref-count must stay above zero throughout a display-scoped rebuild.
+    private func destroyDesktopWindows(displayIDs: Set<CGDirectDisplayID>, completion: @escaping () -> Void) {
+        let toDestroy = desktopVideoInstances.filter { displayIDs.contains($0.window.displayID) }
+        guard !toDestroy.isEmpty else {
+            completion()
+            return
+        }
+
+        appLogger.info("🧹 Destruyendo \(toDestroy.count) ventana(s) de escritorio en pantalla(s) \(displayIDs.map(String.init).joined(separator: ", "))")
+        desktopVideoInstances.removeAll { displayIDs.contains($0.window.displayID) }
+
+        let group = DispatchGroup()
+        for (window, _) in toDestroy {
+            group.enter()
+            window.close {
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) {
+            completion()
+        }
+    }
     
     // MARK: - Security-Scoped Resource Management
-    
-    /// Detiene el acceso security-scoped de forma segura
+
+    /// Detiene el acceso security-scoped delegando al BookmarkActor (única fuente de verdad).
+    /// - Task 2.6 / D6: eliminado el espejo local; BookmarkActor hace ref-count y double-stop safe.
     @MainActor
     private func safeStopSecurityScopedAccess(for url: URL) {
-        let normalizedPath = url.path
-        if activeSecurityScopedURLs.contains(normalizedPath) {
-            activeSecurityScopedURLs.remove(normalizedPath)
-            
-            // Usar BookmarkActor para detener acceso
-            Task {
-                await bookmarkActor.stopAccessingSecurityScopedResource(url: url)
-            }
-            
-            appLogger.debug("🔓 Liberado acceso security-scoped: \(normalizedPath)")
+        // Delegamos al actor. Double-stop es no-op silencioso por contrato.
+        Task {
+            await self.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
         }
+        appLogger.debug("🔓 Stop security-scoped solicitado al BookmarkActor: \(url.path)")
     }
     
     // MARK: - New Robust Auto Change Timer
@@ -1115,11 +1586,370 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
             appLogger.debug("💡 No se reinicia timer: no está activo")
             return
         }
-        
+
         appLogger.info("🔄 Reiniciando timer después de cambio manual")
         startAutoChangeTimerIfNeeded()
     }
-    
+
+    // MARK: - Task 2.5: Full Fresh Rebuild (Design D3)
+
+    /// Performs a full fresh rebuild (design D3): destroys old windows, resolves
+    /// the bookmark, creates new windows with brand-new AVQueuePlayer + AVPlayerLooper
+    /// + AVPlayerLayer per display, runs an orderFront→orderBack cycle for proper
+    /// z-order/space settling, then probes for first-frame advance to confirm the
+    /// pipeline is actually rendering.
+    ///
+    /// Differs from `startWallpaperSafe`/`changeToNextVideo` in that it does NOT
+    /// reuse any existing playback state. Every AVQueuePlayer is allocated fresh,
+    /// so a wedged AVPlayerLooper / stale AVPlayerItem cannot survive the rebuild.
+    ///
+    /// Caller responsibilities (must hold the wallpaper operation lock):
+    /// - Caller has verified `currentVideo != nil`.
+    /// - Caller will record `recoverOutcome` / `verifyResult` based on the return.
+    ///
+    /// - Parameter reason: Short identifier used for telemetry + logs.
+    /// - Returns: `true` if first-frame probe confirmed advancing render, `false` otherwise.
+    /// Task 2.9 — resolves whether a rebuild should be display-scoped and to which
+    /// displays. Returns `nil` for a global rebuild (every display), or the set of
+    /// display IDs to rebuild in isolation. Pure so it can be unit-tested without
+    /// any windows.
+    /// - A scoped rebuild requires both kill-switches on (`perDisplayRecovery` and
+    ///   `bookmarkRefCount` — the scoped path keeps the shared security-scoped URL
+    ///   alive by ref-count), a non-empty request, and that the request is a
+    ///   *strict subset* of the live displays (there must be at least one healthy
+    ///   display left untouched, otherwise a global rebuild is simpler and safe).
+    static func resolveRebuildScope(
+        requested: Set<CGDirectDisplayID>?,
+        liveDisplays: Set<CGDirectDisplayID>,
+        perDisplayEnabled: Bool,
+        refCountEnabled: Bool
+    ) -> Set<CGDirectDisplayID>? {
+        guard perDisplayEnabled, refCountEnabled,
+              let req = requested, !req.isEmpty else { return nil }
+        let intersect = req.intersection(liveDisplays)
+        guard !intersect.isEmpty, intersect != liveDisplays else { return nil }
+        return intersect
+    }
+
+    func performFreshRebuild(reason: String, targetDisplays: Set<CGDirectDisplayID>? = nil) async -> Bool {
+        self.recoveryDecisionLogger.error("🛠️ performFreshRebuild start — reason: \(reason)")
+
+        guard let video = self.currentVideo else {
+            self.recoveryDecisionLogger.fault("❌ performFreshRebuild aborted — no current video.")
+            return false
+        }
+
+        // Task 2.9 — decide global vs display-scoped rebuild.
+        var liveDisplays = Set(self.desktopVideoInstances.map { $0.window.displayID })
+        #if DEBUG
+        if let liveOverride = self.testLiveDisplayIDsOverride { liveDisplays = liveOverride }
+        #endif
+        let scopedTargets = Self.resolveRebuildScope(
+            requested: targetDisplays,
+            liveDisplays: liveDisplays,
+            perDisplayEnabled: RecoveryDebugFlags.perDisplayRecovery,
+            refCountEnabled: RecoveryDebugFlags.bookmarkRefCount
+        )
+        #if DEBUG
+        self.testRebuildTargetsSeen.append(scopedTargets)
+        #endif
+
+        if let scoped = scopedTargets {
+            return await self.performDisplayScopedRebuild(reason: reason, targetDisplays: scoped, video: video)
+        }
+
+        // 1) Teardown — destroy every old window and wait for close completion
+        //    (the close callback chain releases security-scoped access).
+        if !self.desktopVideoInstances.isEmpty {
+            self.appLogger.info("🧹 Teardown de \(self.desktopVideoInstances.count) ventana(s) previa(s)")
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                self.destroyAllDesktopWindows { cont.resume() }
+            }
+            // give AVFoundation a moment to fully release the previous item/looper
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+
+        // 1.5) Task 2.6 / D6: drain security-scoped state to zero before the new
+        //     resolveBookmark/start cycle. Idempotent; rebuild will re-acquire
+        //     cleanly without depending on whatever state the previous rebuild left behind.
+        await self.bookmarkActor.reconcile()
+
+        #if DEBUG
+        // Task 3.1 test seam: stand in for real window creation + first-frame
+        // probe so the recover→verify cycle can be driven headlessly in CI.
+        if let hook = self.testFreshRebuildVerifyHook {
+            let advancing = await hook(reason, self.recoveryAttempts)
+            self.recoveryDecisionLogger.error("🧪 performFreshRebuild TEST HOOK — reason: \(reason), attempt: \(self.recoveryAttempts), advancing: \(advancing)")
+            await self.recoveryTelemetry.recordVerifyResult(advancing: advancing, detail: "test-hook fresh-rebuild (\(reason))")
+            return advancing
+        }
+        #endif
+
+        // 2) Resolve bookmark — abort if it can't be resolved (file gone / perms revoked).
+        guard let accessibleURL = await self.resolveBookmark(for: video) else {
+            self.recoveryDecisionLogger.fault("❌ performFreshRebuild aborted — bookmark could not be resolved.")
+            self.isPlayingWallpaper = false
+            return false
+        }
+
+        // 3) Create brand-new windows. createDesktopWindows already invokes
+        //    startRenderAdvanceProbes() at the end, which allocates one
+        //    RenderAdvanceProbe per window — fresh AVQueuePlayer / looper / layer
+        //    on the window side, fresh probe on the manager side.
+        await self.createDesktopWindows(for: video, accessibleURL: accessibleURL)
+
+        // 4) orderOut → orderFront → orderBack per window (design D3): the orderOut
+        //    fully detaches the window from the window server's Space association
+        //    before re-adding it, which is the part that unsticks a compositor that
+        //    stayed wedged across a wake / display reconfiguration; orderFront then
+        //    orderBack restores the desktop-level z-order behind the icon layer.
+        for (window, _) in self.desktopVideoInstances {
+            window.orderOut(nil)
+            window.orderFront(nil)
+            window.orderBack(nil)
+        }
+
+        // 5) Settle — 400ms gives AVFoundation time to begin the first frame
+        //    render and stabilize the new layer ordering.
+        try? await Task.sleep(for: .milliseconds(400))
+
+        // 6) First-frame probe — sample currentTime twice with ~300ms apart and
+        //    confirm forward advance OR a wrap (which is the AVPlayerLooper
+        //    restart signature).
+        let advancing = await self.verifyFirstFrameProbe()
+
+        if advancing {
+            self.recoveryDecisionLogger.error("✅ performFreshRebuild OK — first-frame probe confirmed advancing.")
+        } else {
+            self.recoveryDecisionLogger.fault("❌ performFreshRebuild failed — first-frame probe saw no advance across \(self.desktopVideoInstances.count) window(s).")
+        }
+        await self.recoveryTelemetry.recordVerifyResult(advancing: advancing, detail: "fresh-rebuild first-frame probe (\(reason))")
+        return advancing
+    }
+
+    /// Samples each active window twice (≈300ms apart) and returns true if ANY
+    /// window shows forward advance or wrap between the two samples. A single
+    /// sample is not enough because playback may legitimately start from 0
+    /// and the first sample may be a valid pre-advance baseline.
+    /// - Parameter onlyDisplays: Task 2.9 — when non-nil, only the windows on
+    ///   those displays are probed (used by a display-scoped rebuild so a still-
+    ///   stalled healthy display cannot mask the freshly rebuilt one, and vice
+    ///   versa).
+    private func verifyFirstFrameProbe(onlyDisplays: Set<CGDirectDisplayID>? = nil) async -> Bool {
+        let windows: [DesktopVideoWindowMejorada] = self.desktopVideoInstances
+            .filter { onlyDisplays == nil || onlyDisplays!.contains($0.window.displayID) }
+            .map { $0.window }
+        guard !windows.isEmpty else { return false }
+
+        let sample1: [CMTime?] = await self.sampleCurrentTimes(on: windows)
+        try? await Task.sleep(for: .milliseconds(300))
+        let sample2: [CMTime?] = await self.sampleCurrentTimes(on: windows)
+
+        for (t1, t2) in zip(sample1, sample2) {
+            guard let s1 = t1, s1.isValid, s1.seconds > 0,
+                  let s2 = t2, s2.isValid, s2.seconds > 0 else {
+                continue
+            }
+            // Forward advance > 0.05s, or wrap (decrease > 0.05s).
+            let delta = s2.seconds - s1.seconds
+            if delta > 0.05 { return true }
+            if delta < -0.05 { return true }
+        }
+        return false
+    }
+
+    /// Snapshot of each window's currentTime, hopped to main actor.
+    /// Returns an array the same length as `windows` (nil where unavailable).
+    private func sampleCurrentTimes(on windows: [DesktopVideoWindowMejorada]) async -> [CMTime?] {
+        await MainActor.run {
+            windows.map { $0.getCurrentTime() }
+        }
+    }
+
+    /// Task 2.9 — the set of display IDs whose render-advance probe currently
+    /// reports `.stalled`. `renderAdvanceProbes` is kept index-aligned with
+    /// `desktopVideoInstances` (both are rebuilt together by
+    /// `startRenderAdvanceProbes()`), so `zip` maps a stalled probe back to its
+    /// window's display.
+    private func stalledDisplayIDs() async -> Set<CGDirectDisplayID> {
+        #if DEBUG
+        if let override = self.testStalledDisplayIDsOverride { return override }
+        #endif
+        var stalled: Set<CGDirectDisplayID> = []
+        for (probe, instance) in zip(self.renderAdvanceProbes, self.desktopVideoInstances) {
+            if await probe.currentVerdict == .stalled {
+                stalled.insert(instance.window.displayID)
+            }
+        }
+        return stalled
+    }
+
+    /// Task 2.9 — display-scoped fresh rebuild: tears down and recreates only the
+    /// windows on `targetDisplays`, leaving every other display's window instance
+    /// (and its AVQueuePlayer / AVPlayerLooper / AVPlayerLayer) untouched. Skips
+    /// `BookmarkActor.reconcile()` and reuses the surviving windows' still-valid
+    /// security-scoped URL so the shared ref-count never drops to zero. The
+    /// first-frame probe is scoped to the rebuilt windows only.
+    private func performDisplayScopedRebuild(
+        reason: String,
+        targetDisplays: Set<CGDirectDisplayID>,
+        video: VideoFile
+    ) async -> Bool {
+        self.recoveryDecisionLogger.error("🛠️ performDisplayScopedRebuild — reason: \(reason), displays: \(targetDisplays.map(String.init).joined(separator: ", "))")
+
+        // Reuse a surviving window's security-scoped URL — it is still valid and
+        // still needed, so we must NOT release it or drain the ref-count here.
+        let survivorURL = self.desktopVideoInstances
+            .first { !targetDisplays.contains($0.window.displayID) }?
+            .accessibleURL
+
+        // 1) Teardown only the target windows (no security-scoped release).
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            self.destroyDesktopWindows(displayIDs: targetDisplays) { cont.resume() }
+        }
+        try? await Task.sleep(for: .milliseconds(300))
+
+        #if DEBUG
+        if let hook = self.testFreshRebuildVerifyHook {
+            let advancing = await hook(reason, self.recoveryAttempts)
+            self.recoveryDecisionLogger.error("🧪 performDisplayScopedRebuild TEST HOOK — reason: \(reason), attempt: \(self.recoveryAttempts), advancing: \(advancing)")
+            await self.recoveryTelemetry.recordVerifyResult(advancing: advancing, detail: "test-hook display-scoped rebuild (\(reason))")
+            return advancing
+        }
+        #endif
+
+        // 2) Resolve the URL to build against — prefer the surviving one; if every
+        //    window happened to be a target, fall back to a fresh bookmark resolve.
+        let accessibleURL: URL
+        if let survivorURL {
+            accessibleURL = survivorURL
+        } else if let resolved = await self.resolveBookmark(for: video) {
+            accessibleURL = resolved
+        } else {
+            self.recoveryDecisionLogger.fault("❌ performDisplayScopedRebuild aborted — no usable security-scoped URL.")
+            return false
+        }
+
+        // 3) Recreate windows only for the target screens; append to the instance list.
+        let targetScreens = NSScreen.screens.filter { targetDisplays.contains($0.displayID) }
+        guard !targetScreens.isEmpty else {
+            self.recoveryDecisionLogger.fault("❌ performDisplayScopedRebuild aborted — target display(s) no longer attached.")
+            return false
+        }
+        await self.createDesktopWindows(for: video, accessibleURL: accessibleURL, onlyScreens: targetScreens)
+
+        // 4) orderOut → orderFront → orderBack for the rebuilt windows only.
+        for (window, _) in self.desktopVideoInstances where targetDisplays.contains(window.displayID) {
+            window.orderOut(nil)
+            window.orderFront(nil)
+            window.orderBack(nil)
+        }
+
+        // 5) Settle.
+        try? await Task.sleep(for: .milliseconds(400))
+
+        // 6) First-frame probe scoped to the rebuilt windows.
+        let advancing = await self.verifyFirstFrameProbe(onlyDisplays: targetDisplays)
+        if advancing {
+            self.recoveryDecisionLogger.error("✅ performDisplayScopedRebuild OK — first-frame probe confirmed advancing on rebuilt display(s).")
+        } else {
+            self.recoveryDecisionLogger.fault("❌ performDisplayScopedRebuild failed — first-frame probe saw no advance on rebuilt display(s).")
+        }
+        await self.recoveryTelemetry.recordVerifyResult(advancing: advancing, detail: "display-scoped first-frame probe (\(reason))")
+        return advancing
+    }
+
+    /// Attempts a bounded, escalating recovery when health check reports unhealthy.
+    /// Uses the render-advance probe as primary signal (design D2).
+    /// - Parameter reason: Reason for the recovery attempt (for logging/telemetry).
+    private func attemptBoundedRecovery(reason: String) async {
+        // Guard against concurrent recovery loops (e.g., multiple ensurePlaying unhealthy triggers)
+        guard !self.isRecoveryInProgress else {
+            self.appLogger.debug("⏭️ Recovery ya en progreso — ignorando disparo concurrente")
+            return
+        }
+        self.isRecoveryInProgress = true
+        defer { self.isRecoveryInProgress = false }
+
+        // Task 2.9 — capture which displays are stalled once, before the first
+        // teardown removes the probes. Every `attemptBoundedRecovery` trigger is a
+        // stall-type event (wake goes straight to `performFreshRebuild`), so a
+        // stall confined to a subset should rebuild only that subset. The
+        // global-vs-scoped gating happens inside `performFreshRebuild`.
+        let stalledDisplays = await self.stalledDisplayIDs()
+        if !stalledDisplays.isEmpty {
+            self.appLogger.info("🖥️ Recovery: displays reportando stall → \(stalledDisplays.map(String.init).joined(separator: ", "))")
+        }
+
+        // Loop through attempts (replaces recursion)
+        let backoffSchedule = self.effectiveRecoveryBackoff
+        while self.recoveryAttempts < self.maxRecoveryAttempts {
+            let backoff = backoffSchedule[min(self.recoveryAttempts, backoffSchedule.count - 1)]
+            if backoff > .seconds(0) {
+                self.appLogger.info("⏳ Recovery attempt \(self.recoveryAttempts + 1)/\(self.maxRecoveryAttempts): waiting \(backoff) before rebuild...")
+                do {
+                    try await Task.sleep(for: backoff)
+                } catch {
+                    self.appLogger.debug("⏭️ Recovery backoff cancelled")
+                    return
+                }
+            }
+
+            self.recoveryAttempts += 1
+            self.appLogger.info("🛠️ Recovery attempt \(self.recoveryAttempts)/\(self.maxRecoveryAttempts) started. Reason: \(reason)")
+            await self.recoveryTelemetry.recordRecoverAttempted(reason: reason)
+
+            // Task 2.8 / D9: kill-switch for full fresh rebuild (2.5).
+            // OFF = legacy rebuild = startWallpaperSafe + 2s settle + health-check probe.
+            let useFreshRebuild = RecoveryDebugFlags.fullFreshRebuild
+            let freshOK: Bool
+            if useFreshRebuild {
+                // Task 2.5 path: full fresh rebuild with first-frame probe.
+                do {
+                    freshOK = try await self.wallpaperOperationActor.withExclusiveAccess {
+                        await self.performFreshRebuild(
+                            reason: reason,
+                            targetDisplays: stalledDisplays.isEmpty ? nil : stalledDisplays
+                        )
+                    }
+                } catch {
+                    self.appLogger.error("⏱️ Recovery attempt \(self.recoveryAttempts) no pudo adquirir lock: \(error)")
+                    freshOK = false
+                }
+            } else {
+                // Legacy path: startWallpaperSafe + health-check probe (no first-frame).
+                self.startWallpaperSafe()
+                try? await Task.sleep(for: .seconds(2))
+                let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
+                    windows: self.desktopVideoInstances,
+                    currentVideo: self.currentVideo,
+                    bookmarkActor: self.bookmarkActor,
+                    renderAdvanceVerdict: self.renderAdvanceState
+                )
+                freshOK = isHealthy
+            }
+
+            if freshOK {
+                self.appLogger.info("✅ Recovery attempt \(self.recoveryAttempts) succeeded — first-frame probe OK")
+                self.recoveryAttempts = 0
+                self.recoveryExhausted = false
+                await self.recoveryTelemetry.recordRecoverOutcome(success: true, reason: reason)
+                return
+            }
+
+            self.appLogger.warning("⚠️ Recovery attempt \(self.recoveryAttempts) failed first-frame probe — next attempt")
+            await self.recoveryTelemetry.recordRecoverOutcome(success: false, reason: "rebuild-unhealthy")
+            // Loop continues for next attempt
+        }
+
+        // All attempts exhausted — log once (no spam on subsequent triggers)
+        if !self.recoveryExhausted {
+            self.recoveryExhausted = true
+            self.recoveryDecisionLogger.fault("🛑 Recovery exhausted after \(self.maxRecoveryAttempts) attempts — stopping. Reason: \(reason)")
+            await self.recoveryTelemetry.recordRecoverOutcome(success: false, reason: "max-attempts-exhausted")
+        }
+    }
+
     // MARK: - Static Frame Update Timer
     
 
@@ -1146,17 +1976,18 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         }
         
          // Generar nuevo frame para el Space actual en background (no bloquear)
-         // HOTFIX: Usar DispatchQueue.main.async en lugar de await MainActor.run
-         // para evitar deadlocks
+         // Task 2.7 / D7: setSystemStaticWallpaper ahora corre fuera del main queue
          Task.detached { [weak self] in
              guard let self = self else { return }
-             
+
              if let staticImageURL = await self.generateStaticWallpaperFrame(for: accessibleURL, timeOffset: currentVideoTime) {
-                 DispatchQueue.main.async {
-                     _ = self.setSystemStaticWallpaper(imageURL: staticImageURL)
-                     self.appLogger.info("🔄 Frame estático actualizado por cambio de Space - tiempo: \(currentVideoTime.map { "\(CMTimeGetSeconds($0))s" } ?? "inicial")")
+                 let success = await self.setSystemStaticWallpaper(imageURL: staticImageURL)
+                 if success {
+                     await MainActor.run {
+                         self.appLogger.info("🔄 Frame estático actualizado por cambio de Space - tiempo: \(currentVideoTime.map { "\(CMTimeGetSeconds($0))s" } ?? "inicial")")
+                     }
                  }
-                 
+
                  // Limpiar archivo temporal
                  try? FileManager.default.removeItem(at: staticImageURL)
              }
@@ -1196,32 +2027,80 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
          }
          
          appLogger.info("🔄 Cambiando automáticamente a: \(nextVideo.name)")
-         
-         // Enforce single change at a time
-         guard !isChangingVideo else {
-             appLogger.warning("⚠️ Cambio de video ya en progreso - ignorando")
+
+         // Task 2.3: auto-change tick — if a guarded operation is already
+         // running (e.g. a wake / health-check rebuild), skip this tick; the
+         // timer fires again shortly. Only user-initiated changes get queued
+         // (see nextWallpaper / previousWallpaper).
+         guard !wallpaperOperationInFlight else {
+             appLogger.debug("⏭️ Cambio automático omitido — operación en progreso")
              return
          }
-         isChangingVideo = true
-         defer { isChangingVideo = false }
-         
-         if isPlayingWallpaper {
-             await changeToNextVideoWithTransition(to: nextVideo)
-         } else {
-             await setActiveVideo(nextVideo)
+         await applyGuardedWallpaperChange(to: nextVideo, restartTimerAfter: false)
+     }
+
+     /// Runs a wallpaper change under the exclusive lock (design D4) with a hard
+     /// timeout and a guaranteed guard release on every exit path (design D5).
+     /// When the guard clears, any user change queued while this one ran is
+     /// drained.
+     /// - Parameter restartTimerAfter: `true` for manual next/previous changes
+     ///   (they reset the auto-change cadence); `false` for the auto-change tick.
+     private func applyGuardedWallpaperChange(to video: VideoFile, restartTimerAfter: Bool) async {
+         guard !wallpaperOperationInFlight else {
+             appLogger.warning("⚠️ applyGuardedWallpaperChange invocado con operación en curso — ignorando")
+             return
+         }
+
+         wallpaperOperationInFlight = true
+
+         do {
+             try await wallpaperOperationActor.withExclusiveAccess {
+                 // Task 2.3: hard timeout inside the lock so a stalled operation
+                 // cannot hold the mutex forever (design D5).
+                 try await self.withOperationTimeout(Self.operationGuardTimeout) { @MainActor in
+                     if self.isPlayingWallpaper {
+                         await self.changeToNextVideoWithTransition(to: video)
+                     } else {
+                         await self.setActiveVideo(video)
+                     }
+                 }
+             }
+             if restartTimerAfter {
+                 restartAutoChangeTimerIfNeeded()
+             }
+         } catch {
+             appLogger.error("⏱️ Cambio de wallpaper falló (\(video.name)): \(error)")
+         }
+
+         // Release the guard BEFORE draining so the re-entrant call can acquire it.
+         wallpaperOperationInFlight = false
+
+         // Task 2.3 (design D5): drain at most one queued user change per release,
+         // awaiting it inline so the change fully settles before this call returns.
+         // A fire-and-forget `Task` here would outlive the operation — in
+         // production it races later changes, and in tests it bleeds into the
+         // next case. Further requests re-enqueue and drain on the next release
+         // (bounded by the user's input rate).
+         if let pending = pendingWallpaperChange {
+             pendingWallpaperChange = nil
+             appLogger.debug("📤 Drenando cambio de wallpaper encolado: \(String(describing: pending))")
+             await drainPendingWallpaperChange(pending)
          }
      }
-    
+
+     /// Re-runs a queued user change with fresh state. Delegating back to the
+     /// public entry points keeps the shuffle/playlist resolution in one place.
+     private func drainPendingWallpaperChange(_ pending: PendingWallpaperChange) async {
+         switch pending {
+         case .next:
+             await nextWallpaper()
+         case .previous:
+             await previousWallpaper()
+         }
+     }
+
     /// Changes to the next video without crossfade (instant switch)
     private func changeToNextVideoWithTransition(to nextVideo: VideoFile) async {
-        guard !isTransitioning else {
-            appLogger.warning("⚠️ Transición ya en progreso - ignorando solicitud")
-            return
-        }
-        
-        isTransitioning = true
-        defer { isTransitioning = false }
-        
         appLogger.info("🔄 Cambiando sin transición a: \(nextVideo.name)")
         
         // Ensure we have a current video selected
@@ -1342,11 +2221,9 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                             group.leave()
                             return
                         }
-                        // Release bookmark off-main to avoid stalling UI
+                        // Release bookmark off-main to avoid stalling UI (ref-count decrement en BookmarkActor)
                         await self.bookmarkActor.stopAccessingSecurityScopedResource(url: url)
-                        _ = await MainActor.run { [weak self] in
-                            self?.activeSecurityScopedURLs.remove(url.path)
-                        }
+                        // Task 2.6 / D6: removed local mirror removal; BookmarkActor owns the state.
                         group.leave()
                     }
                 }
@@ -1377,18 +2254,20 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
              appLogger.info("🔍 DEBUG - [\(idx)]: \(video.name) (id: \(video.id.uuidString.prefix(8))...)")
          }
          
-         guard !isChangingVideo else {
-             appLogger.warning("⚠️ Cambio de wallpaper ya en progreso (manual) - ignorando")
-             return
-         }
-         isChangingVideo = true
-         defer { isChangingVideo = false }
-         
          guard enabledVideos.count > 1 else {
              appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para cambio manual (count: \(enabledVideos.count))")
              return
          }
-         
+
+         // Task 2.3: if a guarded operation is running, queue the intent and
+         // return BEFORE touching shuffle history — the drain re-resolves the
+         // target with fresh state once the guard clears (design D5).
+         if wallpaperOperationInFlight {
+             pendingWallpaperChange = .next
+             appLogger.debug("📥 Siguiente wallpaper encolado — operación en progreso")
+             return
+         }
+
          // Determine next video based on shuffle mode
          var nextVideo: VideoFile?
          if self.isShuffleMode {
@@ -1417,18 +2296,10 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
              appLogger.warning("⚠️ Siguiente video es el mismo que el actual - ignorando")
              return
          }
-         
+
          appLogger.info("🔄 Cambiando manualmente (modo \(self.isShuffleMode ? "shuffle" : "playlist")) a: \(nextVideo.name)")
-         
-         if isPlayingWallpaper {
-             await changeToNextVideoWithTransition(to: nextVideo)
-             // Reiniciar timer después de cambio manual
-             await MainActor.run {
-                 self.restartAutoChangeTimerIfNeeded()
-             }
-         } else {
-             await setActiveVideo(nextVideo)
-         }
+
+         await applyGuardedWallpaperChange(to: nextVideo, restartTimerAfter: true)
      }
 
     /// Manually changes to the previous wallpaper.
@@ -1442,15 +2313,16 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
 
         appLogger.info("🔍 DEBUG previousWallpaper() - Videos habilitados: \(enabledVideos.count), Shuffle: \(self.isShuffleMode)")
 
-        guard !isChangingVideo else {
-            appLogger.warning("⚠️ Cambio de wallpaper ya en progreso (manual) - ignorando")
-            return
-        }
-        isChangingVideo = true
-        defer { isChangingVideo = false }
-
         guard enabledVideos.count > 1 else {
             appLogger.warning("⚠️ No hay suficientes wallpapers habilitados para retroceder")
+            return
+        }
+
+        // Task 2.3: queue the intent and return BEFORE mutating shuffleHistory —
+        // the drain re-resolves with fresh state once the guard clears (design D5).
+        if wallpaperOperationInFlight {
+            pendingWallpaperChange = .previous
+            appLogger.debug("📥 Wallpaper anterior encolado — operación en progreso")
             return
         }
 
@@ -1489,15 +2361,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
 
         appLogger.info("🔄 Retrocediendo manualmente (modo \(self.isShuffleMode ? "shuffle" : "playlist")) a: \(previousVideo.name)")
 
-        if isPlayingWallpaper {
-            await changeToNextVideoWithTransition(to: previousVideo)
-            // Reiniciar timer después de cambio manual
-            await MainActor.run {
-                self.restartAutoChangeTimerIfNeeded()
-            }
-        } else {
-            await setActiveVideo(previousVideo)
-        }
+        await applyGuardedWallpaperChange(to: previousVideo, restartTimerAfter: true)
     }
 
     /// Comprueba si el botón "Siguiente Wallpaper" debe estar habilitado
@@ -1748,7 +2612,7 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         if let staticImageURL = await generateStaticWallpaperFrame(for: accessibleURL) {
             appLogger.info("✅ Frame estático generado: \(staticImageURL.path)")
             
-            let success = setSystemStaticWallpaper(imageURL: staticImageURL)
+            let success = await self.setSystemStaticWallpaper(imageURL: staticImageURL)
             if success {
                 appLogger.info("✅ PRUEBA EXITOSA: Wallpaper estático establecido")
                 // FASE 1: Eliminado scheduleWallpaperApplicationForAllSpaces() que aplicaba 4 veces redundantes
@@ -1915,7 +2779,11 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Pauses video players during fullscreen to save resources
     private func pauseVideoPlayersForFullscreen() async {
         appLogger.info("⏸️ Pausing video players for fullscreen")
-        
+
+        // Task 1.5: playback paused for fullscreen — stop the probes so a paused
+        // (legitimately non-advancing) player is not misread as a stall.
+        await stopRenderAdvanceProbes()
+
         for (window, _) in desktopVideoInstances {
             if let playerLayer = window.currentPlayerLayer {
                 playerLayer.player?.pause()
@@ -1926,61 +2794,201 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
     /// Resumes video players after fullscreen
     private func resumeVideoPlayersFromFullscreen() async {
         appLogger.info("▶️ Resuming video players after fullscreen")
-        
+
         for (window, _) in desktopVideoInstances {
             if let playerLayer = window.currentPlayerLayer {
                 playerLayer.player?.play()
             }
         }
+
+        // Task 1.5: playback resumed — restart the probes.
+        await startRenderAdvanceProbes()
+    }
+
+    // MARK: - Task 1.5: Render-advance probe lifecycle + observable signal
+
+    /// Starts one `RenderAdvanceProbe` per active desktop window plus a poll loop that
+    /// publishes the aggregate verdict to `renderAdvanceState` and feeds each transition
+    /// to the durable telemetry store. Idempotent: a running probe set is torn down first.
+    /// Only runs while playback is expected (called on window creation / fullscreen exit).
+    func startRenderAdvanceProbes() async {
+        await stopRenderAdvanceProbes()
+
+        let windows = desktopVideoInstances.map { $0.window }
+        guard !windows.isEmpty else { return }
+
+        renderAdvanceProbes = await RenderAdvanceProbe.startProbes(for: windows)
+        appLogger.debug("🔬 RenderAdvanceProbes iniciados para \(windows.count) ventana(s)")
+
+        renderAdvancePollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(2.5))
+                } catch {
+                    break
+                }
+                guard let self else { break }
+                let probes = self.renderAdvanceProbes
+                guard !probes.isEmpty else { break }
+
+                let aggregate: RenderAdvanceVerdict
+                if await RenderAdvanceProbe.anyStalled(probes) {
+                    aggregate = .stalled
+                } else if await RenderAdvanceProbe.allAdvancing(probes) {
+                    aggregate = .advancing
+                } else {
+                    aggregate = .unknown
+                }
+
+                await self.publishRenderAdvanceAggregate(aggregate)
+            }
+        }
+    }
+
+    /// Publishes an aggregate render-advance verdict: updates the observable
+    /// `renderAdvanceState` and appends exactly ONE telemetry entry — but only on
+    /// an actual transition. A steady stream of the same verdict (a healthy video
+    /// that keeps advancing) writes nothing after the first sample, so the durable
+    /// log records lifecycle transitions, never per-poll noise (design D1 / task 3.4).
+    func publishRenderAdvanceAggregate(_ aggregate: RenderAdvanceVerdict) async {
+        guard self.renderAdvanceState != aggregate else { return }
+        self.renderAdvanceState = aggregate
+
+        let verdictString: String
+        switch aggregate {
+        case .idle: verdictString = "idle"
+        case .advancing: verdictString = "advancing"
+        case .stalled: verdictString = "stalled"
+        case .unknown: verdictString = "unknown"
+        }
+        self.recoveryDecisionLogger.error("🔬 Render-advance aggregate → \(verdictString)")
+        await self.recoveryTelemetry.recordProbeState(verdictString)
+        #if DEBUG
+        self.testProbeStateWrites.append(verdictString)
+        #endif
+    }
+
+    /// Stops and clears all render-advance probes and the poll loop; resets the
+    /// observable signal to `.idle`. Safe to call when nothing is running.
+    func stopRenderAdvanceProbes() async {
+        renderAdvancePollTask?.cancel()
+        renderAdvancePollTask = nil
+        if !renderAdvanceProbes.isEmpty {
+            await RenderAdvanceProbe.stopProbes(renderAdvanceProbes)
+            renderAdvanceProbes = []
+        }
+        if renderAdvanceState != .idle {
+            renderAdvanceState = .idle
+        }
     }
 
     @objc private func willSleep(notification: NSNotification) {
+        // Task 1.2: record suspend-observed marker at the top so it fires even if later logic bails
+        Task { [recoveryTelemetry] in await recoveryTelemetry.recordSuspend() }
         appLogger.info("💤 El sistema va a suspenderse. Deteniendo temporalmente el wallpaper.")
         // No es necesario detenerlo explícitamente, el sistema lo pausa.
         // Si se detiene aquí, isPlayingWallpaper sería falso al despertar.
     }
 
     @objc private func didWake(notification: NSNotification) {
+        // Task 1.2: record wake-observed marker at the top so it fires even if later logic bails
+        Task { [recoveryTelemetry] in await recoveryTelemetry.recordWake() }
         appLogger.info("🌅 El sistema se ha despertado.")
         // Si el wallpaper estaba activo antes de suspender, lo reiniciamos.
         if isPlayingWallpaper {
             appLogger.info("🚀 Reiniciando wallpaper después de despertar.")
-            // Restart wallpaper with clean state
-            Task {
-                // Wait for system to stabilize
-                try? await Task.sleep(for: .milliseconds(500))
-                
-                // Verificar que aún tenemos un video actual
-                guard let currentVideo = self.currentVideo else { 
-                    await MainActor.run {
-                        self.appLogger.error("❌ No hay video actual al despertar")
-                    }
-                    return
-                }
-                
-                await MainActor.run {
-                    // CRITICAL: Destroy old windows first to prevent zombie windows
-                    self.appLogger.info("🧹 Limpiando ventanas antes de reiniciar")
-                    self.destroyAllDesktopWindows {
-                        // After cleanup, restart wallpaper
-                        Task {
-                            // Pre-resolver el bookmark para reducir latencia
-                            guard let accessibleURL = await self.resolveBookmark(for: currentVideo) else {
-                                await MainActor.run {
-                                    self.appLogger.error("❌ No se pudo resolver bookmark al despertar")
-                                    self.isPlayingWallpaper = false
+            // Task 1.3: retained-level (eviction-resistant) recovery-decision log
+            recoveryDecisionLogger.error("🛠️ Recovery decision: wake-triggered rebuild (wallpaper was active before suspend).")
+            // Task 2.8 / D9: kill-switch for full fresh rebuild (2.5).
+            // ON (default) = Task 2.5 path: rebuild under the exclusive lock with a
+            //   first-frame probe + a single retry.
+            // OFF = legacy path: `startWallpaperSafe()` (which manages its own lock
+            //   internally) + a health-check probe. The legacy call is issued
+            //   WITHOUT holding `withExclusiveAccess` here — nesting it would invert
+            //   the lock (startWallpaperSafe spawns its own exclusive-access Task).
+            if RecoveryDebugFlags.fullFreshRebuild {
+                // Restart wallpaper with clean state via exclusive lock
+                Task {
+                    do {
+                        try await wallpaperOperationActor.withExclusiveAccess {
+                            // Wait for system to stabilize
+                            try? await Task.sleep(for: .milliseconds(500))
+
+                            // Task 2.5 path: full fresh rebuild with first-frame probe.
+                            let firstOK = await self.performFreshRebuild(reason: "wake")
+
+                            if !firstOK {
+                                // Single retry if the first-frame probe did not confirm
+                                // advance — the wake event may have arrived before the
+                                // display subsystem finished waking up.
+                                self.appLogger.warning("⚠️ Wake rebuild first-frame probe failed — single retry")
+                                try? await Task.sleep(for: .milliseconds(800))
+                                let secondOK = await self.performFreshRebuild(reason: "wake-retry")
+                                guard secondOK else {
+                                    await MainActor.run {
+                                        self.appLogger.error("❌ Wake rebuild no logró reproducir tras reintento")
+                                        self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (first-frame probe failed twice).")
+                                        self.isPlayingWallpaper = false
+                                    }
+                                    return
                                 }
-                                return
                             }
-                            
-                            // Crear ventanas de forma asíncrona sin bloquear main thread
-                            await self.createDesktopWindows(for: currentVideo, accessibleURL: accessibleURL)
-                            
+
                             await MainActor.run {
                                 self.isPlayingWallpaper = true
                                 self.startAutoChangeTimerIfNeeded()
+                                self.recoveryAttempts = 0  // Reset recovery counter on successful wake rebuild
+                                self.recoveryExhausted = false  // Reset exhausted flag on successful wake rebuild
                                 self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar")
+                                // Task 1.3: retained-level recovery-outcome log (success path)
+                                self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (first-frame probe OK).")
                             }
+                        }
+                    } catch {
+                        // Task 2.1/2.2: lock acquisition failed (timeout or cancellation).
+                        await MainActor.run {
+                            self.appLogger.error("⏱️ No se pudo reiniciar wallpaper tras wake: lock no adquirido (\(error))")
+                            self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (lock acquisition failed: \(error)).")
+                        }
+                    }
+                }
+            } else {
+                // Legacy path (kill-switch OFF). `startWallpaperSafe()` is NOT wrapped
+                // in `withExclusiveAccess` here — it acquires the lock on its own.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    self.startWallpaperSafe()
+                    try? await Task.sleep(for: .seconds(2))
+                    var healthy = await self.playbackHealthChecker.checkPlaybackHealth(
+                        windows: self.desktopVideoInstances,
+                        currentVideo: self.currentVideo,
+                        bookmarkActor: self.bookmarkActor,
+                        renderAdvanceVerdict: self.renderAdvanceState
+                    )
+                    if !healthy {
+                        self.appLogger.warning("⚠️ Wake rebuild (legacy) health-check failed — single retry")
+                        try? await Task.sleep(for: .milliseconds(800))
+                        self.startWallpaperSafe()
+                        try? await Task.sleep(for: .seconds(2))
+                        healthy = await self.playbackHealthChecker.checkPlaybackHealth(
+                            windows: self.desktopVideoInstances,
+                            currentVideo: self.currentVideo,
+                            bookmarkActor: self.bookmarkActor,
+                            renderAdvanceVerdict: self.renderAdvanceState
+                        )
+                    }
+                    await MainActor.run {
+                        if healthy {
+                            self.isPlayingWallpaper = true
+                            self.startAutoChangeTimerIfNeeded()
+                            self.recoveryAttempts = 0
+                            self.recoveryExhausted = false
+                            self.appLogger.info("✅ Wallpaper reiniciado exitosamente después de despertar (legacy)")
+                            self.recoveryDecisionLogger.error("✅ Recovery outcome: wake-triggered rebuild succeeded (legacy health-check OK).")
+                        } else {
+                            self.appLogger.error("❌ Wake rebuild (legacy) no logró reproducir tras reintento")
+                            self.recoveryDecisionLogger.fault("❌ Recovery outcome: wake-triggered rebuild failed (legacy health-check failed twice).")
+                            self.isPlayingWallpaper = false
                         }
                     }
                 }
@@ -2018,13 +3026,13 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
                     await self.updateWindowVisibilityForSpaces()
                 } else {
                     self.appLogger.info("⚠️ Windows unhealthy - triggering recreation")
-                    // Primera reactivación inmediata
+                    // Primera reactivación inmediata (ensurePlaying internally routes rebuild through lock)
                     self.ensurePlaying(reason: "Space change - throttled")
-                    
+
                     // Un único retry tras 200ms para garantizar reproducción
                     try? await Task.sleep(for: .milliseconds(200))
                     self.ensurePlaying(reason: "Space change - retry")
-                    
+
                     // Actualizar frame estático en background (no bloquear)
                     await self.updateStaticFrameOnSpaceChange()
                 }
@@ -2158,14 +3166,15 @@ class WallpaperManager: NSObject, ObservableObject, NSWindowDelegate {
         appLogger.info("🧹 Cleaning up all resources")
         stopAutoChangeTimer()
         cleanupBackgroundColorWindows()
-        
+
         // Close all windows and release resources
         for (window, accessibleURL) in desktopVideoInstances {
             window.close()
             safeStopSecurityScopedAccess(for: accessibleURL)
         }
         desktopVideoInstances.removeAll()
-        activeSecurityScopedURLs.removeAll()
+        // Task 2.6 / D6: drain remaining security-scoped accesses via the actor.
+        Task { [bookmarkActor] in await bookmarkActor.stopAllSecurityScopedAccess() }
     }
 }
 
@@ -2203,14 +3212,9 @@ extension WallpaperManager {
     /// FASE 5: Optimizado con concurrency gate y rate limiting
     func ensurePlaying(reason: String) {
         appLogger.info("🩺 ensurePlaying() invocado: \(reason)")
-        
-        // FASE 5: Concurrency gate - prevenir ejecuciones concurrentes
-        guard !isEnsurePlayingRunning else {
-            appLogger.debug("⏭️ ensurePlaying: ya ejecutándose, saltando invocación (\(reason))")
-            return
-        }
-        
-        // FASE 5: Rate limiting - prevenir ejecuciones demasiado frecuentes
+
+        // Rate limiting - prevenir ejecuciones demasiado frecuentes
+        // Task 2.3: removed latching boolean; lock now serializes rebuilds.
         if let lastTime = lastEnsurePlayingTime {
             let elapsed = Date().timeIntervalSince(lastTime)
             if elapsed < self.ensurePlayingMinInterval {
@@ -2218,15 +3222,11 @@ extension WallpaperManager {
                 return
             }
         }
-        
-        // Marcar timestamp y flag
         lastEnsurePlayingTime = Date()
-        isEnsurePlayingRunning = true
-        
+
         // Necesitamos datos mínimos
         guard currentVideo != nil else {
             appLogger.debug("ℹ️ No currentVideo disponible")
-            isEnsurePlayingRunning = false
             return
         }
 
@@ -2235,36 +3235,41 @@ extension WallpaperManager {
         if !isPlayingWallpaper && shouldAutoStart {
             appLogger.info("▶️ ensurePlaying: no isPlaying, auto‑inicio activo → startWallpaperSafe()")
             startWallpaperSafe()
-            isEnsurePlayingRunning = false
             return
         }
 
         // Si se supone que está reproduciendo, validar de forma asíncrona
         if isPlayingWallpaper {
-            // Lanzar verificación de salud de forma asíncrona sin bloquear main thread
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                
-                // Usar PlaybackHealthChecker para verificación asíncrona
+
+                // Task 2.8 / D9: kill-switch for probe-based health judgment (2.4).
+                // OFF = legacy fallback (pass .unknown to force bookmark/timeControlStatus check).
+                let probeVerdict = RecoveryDebugFlags.probeBasedHealthJudgment
+                    ? self.renderAdvanceState
+                    : .unknown
                 let isHealthy = await self.playbackHealthChecker.checkPlaybackHealth(
                     windows: self.desktopVideoInstances,
                     currentVideo: self.currentVideo,
-                    bookmarkActor: self.bookmarkActor
+                    bookmarkActor: self.bookmarkActor,
+                    renderAdvanceVerdict: probeVerdict
                 )
-                
+
                 if !isHealthy {
                     self.appLogger.warning("⚠️ ensurePlaying: verificación de salud falló, reiniciando...")
-                    self.startWallpaperSafe()
+                    // Task 1.3: retained-level recovery decision + telemetry
+                    self.recoveryDecisionLogger.error("🛠️ Recovery decision: health-check detected stall/unhealthy, triggering rebuild.")
+                    // Task 2.4: bounded, escalating retry policy instead of single rebuild
+                    Task { [self] in await self.attemptBoundedRecovery(reason: "health-check-unhealthy") }
                 } else {
                     self.appLogger.debug("✅ ensurePlaying: reproducción verificada como saludable")
+                    // Reset recovery state on healthy check
+                    self.recoveryAttempts = 0
+                    self.recoveryExhausted = false
                 }
-                
-                // FASE 5: Liberar gate al finalizar
-                self.isEnsurePlayingRunning = false
             }
         } else {
             appLogger.debug("ℹ️ ensurePlaying: isPlayingWallpaper=false y auto‑inicio desactivado")
-            isEnsurePlayingRunning = false
         }
     }
     
@@ -2330,6 +3335,16 @@ extension WallpaperManager {
             self.autoChangeInterval = originalInterval
             self.saveAutoChangeSettings()
         }
+    }
+}
+
+// MARK: - Display identity helper (Task 2.9)
+
+extension NSScreen {
+    /// The `CGDirectDisplayID` for this screen, or `0` if the device description
+    /// has no `NSScreenNumber` (should not happen for an attached display).
+    var displayID: CGDirectDisplayID {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
     }
 }
 

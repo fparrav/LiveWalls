@@ -168,7 +168,7 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
 - Las actualizaciones de UI deben ocurrir en la cola principal
 - El rastreo de recursos usa una cola concurrente con barriers
 - Las operaciones de wallpaper se ejecutan en colas dedicadas fuera del main thread
-- Usa concurrency gates (`isEnsurePlayingRunning`) para prevenir ejecuciones concurrentes
+- Serializa las operaciones de wallpaper con `WallpaperOperationActor.withExclusiveAccess` (mutex async real con timeout y liberación garantizada); las compuertas latching `isEnsurePlayingRunning`/`isChangingVideo`/`isTransitioning` fueron eliminadas (wake-recovery-hardening 2.3)
 - Implementa rate limiting con timestamps para funciones frecuentemente llamadas
 
 ### Performance Optimizations (Optimizaciones de Rendimiento)
@@ -176,7 +176,7 @@ LiveWalls es una aplicación nativa de macOS para usar videos como fondos de pan
 - **Caching**: BookmarkActor cachea resoluciones de bookmarks; VideoPreloader cachea AVAssets
 - **Lazy Loading**: WindowCreationCoordinator crea ventanas asíncronamente sin bloquear main thread
 - **Resource Pooling**: Reutiliza assets precargados para transiciones instantáneas
-- **Concurrency Control**: Gates y rate limiting en funciones críticas como `ensurePlaying()`
+- **Concurrency Control**: Mutex async exclusivo (`WallpaperOperationActor`) + rate limiting en funciones críticas como `ensurePlaying()`
 
 ### Actualizador (Sparkle)
 - Sparkle se integra vía SPM; el wrapper `InAppUpdater` usa `SPUStandardUpdaterController`.
@@ -290,3 +290,75 @@ Plan comprehensivo de 7 fases para eliminar congelamientos aleatorios y parpadeo
 - ScheduledHealthCheckManager: Programación de chequeos en background
 - PlaybackTelemetry: Tracking de métricas de producción
 - Tests: 34 nuevos tests, cobertura completa de stability fixes
+
+### Wake-Recovery Hardening (Sep 2026)
+
+Cambio OpenSpec `wake-recovery-hardening`: endurece la auto‑recuperación tras
+suspend/wake y stalls silenciosos del render. Se entregó en tres fases
+(A observabilidad → B corrección del self‑heal → C validación).
+
+**Componentes nuevos / cambiados:**
+- **RecoveryTelemetry** (`RecoveryTelemetry.swift`, actor): log de ciclo de vida
+  duradero (`recovery_telemetry.log` en Application Support/LiveWalls), tope
+  rodante de 64 KB / 2000 líneas, sobrevive a la evicción del unified log.
+  Etapas: `suspend`, `wake`, `recover-attempted`, `recover-outcome`,
+  `verify-result`. **Sin escrituras por frame** — solo transiciones de estado.
+- **RenderAdvanceProbe** (`RenderAdvanceProbe.swift`, actor): muestreo periódico
+  (~2.5 s) del playhead por ventana; clasifica `advancing` (avance hacia adelante
+  o loop‑wrap), `stalled` (N muestras sin progreso), `unknown`/`idle`. Activo
+  solo cuando se espera reproducción (no pausado por usuario ni fullscreen).
+- **`renderAdvanceState`** (señal observable en `WallpaperManager`) +
+  `publishRenderAdvanceAggregate(_:)`: publica el veredicto agregado y escribe
+  telemetría **edge‑triggered** (una entrada por transición, nunca por muestra).
+- **`recoveryDecisionLogger`**: decisiones de recuperación a nivel retenido
+  (`.error`/`.fault`) además de los logs `.info`/`.debug` existentes.
+- **WallpaperOperationActor.withExclusiveAccess**: mutex async real con timeout y
+  liberación garantizada (reemplaza el no‑op). Todos los disparadores de rebuild
+  (`didWake`, `didBecomeActive`, `activeSpaceDidChange`, health checks
+  programados, cambios manuales) pasan por este lock; se eliminó el bypass de
+  `didWake`.
+- **Compuertas latching eliminadas**: `isEnsurePlayingRunning`, `isChangingVideo`,
+  `isTransitioning` reemplazadas por una operación guardada que siempre libera
+  (con timeout). Los cambios de video del usuario que llegan durante una
+  recuperación se **encolan** (`PendingWallpaperChange`) en vez de descartarse.
+- **`attemptBoundedRecovery`**: juicio de salud basado en el probe (design D2)
+  con reintentos acotados y escalados (backoff), contadores de intento y latch de
+  agotamiento con log.
+- **`performFreshRebuild(reason:targetDisplays:)`** (design D3): rebuild fresco
+  completo — nuevo `AVQueuePlayer` + `AVPlayerLooper` + `AVPlayerLayer` recién
+  adjuntada, `orderOut → orderFront → orderBack` + settle breve + probe de primer
+  frame. `targetDisplays` nil = global; subconjunto estricto de displays vivos =
+  rebuild solo de esas ventanas (las sanas conservan su instancia). Cada
+  `DesktopVideoWindowMejorada` guarda su `CGDirectDisplayID`. `didWake` sigue
+  siendo global.
+- **BookmarkActor**: única fuente de verdad para el acceso security‑scoped con
+  ref‑counting por URL, `reconcile()` una vez al inicio de un rebuild, y
+  `stopAllSecurityScopedAccess` corregido (usa la URL resuelta, no
+  `URL(string:)`).
+- **Static‑image apply fuera del main queue** (design D7):
+  `setSystemStaticWallpaper` es `nonisolated`; el loop de
+  `NSWorkspace.setDesktopImageURL` corre en un `Task.detached`.
+
+**Recovery flags (`RecoveryDebugFlags.swift`, kill‑switches, todos default ON):**
+- `probeBasedHealthJudgment` (2.4) — OFF revierte al chequeo legacy
+  bookmark/timeControlStatus.
+- `fullFreshRebuild` (2.5) — OFF usa el `startWallpaperSafe()` legacy.
+- `bookmarkRefCount` (2.6) — OFF revierte al start/stop directo sin ref‑count.
+- `staticApplyOffMain` (2.7) — OFF corre el apply estático en el main queue.
+- `perDisplayRecovery` (2.9) — OFF siempre reconstruye todos los displays.
+- `resetAllKillSwitches()` restaura todos a ON.
+- Correcciones estructurales 2.1–2.3 (mutex real, ruteo por el lock, compuertas
+  guardadas) quedan permanentemente activas — un toggle de vuelta reintroduciría
+  los bugs exactos que la Fase B elimina (design.md §D9).
+- Hook determinista de stall (`simulateStall` / `enableStallSimulation()`, task
+  1.6): fuerza un frame estático mientras el decoder reporta salud, para
+  reproducir un stall en CI/campo; inerte cuando está apagado.
+
+**Tests:** `RenderAdvanceProbeTests`, `RecoveryKillSwitchTests`,
+`RecoveryEndToEndTest`, `RecoveryPerDisplayTests`, `RecoveryUIResponsivenessTests`,
+`RecoveryNoOpWhenHealthyTests` + extensiones a `PlaybackHealthCheckerTests`. Los seams `#if DEBUG` en `WallpaperManager`
+(`testFreshRebuildVerifyHook`, `testDriveBoundedRecovery`,
+`testStalledDisplayIDsOverride`, `testStaticApplyProbe`,
+`testRunHealthCheckDecision`, …) permiten manejar el loop completo de recuperación
+headless, sustituyendo solo la creación real de ventanas/`AVPlayer` y el probe de
+primer frame.

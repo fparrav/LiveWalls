@@ -12,6 +12,9 @@
 		1293B5974B65412593AF0B40 /* MarqueeText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80AC59EBEB664B1FAD06E31B /* MarqueeText.swift */; };
 		1A2B3C4D5E6F7890ABCD1234 /* PersistenceActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */; };
 		1E989763C576060F77A4B154 /* PlaybackHealthChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D8281213FF821B3EB49E72 /* PlaybackHealthChecker.swift */; };
+		RT202511150001A /* RecoveryTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = RT202511150001B /* RecoveryTelemetry.swift */; };
+		RT202511150002A /* RenderAdvanceProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = RT202511150002B /* RenderAdvanceProbe.swift */; };
+		RT202511150003A /* RecoveryDebugFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = RT202511150003B /* RecoveryDebugFlags.swift */; };
 		2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */; };
 		3CC0C68A2E1F24D1000095B4 /* FullscreenDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */; };
 		542888ED333D46858A714E4D46117DFF /* DesktopVideoWindowMejorada.swift in Sources */ = {isa = PBXBuildFile; fileRef = 542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */; };
@@ -47,7 +50,13 @@
 		AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA11112222333344440003 /* WallpaperManagerTests.swift */; };
 		AAAA11112222333344440008 /* ContentViewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA11112222333344440004 /* ContentViewUITests.swift */; };
 		BB3C5F9A7D8E4B2C91A6E3F0 /* BookmarkActorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */; };
+		AAAA1111222233334444B801 /* RecoveryKillSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111222233334444B802 /* RecoveryKillSwitchTests.swift */; };
+		AAAA1111222233334444B803 /* RecoveryEndToEndTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111222233334444B804 /* RecoveryEndToEndTest.swift */; };
+		AAAA1111222233334444B805 /* RecoveryPerDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111222233334444B806 /* RecoveryPerDisplayTests.swift */; };
+		AAAA1111222233334444B807 /* RecoveryUIResponsivenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111222233334444B808 /* RecoveryUIResponsivenessTests.swift */; };
+		AAAA1111222233334444B809 /* RecoveryNoOpWhenHealthyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111222233334444B80A /* RecoveryNoOpWhenHealthyTests.swift */; };
 		E6827EA47D70ACDD0E819BAE /* PlaybackHealthCheckerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */; };
+0000000000000000AE8F4D01 /* RenderAdvanceProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000AE8F4D02 /* RenderAdvanceProbeTests.swift */; };
 		F0F0F0A12E1F4AAA00000002 /* InAppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0F0F0A02E1F4AAA00000001 /* InAppUpdater.swift */; };
 		F0F0F0B12E1F4BBB00000002 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0F0F0B02E1F4BBB00000001 /* AboutView.swift */; };
 		F2227C492E1F40488BAD0026 /* WallpaperTimerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2227C49B11F40488BAD26027086522B /* WallpaperTimerManager.swift */; };
@@ -83,6 +92,12 @@
 		1A2B3C4D5E6F7890ABCD1235 /* PersistenceActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActor.swift; sourceTree = "<group>"; };
 		2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceActorTests.swift; sourceTree = "<group>"; };
 		30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaybackHealthCheckerTests.swift; sourceTree = "<group>"; };
+		AAAA1111222233334444B802 /* RecoveryKillSwitchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryKillSwitchTests.swift; sourceTree = "<group>"; };
+		AAAA1111222233334444B804 /* RecoveryEndToEndTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryEndToEndTest.swift; sourceTree = "<group>"; };
+		AAAA1111222233334444B806 /* RecoveryPerDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryPerDisplayTests.swift; sourceTree = "<group>"; };
+		AAAA1111222233334444B808 /* RecoveryUIResponsivenessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryUIResponsivenessTests.swift; sourceTree = "<group>"; };
+		AAAA1111222233334444B80A /* RecoveryNoOpWhenHealthyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryNoOpWhenHealthyTests.swift; sourceTree = "<group>"; };
+	0000000000000000AE8F4D02 /* RenderAdvanceProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderAdvanceProbeTests.swift; sourceTree = "<group>"; };
 		3CC0C68A5EE24D1D9507B4E3BBEF17FA /* FullscreenDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenDetector.swift; sourceTree = "<group>"; };
 		23C9D22B0E404B85A1190DCA93CFE7B8 /* BackgroundColorWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundColorWindow.swift; sourceTree = "<group>"; };
 		542888ED333D46858A714E4D46117DFE /* DesktopVideoWindowMejorada.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopVideoWindowMejorada.swift; sourceTree = "<group>"; };
@@ -157,6 +172,9 @@
 		9A1B2C3D4E5F6789ABCDEF04 /* VideoOptimizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoOptimizer.swift; sourceTree = "<group>"; };
 		9A1B2C3D4E5F6789ABCDEF19 /* TransitionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionManager.swift; sourceTree = "<group>"; };
 		A9D8281213FF821B3EB49E72 /* PlaybackHealthChecker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaybackHealthChecker.swift; sourceTree = "<group>"; };
+		RT202511150001B /* RecoveryTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryTelemetry.swift; sourceTree = "<group>"; };
+		RT202511150002B /* RenderAdvanceProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderAdvanceProbe.swift; sourceTree = "<group>"; };
+	RT202511150003B /* RecoveryDebugFlags.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryDebugFlags.swift; sourceTree = "<group>"; };
 		AAAA11112222333344440003 /* WallpaperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperManagerTests.swift; sourceTree = "<group>"; };
 		AAAA11112222333344440004 /* ContentViewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewUITests.swift; sourceTree = "<group>"; };
 		AAAA1111222233334444000F /* LiveWallsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveWallsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -296,6 +314,9 @@
 				8B0C7D322B1F4A3100123456 /* LiveWalls.entitlements */,
 				8B0C7D2F2B1F4A3100123456 /* Preview Content */,
 				A9D8281213FF821B3EB49E72 /* PlaybackHealthChecker.swift */,
+				RT202511150001B /* RecoveryTelemetry.swift */,
+				RT202511150002B /* RenderAdvanceProbe.swift */,
+				RT202511150003B /* RecoveryDebugFlags.swift */,
 				412CE12ADD8B4EED8D0A5283 /* VideoPreloader.swift */,
 			
 				BE659E300FC697EC0C200769 /* GlassCard.swift */,
@@ -324,9 +345,15 @@
 			31D886888FCE46E6BF5230FB /* WindowLevelTests.swift */,
 			55846EBB2EBEFA1400E46C3B /* StartupCoordinatorTests.swift */,
 			CC4D6E0B8E9F5C3DA2B7F4E1 /* BookmarkActorTests.swift */,
+			AAAA1111222233334444B802 /* RecoveryKillSwitchTests.swift */,
+			AAAA1111222233334444B804 /* RecoveryEndToEndTest.swift */,
+			AAAA1111222233334444B806 /* RecoveryPerDisplayTests.swift */,
+			AAAA1111222233334444B808 /* RecoveryUIResponsivenessTests.swift */,
+			AAAA1111222233334444B80A /* RecoveryNoOpWhenHealthyTests.swift */,
 			2B3C4D5E6F7890AB12345679 /* PersistenceActorTests.swift */,
 			AAAA11112222333344440003 /* WallpaperManagerTests.swift */,
 			30558430AE0F597F00FBCF61 /* PlaybackHealthCheckerTests.swift */,
+	0000000000000000AE8F4D02 /* RenderAdvanceProbeTests.swift */,
 			BDD19F02B8524BAC9818CB5D /* VideoPreloaderTests.swift */,
 			0000000000000000A5D2599A /* WindowRecreationTests.swift */,
 			0CCC0FAFF3CC4A249190F23A /* TimerSpaceChangeAuditTests.swift */,
@@ -490,6 +517,9 @@
 				F0F0F0B12E1F4BBB00000002 /* AboutView.swift in Sources */,
 				8B0C7D2A2B1F4A3000123456 /* LiveWallsApp.swift in Sources */,
 				1E989763C576060F77A4B154 /* PlaybackHealthChecker.swift in Sources */,
+				RT202511150001A /* RecoveryTelemetry.swift in Sources */,
+				RT202511150002A /* RenderAdvanceProbe.swift in Sources */,
+				RT202511150003A /* RecoveryDebugFlags.swift in Sources */,
 				55846EBE2EBF778A00E46C3B /* WindowCreationCoordinator.swift in Sources */,
 				72BF47E36CA54AACAFD3EFEC /* VideoPreloader.swift in Sources */,
 			
@@ -503,10 +533,16 @@
 		buildActionMask = 2147483647;
 		files = (
 			BB3C5F9A7D8E4B2C91A6E3F0 /* BookmarkActorTests.swift in Sources */,
+			AAAA1111222233334444B801 /* RecoveryKillSwitchTests.swift in Sources */,
+			AAAA1111222233334444B803 /* RecoveryEndToEndTest.swift in Sources */,
+			AAAA1111222233334444B805 /* RecoveryPerDisplayTests.swift in Sources */,
+			AAAA1111222233334444B807 /* RecoveryUIResponsivenessTests.swift in Sources */,
+			AAAA1111222233334444B809 /* RecoveryNoOpWhenHealthyTests.swift in Sources */,
 			2B3C4D5E6F7890AB12345678 /* PersistenceActorTests.swift in Sources */,
 			55846EBC2EBEFA1400E46C3B /* StartupCoordinatorTests.swift in Sources */,
 			AAAA11112222333344440007 /* WallpaperManagerTests.swift in Sources */,
 			E6827EA47D70ACDD0E819BAE /* PlaybackHealthCheckerTests.swift in Sources */,
+		0000000000000000AE8F4D01 /* RenderAdvanceProbeTests.swift in Sources */,
 			55846EC82EBF885700E46C3B /* ScheduledHealthCheckManagerTests.swift in Sources */,
 			55846EC22EBF77A900E46C3B /* SystemReadinessObserverTests.swift in Sources */,
 			55846EC42EBF77A900E46C3B /* WindowCreationCoordinatorTests.swift in Sources */,
